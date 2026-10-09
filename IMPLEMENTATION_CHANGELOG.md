@@ -67,4 +67,8 @@
     * Validated `AsyncLocalStorage` zero-data-leakage boundary (Tenant A queries cannot return Tenant B data).
     * Validated invitation isolation and teardown cleanup.
     * 100% of Phase 1 acceptance criteria verified and passed.
+* **[Code Documentation & Developer Experience]:**
+  * Added comprehensive function-level, architecture, and lifecycle comments across all 28 source files (backend & frontend).
+  * Documented architectural rationale ("What is this?", "Why are we doing this?", "How the flow works"), safety mechanisms (anti-lockout, PII isolation, role safeguards), and data flow pipelines.
+  * Committed and pushed to GitHub: commit `8dc389e`.
 
