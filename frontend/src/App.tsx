@@ -47,6 +47,9 @@ import { LRListPage } from './pages/commercial/LRListPage';
 import { InvoiceListPage } from './pages/commercial/InvoiceListPage';
 import { SettlementListPage } from './pages/commercial/SettlementListPage';
 import { LedgerListPage } from './pages/commercial/LedgerListPage';
+import { BillingPage } from './pages/settings/BillingPage';
+import { CustomFieldsPage } from './pages/settings/CustomFieldsPage';
+import { SuperAdminDashboardPage } from './pages/superadmin/SuperAdminDashboardPage';
 import { ToastContainer } from './components/common/ToastContainer';
 
 /**
@@ -138,8 +141,10 @@ export const App: React.FC = () => {
           <Route path="ledger" element={<LedgerListPage />} />
           <Route path="commercial/ledger" element={<LedgerListPage />} />
 
-          {/* Placeholders for subsequent phases */}
-          <Route path="super-admin" element={<div className="page-header-title">Super-Admin Control Plane (Phase 5)</div>} />
+          {/* Phase 5: SaaS Billing, Entitlements & Customization */}
+          <Route path="settings/billing" element={<BillingPage />} />
+          <Route path="settings/custom-fields" element={<CustomFieldsPage />} />
+          <Route path="super-admin" element={<SuperAdminDashboardPage />} />
         </Route>
 
         {/* Catch-all Fallback */}

@@ -40,9 +40,19 @@ export interface ICompany extends Document {
     currency: string;
     timezone: string;
     lr_prefix: string;
+    lr_zero_pad: number;
     invoice_prefix: string;
+    invoice_zero_pad: number;
+    settlement_prefix: string;
+    settlement_zero_pad: number;
     logo_url?: string;
     date_format: string;
+    number_system: 'indian_lakhs' | 'international_millions';
+    expense_categories: Array<{
+      code: string;
+      label: string;
+      is_driver_reimbursable: boolean;
+    }>;
   };
   subscription_status: 'trialing' | 'active' | 'past_due' | 'suspended' | 'cancelled' | 'expired';
   trial_ends_at: Date;
@@ -69,9 +79,35 @@ const CompanySchema = new Schema<ICompany>(
       currency: { type: String, default: 'INR' },
       timezone: { type: String, default: 'Asia/Kolkata' },
       lr_prefix: { type: String, default: 'LR-' },
+      lr_zero_pad: { type: Number, default: 5 },
       invoice_prefix: { type: String, default: 'INV-' },
+      invoice_zero_pad: { type: Number, default: 5 },
+      settlement_prefix: { type: String, default: 'SET-' },
+      settlement_zero_pad: { type: Number, default: 5 },
       logo_url: { type: String },
       date_format: { type: String, default: 'DD/MM/YYYY' },
+      number_system: {
+        type: String,
+        enum: ['indian_lakhs', 'international_millions'],
+        default: 'indian_lakhs',
+      },
+      expense_categories: {
+        type: [
+          {
+            code: { type: String, required: true },
+            label: { type: String, required: true },
+            is_driver_reimbursable: { type: Boolean, default: true },
+          },
+        ],
+        default: [
+          { code: 'toll_tax', label: 'Toll & Fastag Tax', is_driver_reimbursable: true },
+          { code: 'rto_police', label: 'RTO & Police Entry', is_driver_reimbursable: true },
+          { code: 'loading_unloading', label: 'Loading / Unloading Hamali', is_driver_reimbursable: true },
+          { code: 'puncture_repair', label: 'Tyre Puncture & Air', is_driver_reimbursable: true },
+          { code: 'parking_halting', label: 'Parking & Halting Charges', is_driver_reimbursable: true },
+          { code: 'driver_bhatta', label: 'Driver Food Bhatta', is_driver_reimbursable: false },
+        ],
+      },
     },
     subscription_status: {
       type: String,

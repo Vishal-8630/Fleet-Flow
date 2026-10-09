@@ -1,0 +1,86 @@
+/**
+ * ============================================================================
+ * FLEET FLOW — SUPER ADMIN CONTROL PLANE STYLING (superAdmin.css)
+ * Strictly Pure Generic CSS using CSS Variables — Zero Tailwind
+ * ============================================================================
+ */
+
+/* Impersonation Banner */
+.impersonation-active-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(90deg, #b91c1c 0%, #dc2626 100%);
+  color: #ffffff;
+  padding: 10px 24px;
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.4);
+}
+
+/* Super Admin KPI Cards */
+.superadmin-kpis-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--spacing-4);
+  margin-bottom: var(--spacing-6);
+}
+
+.superadmin-kpi-card {
+  background: var(--surface-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-md);
+  padding: var(--spacing-4) var(--spacing-5);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-4);
+}
+
+.superadmin-kpi-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--border-radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.superadmin-kpi-icon.revenue { background: rgba(16, 185, 129, 0.15); color: #10b981; }
+.superadmin-kpi-icon.tenants { background: rgba(59, 130, 246, 0.15); color: #3b82f6; }
+.superadmin-kpi-icon.fleet { background: rgba(245, 158, 11, 0.15); color: #f59e0b; }
+.superadmin-kpi-icon.churn { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
+
+.superadmin-kpi-content {
+  flex: 1;
+}
+
+.superadmin-kpi-label {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+
+.superadmin-kpi-value {
+  font-size: var(--font-size-xl);
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+/* Tenants Control Table */
+.tenant-plan-pill {
+  display: inline-flex;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.tenant-plan-pill.starter { background: rgba(148, 163, 184, 0.2); color: #cbd5e1; }
+.tenant-plan-pill.standard { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }
+.tenant-plan-pill.pro { background: rgba(168, 85, 247, 0.2); color: #c084fc; }
+.tenant-plan-pill.enterprise { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }

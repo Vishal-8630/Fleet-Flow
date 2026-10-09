@@ -44,6 +44,7 @@ export interface IBillingParty extends Document {
   outstanding_receivables: number;
   status: 'active' | 'inactive';
   is_deleted: boolean;
+  custom_fields?: Record<string, any>;
   created_at: Date;
   updated_at: Date;
 }
@@ -86,6 +87,7 @@ const BillingPartySchema = new Schema<IBillingParty>(
       default: 'active',
     },
     is_deleted: { type: Boolean, default: false, index: true },
+    custom_fields: { type: Schema.Types.Mixed, default: {} },
   },
   {
     timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
@@ -96,6 +98,7 @@ const BillingPartySchema = new Schema<IBillingParty>(
 BillingPartySchema.index({ company_id: 1, name: 1 });
 BillingPartySchema.index({ company_id: 1, gstin: 1 });
 BillingPartySchema.index({ company_id: 1, is_deleted: 1 });
+BillingPartySchema.index({ 'custom_fields.$**': 1 });
 
 // Apply Multi-Tenant query filter and auto-tenant attachment
 BillingPartySchema.plugin(tenantPlugin);

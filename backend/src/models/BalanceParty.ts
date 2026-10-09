@@ -43,6 +43,7 @@ export interface IBalanceParty extends Document {
   current_balance: number;
   status: 'active' | 'inactive';
   is_deleted: boolean;
+  custom_fields?: Record<string, any>;
   created_at: Date;
   updated_at: Date;
 }
@@ -78,6 +79,7 @@ const BalancePartySchema = new Schema<IBalanceParty>(
       default: 'active',
     },
     is_deleted: { type: Boolean, default: false, index: true },
+    custom_fields: { type: Schema.Types.Mixed, default: {} },
   },
   {
     timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
@@ -88,6 +90,7 @@ const BalancePartySchema = new Schema<IBalanceParty>(
 BalancePartySchema.index({ company_id: 1, party_name: 1 });
 BalancePartySchema.index({ company_id: 1, party_type: 1 });
 BalancePartySchema.index({ company_id: 1, is_deleted: 1 });
+BalancePartySchema.index({ 'custom_fields.$**': 1 });
 
 // Apply Multi-Tenant query filter and auto-tenant attachment
 BalancePartySchema.plugin(tenantPlugin);

@@ -20,3 +20,6 @@
 @import './components/toasts.css';
 @import './components/shell.css';
 @import './components/commercial.css';
+@import './components/billing.css';
+@import './components/settings.css';
+@import './components/superAdmin.css';

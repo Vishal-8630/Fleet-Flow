@@ -22,6 +22,7 @@
 import { Request, Response } from 'express';
 import { Truck, ITruck, ComplianceStatus } from '../models/Truck.js';
 import { Driver } from '../models/Driver.js';
+import { validateCustomFieldsPayload } from '../utils/customFieldValidator.js';
 
 /**
  * 1. listTrucks
@@ -186,6 +187,17 @@ export async function createTruck(req: Request, res: Response): Promise<void> {
     const odo = Number(current_odometer_kms) || 0;
     const interval = Number(service_interval_kms) || 10000;
 
+    // Validate dynamic custom fields if configured for this workspace
+    let customFieldsData = req.body.custom_fields || {};
+    if (req.company) {
+      const customValidation = await validateCustomFieldsPayload(req.company._id, 'Truck', customFieldsData);
+      if (!customValidation.success) {
+        res.status(400).json({ error: customValidation.errors?.[0] || 'Custom field validation failed.' });
+        return;
+      }
+      customFieldsData = customValidation.data || customFieldsData;
+    }
+
     const truck = await Truck.create({
       truck_no: cleanTruckNo,
       make: make.trim(),
@@ -205,6 +217,7 @@ export async function createTruck(req: Request, res: Response): Promise<void> {
       state_permit_doc,
       road_tax_doc,
       puc_doc,
+      custom_fields: customFieldsData,
     });
 
     res.status(201).json({
@@ -289,6 +302,17 @@ export async function updateTruck(req: Request, res: Response): Promise<void> {
     if (state_permit_doc !== undefined) truck.state_permit_doc = state_permit_doc;
     if (road_tax_doc !== undefined) truck.road_tax_doc = road_tax_doc;
     if (puc_doc !== undefined) truck.puc_doc = puc_doc;
+
+    // Validate and update custom fields
+    if (req.body.custom_fields !== undefined && req.company) {
+      const mergedFields = { ...(truck.custom_fields || {}), ...req.body.custom_fields };
+      const customValidation = await validateCustomFieldsPayload(req.company._id, 'Truck', mergedFields);
+      if (!customValidation.success) {
+        res.status(400).json({ error: customValidation.errors?.[0] || 'Custom field validation failed.' });
+        return;
+      }
+      truck.custom_fields = customValidation.data || mergedFields;
+    }
 
     await truck.save();
 

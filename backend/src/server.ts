@@ -40,6 +40,9 @@ import entryRoutes from './routes/entryRoutes.js';
 import invoiceRoutes from './routes/invoiceRoutes.js';
 import settlementRoutes from './routes/settlementRoutes.js';
 import ledgerRoutes from './routes/ledgerRoutes.js';
+import billingRoutes from './routes/billingRoutes.js';
+import customFieldRoutes from './routes/customFieldRoutes.js';
+import superAdminRoutes from './routes/superAdminRoutes.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -104,6 +107,9 @@ app.use('/api/commercial/entries', entryRoutes);
 app.use('/api/commercial/invoices', invoiceRoutes);
 app.use('/api/commercial/settlements', settlementRoutes);
 app.use('/api/commercial/ledger', ledgerRoutes);
+app.use('/api/billing', billingRoutes);
+app.use('/api/settings/custom-fields', customFieldRoutes);
+app.use('/api/super-admin', superAdminRoutes);
 
 // ----------------------------------------------------------------------------
 // 4. Centralized Global Error Handler

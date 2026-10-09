@@ -65,69 +65,73 @@ export interface IDriver extends Document {
   // Status & Soft Delete
   status: DriverStatus;
   is_deleted: boolean;
+  custom_fields?: Record<string, any>;
   created_at: Date;
   updated_at: Date;
-
-  // Helper Methods
-  getMaskedAadhaar(): string;
-  toSafeJSON(userRole?: string): Record<string, any>;
-}
-
-const DriverVehicleAssignmentSchema = new Schema(
-  {
-    truck_id: { type: Schema.Types.ObjectId, ref: 'Truck', required: true },
-    assigned_at: { type: Date, default: Date.now },
-    unassigned_at: { type: Date },
-    notes: { type: String, trim: true },
-  },
-  { _id: true }
-);
-
-const DriverSchema = new Schema<IDriver>(
-  {
-    name: { type: String, required: true, trim: true },
-    photo_url: { type: String, trim: true },
-    phone: { type: String, required: true, trim: true },
-    emergency_phone: { type: String, trim: true },
-    address: { type: String, trim: true },
-    date_of_birth: { type: Date },
-
-    license_number: {
-      type: String,
-      required: true,
-      trim: true,
-      uppercase: true,
-    },
-    license_expiry_date: { type: Date },
-    license_front_url: { type: String, trim: true },
-    license_back_url: { type: String, trim: true },
-
-    aadhaar_number: { type: String, trim: true },
-    aadhaar_front_url: { type: String, trim: true },
-    aadhaar_back_url: { type: String, trim: true },
-
-    running_advance_balance: { type: Number, default: 0 },
-    amount_company_owes_driver: { type: Number, default: 0 },
-    amount_driver_owes_company: { type: Number, default: 0 },
-    last_settlement_date: { type: Date },
-    last_settlement_id: { type: Schema.Types.ObjectId },
-
-    current_truck_id: { type: Schema.Types.ObjectId, ref: 'Truck' },
-    assignment_history: [DriverVehicleAssignmentSchema],
-
-    status: {
-      type: String,
-      enum: ['active', 'on_leave', 'terminated'],
-      default: 'active',
-    },
-    is_deleted: { type: Boolean, default: false, index: true },
-  },
-  {
-    timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
-    toJSON: { virtuals: true },
-    toObject: { virtuals: true },
-  }
-);
+ 
+   // Helper Methods
+   getMaskedAadhaar(): string;
+   toSafeJSON(userRole?: string): Record<string, any>;
+ }
+ 
+ const DriverVehicleAssignmentSchema = new Schema(
+   {
+     truck_id: { type: Schema.Types.ObjectId, ref: 'Truck', required: true },
+     assigned_at: { type: Date, default: Date.now },
+     unassigned_at: { type: Date },
+     notes: { type: String, trim: true },
+   },
+   { _id: true }
+ );
+ 
+ const DriverSchema = new Schema<IDriver>(
+   {
+     name: { type: String, required: true, trim: true },
+     photo_url: { type: String, trim: true },
+     phone: { type: String, required: true, trim: true },
+     emergency_phone: { type: String, trim: true },
+     address: { type: String, trim: true },
+     date_of_birth: { type: Date },
+ 
+     license_number: {
+       type: String,
+       required: true,
+       trim: true,
+       uppercase: true,
+     },
+     license_expiry_date: { type: Date },
+     license_front_url: { type: String, trim: true },
+     license_back_url: { type: String, trim: true },
+ 
+     aadhaar_number: { type: String, trim: true },
+     aadhaar_front_url: { type: String, trim: true },
+     aadhaar_back_url: { type: String, trim: true },
+ 
+     running_advance_balance: { type: Number, default: 0 },
+     amount_company_owes_driver: { type: Number, default: 0 },
+     amount_driver_owes_company: { type: Number, default: 0 },
+     last_settlement_date: { type: Date },
+     last_settlement_id: { type: Schema.Types.ObjectId },
+ 
+     current_truck_id: { type: Schema.Types.ObjectId, ref: 'Truck' },
+     assignment_history: [DriverVehicleAssignmentSchema],
+ 
+     status: {
+       type: String,
+       enum: ['active', 'on_leave', 'terminated'],
+       default: 'active',
+     },
+     is_deleted: { type: Boolean, default: false, index: true },
+     custom_fields: { type: Schema.Types.Mixed, default: {} },
+   },
+   {
+     timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
+     toJSON: { virtuals: true },
+     toObject: { virtuals: true },
+   }
+ );
+ 
+ DriverSchema.index({ 'custom_fields.$**': 1 });
 
 /**
  * Returns a masked representation of the Aadhaar number (e.g., `XXXX-XXXX-1234`).

@@ -48,8 +48,13 @@ export const CompanySettingsPage: React.FC = () => {
     currency: 'INR',
     timezone: 'Asia/Kolkata',
     lr_prefix: 'LR-',
+    lr_zero_pad: 5,
     invoice_prefix: 'INV-',
+    invoice_zero_pad: 5,
+    settlement_prefix: 'SET-',
+    settlement_zero_pad: 5,
     date_format: 'DD/MM/YYYY',
+    number_system: 'indian_lakhs',
   });
 
   // Fetch company profile
@@ -76,8 +81,13 @@ export const CompanySettingsPage: React.FC = () => {
         currency: data.settings?.currency || 'INR',
         timezone: data.settings?.timezone || 'Asia/Kolkata',
         lr_prefix: data.settings?.lr_prefix || 'LR-',
+        lr_zero_pad: data.settings?.lr_zero_pad ?? 5,
         invoice_prefix: data.settings?.invoice_prefix || 'INV-',
+        invoice_zero_pad: data.settings?.invoice_zero_pad ?? 5,
+        settlement_prefix: data.settings?.settlement_prefix || 'SET-',
+        settlement_zero_pad: data.settings?.settlement_zero_pad ?? 5,
         date_format: data.settings?.date_format || 'DD/MM/YYYY',
+        number_system: data.settings?.number_system || 'indian_lakhs',
       });
     }
   }, [data]);
@@ -101,8 +111,13 @@ export const CompanySettingsPage: React.FC = () => {
           currency: formData.currency,
           timezone: formData.timezone,
           lr_prefix: formData.lr_prefix,
+          lr_zero_pad: Number(formData.lr_zero_pad),
           invoice_prefix: formData.invoice_prefix,
+          invoice_zero_pad: Number(formData.invoice_zero_pad),
+          settlement_prefix: formData.settlement_prefix,
+          settlement_zero_pad: Number(formData.settlement_zero_pad),
           date_format: formData.date_format,
+          number_system: formData.number_system,
         },
       };
       const res = await api.put('/company/profile', payload);
@@ -423,45 +438,128 @@ export const CompanySettingsPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Row 2: LR Prefix & Tax Invoice Prefix */}
-            <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: '1.25rem', marginBottom: '1.25rem' }}>
+            {/* Row 2: Numbering Series & Zero-Padding */}
+            <div className="grid grid-cols-1 md:grid-cols-3" style={{ gap: '1.25rem', marginBottom: '1.25rem' }}>
               <div className="form-group" style={{ marginBottom: 0 }}>
                 <label className="form-label" htmlFor="lr_prefix">
-                  LR (Lorry Receipt / Bilty) Prefix
+                  LR Prefix & Zero-Pad
                 </label>
-                <input
-                  id="lr_prefix"
-                  name="lr_prefix"
-                  type="text"
-                  className="form-control"
-                  placeholder="e.g. LR-"
-                  value={formData.lr_prefix}
-                  onChange={handleChange}
-                  disabled={!isAdmin || isLoading}
-                />
-                <span className="form-hint">Auto-prepended to newly generated bilty tracking documents.</span>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    id="lr_prefix"
+                    name="lr_prefix"
+                    type="text"
+                    className="form-control"
+                    placeholder="LR-"
+                    style={{ flex: 2 }}
+                    value={formData.lr_prefix}
+                    onChange={handleChange}
+                    disabled={!isAdmin || isLoading}
+                  />
+                  <input
+                    id="lr_zero_pad"
+                    name="lr_zero_pad"
+                    type="number"
+                    min="3"
+                    max="8"
+                    className="form-control"
+                    placeholder="5"
+                    style={{ flex: 1 }}
+                    value={formData.lr_zero_pad}
+                    onChange={handleChange}
+                    disabled={!isAdmin || isLoading}
+                  />
+                </div>
+                <span className="form-hint">e.g. {formData.lr_prefix}{'0'.repeat(Math.max(1, (formData.lr_zero_pad || 5) - 1))}1</span>
               </div>
 
               <div className="form-group" style={{ marginBottom: 0 }}>
                 <label className="form-label" htmlFor="invoice_prefix">
-                  Tax Invoice Prefix
+                  Invoice Prefix & Zero-Pad
                 </label>
-                <input
-                  id="invoice_prefix"
-                  name="invoice_prefix"
-                  type="text"
-                  className="form-control"
-                  placeholder="e.g. INV-"
-                  value={formData.invoice_prefix}
-                  onChange={handleChange}
-                  disabled={!isAdmin || isLoading}
-                />
-                <span className="form-hint">Auto-prepended to customer billing and tax invoice numbers.</span>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    id="invoice_prefix"
+                    name="invoice_prefix"
+                    type="text"
+                    className="form-control"
+                    placeholder="INV-"
+                    style={{ flex: 2 }}
+                    value={formData.invoice_prefix}
+                    onChange={handleChange}
+                    disabled={!isAdmin || isLoading}
+                  />
+                  <input
+                    id="invoice_zero_pad"
+                    name="invoice_zero_pad"
+                    type="number"
+                    min="3"
+                    max="8"
+                    className="form-control"
+                    placeholder="5"
+                    style={{ flex: 1 }}
+                    value={formData.invoice_zero_pad}
+                    onChange={handleChange}
+                    disabled={!isAdmin || isLoading}
+                  />
+                </div>
+                <span className="form-hint">e.g. {formData.invoice_prefix}{'0'.repeat(Math.max(1, (formData.invoice_zero_pad || 5) - 1))}1</span>
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label" htmlFor="settlement_prefix">
+                  Settlement Prefix & Pad
+                </label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    id="settlement_prefix"
+                    name="settlement_prefix"
+                    type="text"
+                    className="form-control"
+                    placeholder="SET-"
+                    style={{ flex: 2 }}
+                    value={formData.settlement_prefix}
+                    onChange={handleChange}
+                    disabled={!isAdmin || isLoading}
+                  />
+                  <input
+                    id="settlement_zero_pad"
+                    name="settlement_zero_pad"
+                    type="number"
+                    min="3"
+                    max="8"
+                    className="form-control"
+                    placeholder="5"
+                    style={{ flex: 1 }}
+                    value={formData.settlement_zero_pad}
+                    onChange={handleChange}
+                    disabled={!isAdmin || isLoading}
+                  />
+                </div>
+                <span className="form-hint">e.g. {formData.settlement_prefix}{'0'.repeat(Math.max(1, (formData.settlement_zero_pad || 5) - 1))}1</span>
               </div>
             </div>
 
-            {/* Row 3: Display Date Format & Standards Note */}
+            {/* Row 3: Regional Number Formatting & Date Format */}
             <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: '1.25rem' }}>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label" htmlFor="number_system">
+                  Regional Number System
+                </label>
+                <select
+                  id="number_system"
+                  name="number_system"
+                  className="form-control"
+                  value={formData.number_system}
+                  onChange={handleChange}
+                  disabled={!isAdmin || isLoading}
+                >
+                  <option value="indian_lakhs">Indian Lakhs & Crores (₹1,00,000 / ₹1,00,00,000)</option>
+                  <option value="international_millions">International Millions ($100,000 / $10,000,000)</option>
+                </select>
+                <span className="form-hint">Governs commas and digit grouping across financial ledger reports.</span>
+              </div>
+
               <div className="form-group" style={{ marginBottom: 0 }}>
                 <label className="form-label" htmlFor="date_format">
                   Display Date Format
@@ -474,30 +572,11 @@ export const CompanySettingsPage: React.FC = () => {
                   onChange={handleChange}
                   disabled={!isAdmin || isLoading}
                 >
-                  <option value="DD/MM/YYYY">DD/MM/YYYY (e.g. 09/10/2026)</option>
-                  <option value="YYYY-MM-DD">YYYY-MM-DD (e.g. 2026-10-09)</option>
-                  <option value="MM/DD/YYYY">MM/DD/YYYY (e.g. 10/09/2026)</option>
+                  <option value="DD/MM/YYYY">DD/MM/YYYY (e.g. 10/10/2026)</option>
+                  <option value="YYYY-MM-DD">YYYY-MM-DD (e.g. 2026-10-10)</option>
+                  <option value="MM/DD/YYYY">MM/DD/YYYY (e.g. 10/10/2026)</option>
                 </select>
                 <span className="form-hint">Governs how dates render across tables, printouts, and reports.</span>
-              </div>
-
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  padding: '1rem 1.25rem',
-                  backgroundColor: 'var(--color-slate-50)',
-                  border: '1px solid var(--border-light)',
-                  borderRadius: 'var(--radius-md)',
-                  alignSelf: 'flex-start',
-                }}
-              >
-                <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                  <strong style={{ color: 'var(--text-main)', display: 'block', marginBottom: '0.25rem' }}>
-                    Document Standard Compliance
-                  </strong>
-                  Prefixes and formatting preferences apply seamlessly to all company branches and operational team members.
-                </div>
               </div>
             </div>
           </div>

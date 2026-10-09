@@ -205,6 +205,7 @@ export interface ITruckJourney extends Document {
 
   // Soft delete flag
   is_deleted: boolean;
+  custom_fields?: Record<string, any>;
 }
 
 const TruckJourneySchema = new Schema<ITruckJourney>(
@@ -477,6 +478,10 @@ const TruckJourneySchema = new Schema<ITruckJourney>(
       default: false,
       index: true,
     },
+    custom_fields: {
+      type: Schema.Types.Mixed,
+      default: {},
+    },
   },
   {
     timestamps: true,
@@ -487,6 +492,7 @@ const TruckJourneySchema = new Schema<ITruckJourney>(
 
 // Compound unique index: Journey number is unique per company tenant
 TruckJourneySchema.index({ company_id: 1, journey_number: 1 }, { unique: true });
+TruckJourneySchema.index({ 'custom_fields.$**': 1 });
 
 // Multi-tenant isolation plugin
 TruckJourneySchema.plugin(tenantPlugin);

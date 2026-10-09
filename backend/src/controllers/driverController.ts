@@ -22,6 +22,7 @@
 import { Request, Response } from 'express';
 import { Driver, IDriver, DriverStatus } from '../models/Driver.js';
 import { Truck } from '../models/Truck.js';
+import { validateCustomFieldsPayload } from '../utils/customFieldValidator.js';
 
 /**
  * 1. listDrivers
@@ -164,6 +165,17 @@ export async function createDriver(req: Request, res: Response): Promise<void> {
       return;
     }
 
+    // Validate dynamic custom fields if configured
+    let customFieldsData = req.body.custom_fields || {};
+    if (req.company) {
+      const customValidation = await validateCustomFieldsPayload(req.company._id, 'Driver', customFieldsData);
+      if (!customValidation.success) {
+        res.status(400).json({ error: customValidation.errors?.[0] || 'Custom field validation failed.' });
+        return;
+      }
+      customFieldsData = customValidation.data || customFieldsData;
+    }
+
     const driver = await Driver.create({
       name: name.trim(),
       photo_url,
@@ -180,6 +192,7 @@ export async function createDriver(req: Request, res: Response): Promise<void> {
       aadhaar_back_url,
       running_advance_balance: Number(running_advance_balance) || 0,
       status: status || 'active',
+      custom_fields: customFieldsData,
     });
 
     res.status(201).json({
@@ -253,6 +266,16 @@ export async function updateDriver(req: Request, res: Response): Promise<void> {
     if (aadhaar_back_url !== undefined) driver.aadhaar_back_url = aadhaar_back_url;
     if (running_advance_balance !== undefined) driver.running_advance_balance = Number(running_advance_balance);
     if (status) driver.status = status;
+
+    if (req.body.custom_fields !== undefined && req.company) {
+      const merged = { ...(driver.custom_fields || {}), ...req.body.custom_fields };
+      const customValidation = await validateCustomFieldsPayload(req.company._id, 'Driver', merged);
+      if (!customValidation.success) {
+        res.status(400).json({ error: customValidation.errors?.[0] || 'Custom field validation failed.' });
+        return;
+      }
+      driver.custom_fields = customValidation.data || merged;
+    }
 
     await driver.save();
 

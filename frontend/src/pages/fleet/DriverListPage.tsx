@@ -40,6 +40,7 @@ import api from '../../api/client';
 import { PageHeader } from '../../components/common/PageHeader';
 import { Modal } from '../../components/common/Modal';
 import { Pagination } from '../../components/common/Pagination';
+import { CustomFieldsRenderer } from '../../components/common/CustomFieldsRenderer';
 import { useAuthStore } from '../../stores/authStore';
 import { toast } from '../../stores/uiStore';
 
@@ -59,6 +60,7 @@ export interface DriverRecord {
     make: string;
     model: string;
   };
+  custom_fields?: Record<string, any>;
   created_at: string;
 }
 
@@ -89,6 +91,7 @@ export const DriverListPage: React.FC = () => {
   };
 
   const [formData, setFormData] = useState(initialDriverFormData);
+  const [customFields, setCustomFields] = useState<Record<string, any>>({});
 
   // Query drivers list
   const { data, isLoading } = useQuery({
@@ -118,6 +121,7 @@ export const DriverListPage: React.FC = () => {
 
   const handleCancel = () => {
     setFormData(initialDriverFormData);
+    setCustomFields({});
     setIsCreateModalOpen(false);
   };
 
@@ -131,6 +135,7 @@ export const DriverListPage: React.FC = () => {
       toast.success(resData.message || 'Driver registered successfully.');
       setIsCreateModalOpen(false);
       setFormData(initialDriverFormData);
+      setCustomFields({});
       queryClient.invalidateQueries({ queryKey: ['drivers'] });
     },
     onError: (err: any) => {
@@ -163,6 +168,7 @@ export const DriverListPage: React.FC = () => {
     createMutation.mutate({
       ...formData,
       running_advance_balance: Number(formData.running_advance_balance) || 0,
+      custom_fields: customFields,
     });
   };
 
@@ -573,6 +579,14 @@ export const DriverListPage: React.FC = () => {
               </select>
             </div>
           </div>
+
+          {/* Dynamic Workspace Custom Fields */}
+          <CustomFieldsRenderer
+            entity="Driver"
+            values={customFields}
+            onChange={setCustomFields}
+            disabled={createMutation.isPending}
+          />
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', borderTop: '1px solid var(--border-color)', paddingTop: '1rem' }}>
             <button

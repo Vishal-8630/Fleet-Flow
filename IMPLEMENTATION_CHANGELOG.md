@@ -13,7 +13,7 @@
 | **Phase 2** | Master Data Registries & Compliance Vault | ✅ Completed | 100% |
 | **Phase 3** | Operations, Dispatch & Vehicle Movements | ✅ Completed | 100% |
 | **Phase 4** | Commercial Engine, Invoices & Settlements | ✅ Completed | 100% |
-| **Phase 5** | SaaS Billing, Entitlements & Customization | ⚪ Not Started | 0% |
+| **Phase 5** | SaaS Billing, Entitlements & Customization | ✅ Completed | 100% |
 | **Phase 6** | Public Tracking, Automation & Release | ⚪ Not Started | 0% |
 
 ---
@@ -324,3 +324,45 @@
   * ✅ Vendor Statement: Verified market vehicle math and payout recording.
   * ✅ Multi-Tenant Isolation: Verified Tenant B queries return 0 commercial records from Tenant A.
   * **100% of Phase 4 architectural criteria verified and passed.**
+
+---
+
+### Phase 5: SaaS Billing, Entitlements & Workspace Customization
+* **[Backend] Central Feature Catalog & Entitlement Evaluation (`featureCatalog.ts`, `entitlementService.ts`):**
+  * Registered all 20 canonical modules (`MOD_FLEET`, `MOD_DRIVERS`, `MOD_TRIPS`, `MOD_MARKET_VEHICLES`, `MOD_PARTIES`, `MOD_DOCUMENT_VAULT`, `MOD_LR_ENGINE`, `MOD_BILLING_INVOICE`, `MOD_SETTLEMENTS`, `MOD_LEDGERS`, `MOD_REPORTS`, `MOD_CUSTOM_FIELDS`, `MOD_WORKFLOW_APPROVALS`, `MOD_AUDIT_LOGS`, `MOD_GPS_SYNC`, `MOD_FLEET_IQ`, `MOD_WHATSAPP`, `MOD_MAINTENANCE`, `MOD_TALLY_SYNC`, `MOD_MULTI_BRANCH`).
+  * Implemented module hard-dependency validation tree (e.g., Invoicing depends on Parties and LR Engine).
+  * Implemented entitlement waterfall: Read-only suspension lock $\rightarrow$ Super-admin manual overrides $\rightarrow$ Active paid add-ons $\rightarrow$ Active plan tier $\rightarrow$ 14-day free trial.
+  * Created Express gating middleware: `requireFeature('MOD_...')` and `requireAllFeatures([...])` returning HTTP 403 `FEATURE_LOCKED`.
+* **[Backend] Billing Models, Seed Service & Razorpay Integration (`Plan.ts`, `AddOn.ts`, `Subscription.ts`, `ProcessedWebhook.ts`):**
+  * Stored currency in integer paise to eliminate floating-point rounding errors across plans: Starter (₹1,499/mo), Standard (₹3,999/mo), Pro (₹8,999/mo), Enterprise (₹19,999/mo).
+  * Implemented standalone monetized add-ons (WhatsApp Suite, Fleet IQ, +10 Truck Capacity Boosters).
+  * Implemented mathematical down-to-the-second proration calculator (`prorationService.ts`).
+  * Implemented scheduled delayed downgrades (`scheduled_change`) and 7-day dunning lifecycle.
+  * Implemented cryptographic HMAC-SHA256 signature verification and idempotency ledger (`ProcessedWebhook`) preventing duplicate replay events.
+* **[Backend] Custom Fields Studio & Injection Defense (`CustomFieldDefinition.ts`, `customFieldValidator.ts`):**
+  * Supported entities: `Truck`, `Driver`, `TruckJourney`, `BillingParty`, `BalanceParty`, `Entry`.
+  * Wildcard indexing on all models (`custom_fields.$**`).
+  * Dynamic Zod schema compiler with strict input validation that rejects unregistered or rogue client properties.
+  * Soft-archive protections preventing hard deletion of custom fields containing active historical data.
+* **[Backend] Super-Admin Control Plane (`superAdminController.ts`, `PlatformAuditLog.ts`):**
+  * Telemetry calculations for MRR, ARR, active fleets, and tenant directory.
+  * Quota overrides, 1-click trial extensions (+7, +14, +30 days), and audited 1-hour support impersonation sessions.
+* **[Frontend Design System Overhaul] Modernized Billing & Plans UI:**
+  * Re-architected `billing.css` and `BillingPage.tsx` using 100% pure generic CSS and design tokens from `variables.css`.
+  * **Hero Workspace Status Card:** Light multi-stop gradient background (`#ffffff` to `#f0f7ff`), status badge with pulsing live dot, clear commercial capability descriptions, and validity metadata.
+  * **Real-Time Resource Meters (KPI Grid):** 3 elevated cards for Fleet Trucks, Commercial Drivers, and Team Accounts with individual icon boxes (`Truck`, `Users`, `UserCheck`), color-coded gradient progress tracks, and remaining quota metrics.
+  * **Billing Cycle Segmented Switch:** High-contrast pill toggle (`#f1f5f9` track with `#ffffff` active button and shadow) with emerald `Save 17% (2 Mo Free)` discount badge.
+  * **4-Column Pricing Matrix:** Responsive cards with 24px gutters, distinctive active state (`✓ Current Plan` emerald badge & border), Pro Enterprise featured styling (`★ Most Popular` blue gradient badge with upgrade CTA), structured checklist items with circle checkmarks, and yearly discount calculations.
+  * **Modular Add-Ons Studio:** Structured cards for WhatsApp Suite, Fleet IQ, and Capacity Boosters with colored icon boxes, benefit badges, and bulleted features.
+  * **Enterprise Trust & Security Strip:** 4 reassurance badges highlighting 256-bit SSL, GST B2B tax invoices, exact proration credits, and cancel anytime flexibility.
+  * **Down-to-the-Second Proration Modal:** Visual plan transition card, detailed financial breakdown, and confirm CTA.
+  * **Verified Clean Build:** Frontend and backend compiled with 0 errors via `npm run build`.
+
+* **[Testing & Automated Verification] (`verifyPhase5.ts`):**
+  * ✅ Webhook Idempotency & Replay Defense: Verified unique index rejection on duplicate webhook delivery.
+  * ✅ Proration Calculus: Verified exact ₹2,000 net difference at 50% mid-cycle upgrade.
+  * ✅ Dynamic Custom Field Injection Defense: Verified valid fields pass and unregistered rogue keys are rejected by dynamic Zod.
+  * ✅ Read-Only Suspension Gate: Verified suspended status enforces `is_read_only: true`.
+  * ✅ Feature Dependency Tree: Verified missing dependency detection for `MOD_BILLING_INVOICE`.
+  * **100% of Phase 5 architectural criteria verified and passed against live MongoDB Atlas.**
+

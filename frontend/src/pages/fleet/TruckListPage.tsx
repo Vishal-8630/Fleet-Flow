@@ -40,6 +40,7 @@ import api from '../../api/client';
 import { PageHeader } from '../../components/common/PageHeader';
 import { Modal } from '../../components/common/Modal';
 import { Pagination } from '../../components/common/Pagination';
+import { CustomFieldsRenderer } from '../../components/common/CustomFieldsRenderer';
 import { useAuthStore } from '../../stores/authStore';
 import { toast } from '../../stores/uiStore';
 
@@ -63,6 +64,7 @@ export interface TruckRecord {
     phone: string;
     photo_url?: string;
   };
+  custom_fields?: Record<string, any>;
   created_at: string;
 }
 
@@ -95,6 +97,7 @@ export const TruckListPage: React.FC = () => {
   };
 
   const [formData, setFormData] = useState(initialTruckFormData);
+  const [customFields, setCustomFields] = useState<Record<string, any>>({});
 
   // Query trucks list
   const { data, isLoading } = useQuery({
@@ -126,6 +129,7 @@ export const TruckListPage: React.FC = () => {
 
   const handleCancel = () => {
     setFormData(initialTruckFormData);
+    setCustomFields({});
     setIsCreateModalOpen(false);
   };
 
@@ -139,6 +143,7 @@ export const TruckListPage: React.FC = () => {
       toast.success(resData.message || 'Vehicle registered successfully.');
       setIsCreateModalOpen(false);
       setFormData(initialTruckFormData);
+      setCustomFields({});
       queryClient.invalidateQueries({ queryKey: ['trucks'] });
     },
     onError: (err: any) => {
@@ -174,6 +179,7 @@ export const TruckListPage: React.FC = () => {
       cbm_capacity: formData.cbm_capacity ? Number(formData.cbm_capacity) : 0,
       current_odometer_kms: Number(formData.current_odometer_kms) || 0,
       service_interval_kms: Number(formData.service_interval_kms) || 10000,
+      custom_fields: customFields,
     });
   };
 
@@ -412,6 +418,26 @@ export const TruckListPage: React.FC = () => {
                       <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
                         Year: {truck.year || 'N/A'}
                       </div>
+                      {truck.custom_fields && Object.keys(truck.custom_fields).length > 0 && (
+                        <div style={{ marginTop: '4px', display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                          {Object.entries(truck.custom_fields).map(([k, v]) => (
+                            <span
+                              key={k}
+                              style={{
+                                fontSize: '10px',
+                                padding: '1px 6px',
+                                borderRadius: '4px',
+                                backgroundColor: 'var(--color-primary-50)',
+                                color: 'var(--color-primary-800)',
+                                border: '1px solid var(--color-primary-200)',
+                                fontWeight: 600,
+                              }}
+                            >
+                              {k.replace(/_/g, ' ').toUpperCase()}: {String(v)}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </td>
                     <td>
                       <div style={{ fontWeight: 'var(--font-weight-medium)', color: 'var(--text-main)' }}>{truck.make}</div>
@@ -666,6 +692,14 @@ export const TruckListPage: React.FC = () => {
               </select>
             </div>
           </div>
+
+          {/* Dynamic Workspace Custom Fields */}
+          <CustomFieldsRenderer
+            entity="Truck"
+            values={customFields}
+            onChange={setCustomFields}
+            disabled={createMutation.isPending}
+          />
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', borderTop: '1px solid var(--border-color)', paddingTop: '1rem' }}>
             <button

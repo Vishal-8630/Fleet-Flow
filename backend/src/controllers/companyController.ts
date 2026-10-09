@@ -112,8 +112,14 @@ export const updateCompanyProfile = async (req: Request, res: Response): Promise
         currency: settings.currency || company.settings?.currency || 'INR',
         timezone: settings.timezone || company.settings?.timezone || 'Asia/Kolkata',
         lr_prefix: settings.lr_prefix || company.settings?.lr_prefix || 'LR-',
+        lr_zero_pad: settings.lr_zero_pad ?? company.settings?.lr_zero_pad ?? 5,
         invoice_prefix: settings.invoice_prefix || company.settings?.invoice_prefix || 'INV-',
+        invoice_zero_pad: settings.invoice_zero_pad ?? company.settings?.invoice_zero_pad ?? 5,
+        settlement_prefix: settings.settlement_prefix || company.settings?.settlement_prefix || 'SET-',
+        settlement_zero_pad: settings.settlement_zero_pad ?? company.settings?.settlement_zero_pad ?? 5,
         date_format: settings.date_format || company.settings?.date_format || 'DD/MM/YYYY',
+        number_system: settings.number_system || company.settings?.number_system || 'indian_lakhs',
+        expense_categories: settings.expense_categories || company.settings?.expense_categories || [],
         logo_url: settings.logo_url || company.settings?.logo_url,
       };
     }

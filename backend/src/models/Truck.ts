@@ -82,6 +82,7 @@ export interface ITruck {
   status: TruckStatus;
   is_deleted: boolean;
   compliance_status: ComplianceStatus;
+  custom_fields?: Record<string, any>;
   created_at: Date;
   updated_at: Date;
 
@@ -162,6 +163,7 @@ const TruckSchema = new Schema<ITruck>(
       default: 'available',
     },
     is_deleted: { type: Boolean, default: false, index: true },
+    custom_fields: { type: Schema.Types.Mixed, default: {} },
   },
   {
     timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
@@ -169,6 +171,9 @@ const TruckSchema = new Schema<ITruck>(
     toObject: { virtuals: true },
   }
 );
+
+// Wildcard index for dynamic custom fields querying
+TruckSchema.index({ 'custom_fields.$**': 1 });
 
 /**
  * Calculates the real-time compliance status of the truck based on the expiration

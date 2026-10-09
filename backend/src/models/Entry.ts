@@ -87,6 +87,7 @@ export interface IEntry extends Document {
   status: LRStatus;
 
   is_deleted: boolean;
+  custom_fields?: Record<string, any>;
   created_at: Date;
   updated_at: Date;
 }
@@ -253,6 +254,10 @@ const EntrySchema = new Schema<IEntry>(
       default: false,
       index: true,
     },
+    custom_fields: {
+      type: Schema.Types.Mixed,
+      default: {},
+    },
   },
   {
     timestamps: true,
@@ -265,6 +270,7 @@ const EntrySchema = new Schema<IEntry>(
 EntrySchema.index({ company_id: 1, lr_no: 1 }, { unique: true });
 EntrySchema.index({ company_id: 1, bill_no: 1 });
 EntrySchema.index({ company_id: 1, lr_date: -1 });
+EntrySchema.index({ 'custom_fields.$**': 1 });
 
 // Multi-tenant isolation plugin
 EntrySchema.plugin(tenantPlugin);
