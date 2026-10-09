@@ -45,15 +45,15 @@ export const Navbar: React.FC = () => {
         <div className="flex items-center" style={{ gap: '0.5rem', backgroundColor: 'var(--color-slate-100)', padding: '0.375rem 0.75rem', borderRadius: 'var(--radius-md)' }}>
           <Building2 size={16} color="var(--color-primary-600)" />
           <span style={{ fontWeight: 'var(--font-weight-semibold)', fontSize: 'var(--font-size-sm)' }}>
-            {company?.name || 'Workspace'}
+            {user?.isSuperAdmin ? 'Fleet Flow Platform' : company?.name || 'Workspace'}
           </span>
-          <span className="badge badge-info" style={{ textTransform: 'uppercase', fontSize: '10px' }}>
-            {company?.status || 'Active'}
+          <span className={`badge ${user?.isSuperAdmin ? 'badge-warning' : 'badge-info'}`} style={{ textTransform: 'uppercase', fontSize: '10px' }}>
+            {user?.isSuperAdmin ? 'Super-Admin' : company?.status || 'Active'}
           </span>
         </div>
 
         {/* Dynamic Free Trial Countdown Pill */}
-        {company?.status === 'trialing' && (
+        {!user?.isSuperAdmin && company?.status === 'trialing' && (
           <div className="badge badge-warning" style={{ gap: '0.375rem' }}>
             <Clock size={12} />
             <span>{daysLeft} Days Free Trial Left</span>
@@ -72,7 +72,7 @@ export const Navbar: React.FC = () => {
               {user?.name}
             </div>
             <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)', textTransform: 'capitalize' }}>
-              Role: {role}
+              Role: {user?.isSuperAdmin ? 'Platform Super-Admin' : role}
             </div>
           </div>
         </div>

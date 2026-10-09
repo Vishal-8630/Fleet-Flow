@@ -121,7 +121,7 @@ export async function registerCompany(req: Request, res: Response): Promise<void
 
     res.status(201).json({
       message: 'Company workspace successfully registered!',
-      user: { id: user._id, name: user.name, email: user.email },
+      user: { id: user._id, name: user.name, email: user.email, isSuperAdmin: false },
       company: { id: company._id, name: company.name, slug: company.slug, status: company.subscription_status },
     });
   } catch (error: any) {
@@ -176,7 +176,12 @@ export async function login(req: Request, res: Response): Promise<void> {
 
     res.json({
       message: 'Login successful.',
-      user: { id: user._id, name: user.name, email: user.email },
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        isSuperAdmin: user.is_platform_super_admin,
+      },
       company: { id: company._id, name: company.name, slug: company.slug, status: company.subscription_status },
       role: membership.role,
     });

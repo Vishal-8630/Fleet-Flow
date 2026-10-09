@@ -82,6 +82,22 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
   return <>{children}</>;
 };
 
+const DashboardRoute: React.FC = () => {
+  const { user } = useAuthStore();
+  if (user?.isSuperAdmin) {
+    return <Navigate to="/super-admin" replace />;
+  }
+  return <DashboardPage />;
+};
+
+const IndexRedirect: React.FC = () => {
+  const { user } = useAuthStore();
+  if (user?.isSuperAdmin) {
+    return <Navigate to="/super-admin" replace />;
+  }
+  return <Navigate to="/dashboard" replace />;
+};
+
 export const App: React.FC = () => {
   const { checkAuth } = useAuthStore();
 
@@ -109,8 +125,8 @@ export const App: React.FC = () => {
             </ProtectedRoute>
           }
         >
-          <Route index element={<Navigate to="/dashboard" replace />} />
-          <Route path="dashboard" element={<DashboardPage />} />
+          <Route index element={<IndexRedirect />} />
+          <Route path="dashboard" element={<DashboardRoute />} />
           <Route path="team" element={<TeamMembersPage />} />
           <Route path="settings/company" element={<CompanySettingsPage />} />
 

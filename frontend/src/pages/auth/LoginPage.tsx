@@ -34,7 +34,12 @@ export const LoginPage: React.FC = () => {
     setLoading(true);
     try {
       await login({ email, password });
-      navigate('/dashboard');
+      const loggedUser = useAuthStore.getState().user;
+      if (loggedUser?.isSuperAdmin) {
+        navigate('/super-admin');
+      } else {
+        navigate('/dashboard');
+      }
     } catch {
       // Error message is set in authStore and displayed in the alert box
     } finally {
