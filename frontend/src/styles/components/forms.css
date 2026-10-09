@@ -7,6 +7,7 @@
 }
 
 .form-label {
+  display: block;
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-semibold);
   color: var(--color-slate-700);
@@ -14,53 +15,133 @@
   letter-spacing: 0.025em;
 }
 
+/* Master Form Inputs & Controls */
+.form-control,
 .form-input,
 .form-select,
 .form-textarea {
+  display: block;
   width: 100%;
   padding: 0.625rem 0.875rem;
   font-family: var(--font-family-base);
   font-size: var(--font-size-sm);
+  line-height: 1.5;
   color: var(--text-primary);
   background-color: #ffffff;
   border: 1px solid var(--border-light);
   border-radius: var(--radius-md);
   outline: none;
-  transition: all var(--transition-fast);
+  box-sizing: border-box;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background-color var(--transition-fast);
 }
 
+/* Native Select Styling with SVG Chevron */
+select.form-control,
+select.form-input,
+select.form-select,
+.form-select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-color: #ffffff;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 1rem 1rem;
+  padding-right: 2.25rem;
+  cursor: pointer;
+}
+
+/* Hover State */
+.form-control:hover:not(:focus):not(:disabled),
+.form-input:hover:not(:focus):not(:disabled),
+.form-select:hover:not(:focus):not(:disabled),
+.form-textarea:hover:not(:focus):not(:disabled) {
+  border-color: var(--border-subtle);
+}
+
+/* Focus State */
+.form-control:focus,
 .form-input:focus,
 .form-select:focus,
 .form-textarea:focus {
-  border-color: var(--border-focus);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+  border-color: var(--color-primary-500);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+  background-color: #ffffff;
 }
 
+.form-control::placeholder,
 .form-input::placeholder,
 .form-textarea::placeholder {
   color: var(--color-slate-400);
 }
 
+.form-control:disabled,
 .form-input:disabled,
 .form-select:disabled,
 .form-textarea:disabled {
   background-color: var(--color-slate-100);
+  border-color: var(--border-light);
+  color: var(--text-muted);
   cursor: not-allowed;
-  opacity: 0.7;
+  opacity: 0.75;
 }
+
+textarea.form-control,
+textarea.form-input,
+.form-textarea {
+  resize: vertical;
+  min-height: 5rem;
+}
+
+/* File Input Styling */
+input[type="file"].form-control,
+input[type="file"].form-input {
+  padding: 0.45rem 0.75rem;
+  cursor: pointer;
+  line-height: normal;
+}
+
+input[type="file"].form-control::file-selector-button,
+input[type="file"].form-input::file-selector-button {
+  background-color: var(--color-slate-100);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  padding: 0.25rem 0.75rem;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+  cursor: pointer;
+  margin-right: 0.75rem;
+  transition: all var(--transition-fast);
+}
+
+input[type="file"].form-control::file-selector-button:hover,
+input[type="file"].form-input::file-selector-button:hover {
+  background-color: var(--color-slate-200);
+}
+
+/* Date and Number inputs */
+input[type="date"].form-control,
+input[type="date"].form-input {
+  cursor: pointer;
+}
+
 
 .form-error {
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-medium);
   color: var(--color-danger);
-  margin-top: 0.125rem;
+  margin-top: 0.25rem;
 }
 
 .form-hint {
   font-size: var(--font-size-xs);
   color: var(--text-muted);
+  margin-top: 0.25rem;
 }
 
+/* Icon Prefix Wrappers */
 .input-icon-wrapper {
   position: relative;
   display: flex;
@@ -73,8 +154,32 @@
   left: 0.875rem;
   color: var(--color-slate-400);
   pointer-events: none;
+  z-index: 1;
 }
 
+.input-icon-wrapper .form-control,
 .input-icon-wrapper .form-input {
-  padding-left: 2.5rem;
+  padding-left: 2.375rem;
+}
+
+/* Search Box Helper */
+.search-input-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.search-input-wrapper .search-icon {
+  position: absolute;
+  left: 0.875rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--color-slate-400);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.search-input-wrapper .form-control,
+.search-input-wrapper input {
+  padding-left: 2.375rem;
+  width: 100%;
 }

@@ -51,3 +51,5 @@ Thumbs.db
 scratch/
 tmp/
 temp/
+uploads/
+backend/uploads/

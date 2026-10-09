@@ -26,6 +26,7 @@ interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
   title: string;
+  subtitle?: string;
   children: React.ReactNode;
   footer?: React.ReactNode;
   size?: 'sm' | 'md' | 'lg' | 'xl';
@@ -35,6 +36,7 @@ export const Modal: React.FC<ModalProps> = ({
   isOpen,
   onClose,
   title,
+  subtitle,
   children,
   footer,
   size = 'md',
@@ -68,9 +70,16 @@ export const Modal: React.FC<ModalProps> = ({
         aria-labelledby="modal-title"
       >
         <div className="modal-header">
-          <h3 id="modal-title" className="modal-title">
-            {title}
-          </h3>
+          <div>
+            <h3 id="modal-title" className="modal-title">
+              {title}
+            </h3>
+            {subtitle && (
+              <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                {subtitle}
+              </div>
+            )}
+          </div>
           <button
             type="button"
             className="modal-close-btn"

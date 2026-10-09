@@ -34,6 +34,8 @@ import {
   BookOpen,
   Settings,
   ShieldCheck,
+  Building2,
+  Briefcase,
 } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 
@@ -45,6 +47,8 @@ export const Sidebar: React.FC = () => {
     { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
     { label: 'Fleet & Trucks', path: '/fleet/trucks', icon: Truck },
     { label: 'Driver Master', path: '/fleet/drivers', icon: UserSquare2 },
+    { label: 'Billing Parties', path: '/parties/billing', icon: Building2 },
+    { label: 'Balance Parties', path: '/parties/balance', icon: Briefcase },
     { label: 'Trips & Dispatch', path: '/journey/all', icon: Navigation },
     { label: 'Bill Entries & LR', path: '/bill-entry/all', icon: Receipt },
     { label: 'Freight Invoices', path: '/invoices', icon: FileSpreadsheet },

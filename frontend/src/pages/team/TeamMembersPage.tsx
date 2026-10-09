@@ -192,84 +192,78 @@ export const TeamMembersPage: React.FC = () => {
       />
 
       {/* KPI Stats */}
-      <div className="grid-12" style={{ marginBottom: '1.75rem' }}>
-        <div className="col-span-4 col-span-md-12">
-          <div className="card" style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
-            <div
-              style={{
-                width: '3rem',
-                height: '3rem',
-                borderRadius: 'var(--radius-lg)',
-                backgroundColor: 'var(--color-primary-50)',
-                color: 'var(--color-primary-600)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Users size={24} />
+      <div className="grid grid-cols-1 md:grid-cols-3" style={{ gap: '1rem', marginBottom: '1.75rem' }}>
+        <div className="card" style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
+          <div
+            style={{
+              width: '3rem',
+              height: '3rem',
+              borderRadius: 'var(--radius-lg)',
+              backgroundColor: 'var(--color-primary-50)',
+              color: 'var(--color-primary-600)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Users size={24} />
+          </div>
+          <div>
+            <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)', fontWeight: 'var(--font-weight-medium)' }}>
+              Total Members
             </div>
-            <div>
-              <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)', fontWeight: 'var(--font-weight-medium)' }}>
-                Total Members
-              </div>
-              <div style={{ fontSize: 'var(--font-size-2xl)', fontWeight: 'var(--font-weight-bold)', color: 'var(--text-main)' }}>
-                {totalCount}
-              </div>
+            <div style={{ fontSize: 'var(--font-size-2xl)', fontWeight: 'var(--font-weight-bold)', color: 'var(--text-main)' }}>
+              {totalCount}
             </div>
           </div>
         </div>
 
-        <div className="col-span-4 col-span-md-12">
-          <div className="card" style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
-            <div
-              style={{
-                width: '3rem',
-                height: '3rem',
-                borderRadius: 'var(--radius-lg)',
-                backgroundColor: 'var(--color-emerald-50)',
-                color: 'var(--color-emerald-600)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <ShieldCheck size={24} />
+        <div className="card" style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
+          <div
+            style={{
+              width: '3rem',
+              height: '3rem',
+              borderRadius: 'var(--radius-lg)',
+              backgroundColor: 'var(--color-emerald-50)',
+              color: 'var(--color-emerald-600)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <ShieldCheck size={24} />
+          </div>
+          <div>
+            <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)', fontWeight: 'var(--font-weight-medium)' }}>
+              Active Accounts
             </div>
-            <div>
-              <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)', fontWeight: 'var(--font-weight-medium)' }}>
-                Active Accounts
-              </div>
-              <div style={{ fontSize: 'var(--font-size-2xl)', fontWeight: 'var(--font-weight-bold)', color: 'var(--text-main)' }}>
-                {activeCount}
-              </div>
+            <div style={{ fontSize: 'var(--font-size-2xl)', fontWeight: 'var(--font-weight-bold)', color: 'var(--text-main)' }}>
+              {activeCount}
             </div>
           </div>
         </div>
 
-        <div className="col-span-4 col-span-md-12">
-          <div className="card" style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
-            <div
-              style={{
-                width: '3rem',
-                height: '3rem',
-                borderRadius: 'var(--radius-lg)',
-                backgroundColor: 'var(--color-amber-50)',
-                color: 'var(--color-amber-600)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Clock size={24} />
+        <div className="card" style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
+          <div
+            style={{
+              width: '3rem',
+              height: '3rem',
+              borderRadius: 'var(--radius-lg)',
+              backgroundColor: 'var(--color-amber-50)',
+              color: 'var(--color-amber-600)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Clock size={24} />
+          </div>
+          <div>
+            <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)', fontWeight: 'var(--font-weight-medium)' }}>
+              Pending Invitations
             </div>
-            <div>
-              <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)', fontWeight: 'var(--font-weight-medium)' }}>
-                Pending Invitations
-              </div>
-              <div style={{ fontSize: 'var(--font-size-2xl)', fontWeight: 'var(--font-weight-bold)', color: 'var(--text-main)' }}>
-                {pendingCount}
-              </div>
+            <div style={{ fontSize: 'var(--font-size-2xl)', fontWeight: 'var(--font-weight-bold)', color: 'var(--text-main)' }}>
+              {pendingCount}
             </div>
           </div>
         </div>
@@ -471,7 +465,11 @@ export const TeamMembersPage: React.FC = () => {
             <button
               type="button"
               className="btn btn-outline"
-              onClick={() => setIsInviteModalOpen(false)}
+              onClick={() => {
+                setInviteEmail('');
+                setInviteRole('dispatcher');
+                setIsInviteModalOpen(false);
+              }}
             >
               Cancel
             </button>

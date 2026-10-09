@@ -33,6 +33,12 @@ import { AppLayout } from './components/layout/AppLayout';
 import { DashboardPage } from './pages/dashboard/DashboardPage';
 import { TeamMembersPage } from './pages/team/TeamMembersPage';
 import { CompanySettingsPage } from './pages/settings/CompanySettingsPage';
+import { TruckListPage } from './pages/fleet/TruckListPage';
+import { TruckDetailPage } from './pages/fleet/TruckDetailPage';
+import { DriverListPage } from './pages/fleet/DriverListPage';
+import { DriverDetailPage } from './pages/fleet/DriverDetailPage';
+import { BillingPartyListPage } from './pages/parties/BillingPartyListPage';
+import { BalancePartyListPage } from './pages/parties/BalancePartyListPage';
 import { ToastContainer } from './components/common/ToastContainer';
 
 /**
@@ -94,9 +100,15 @@ export const App: React.FC = () => {
           <Route path="team" element={<TeamMembersPage />} />
           <Route path="settings/company" element={<CompanySettingsPage />} />
 
+          {/* Phase 2: Master Data Registries */}
+          <Route path="fleet/trucks" element={<TruckListPage />} />
+          <Route path="fleet/trucks/:id" element={<TruckDetailPage />} />
+          <Route path="fleet/drivers" element={<DriverListPage />} />
+          <Route path="fleet/drivers/:id" element={<DriverDetailPage />} />
+          <Route path="parties/billing" element={<BillingPartyListPage />} />
+          <Route path="parties/balance" element={<BalancePartyListPage />} />
+
           {/* Placeholders for subsequent phases */}
-          <Route path="fleet/trucks" element={<div className="page-header-title">Truck Registry (Phase 2)</div>} />
-          <Route path="fleet/drivers" element={<div className="page-header-title">Driver Master (Phase 2)</div>} />
           <Route path="journey/all" element={<div className="page-header-title">Trips & Dispatch (Phase 3)</div>} />
           <Route path="bill-entry/all" element={<div className="page-header-title">Bill Entries & LR (Phase 4)</div>} />
           <Route path="invoices" element={<div className="page-header-title">Freight Invoices (Phase 4)</div>} />

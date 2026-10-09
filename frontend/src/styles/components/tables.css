@@ -1,55 +1,82 @@
+/* Table Responsive Wrappers */
+.table-responsive,
 .table-wrapper {
   width: 100%;
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
   background-color: var(--bg-surface);
+}
+
+.table-wrapper {
   border: 1px solid var(--border-light);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
+  overflow: hidden;
 }
 
+/* Master Table Styles */
+.table,
 .data-table {
   width: 100%;
   border-collapse: collapse;
   text-align: left;
+  font-size: var(--font-size-sm);
+  background-color: var(--bg-surface);
 }
 
+.table thead,
+.data-table thead,
 .table-header {
   background-color: var(--color-slate-50);
   border-bottom: 1px solid var(--border-light);
 }
 
+.table thead th,
+.data-table thead th,
 .table-header th {
-  padding: 0.75rem 1rem;
+  padding: 0.875rem 1.125rem;
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-semibold);
   color: var(--color-slate-600);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   white-space: nowrap;
+  border-bottom: 1px solid var(--border-light);
+  line-height: 1.25;
 }
 
+.table tbody tr,
+.data-table tbody tr,
 .table-row {
   border-bottom: 1px solid var(--border-light);
   transition: background-color var(--transition-fast);
 }
 
+.table tbody tr:last-child,
+.data-table tbody tr:last-child,
 .table-row:last-child {
   border-bottom: none;
 }
 
+.table tbody tr:hover,
+.data-table tbody tr:hover,
 .table-row:hover {
   background-color: var(--color-slate-50);
 }
 
+.table tbody td,
+.data-table tbody td,
 .table-cell {
-  padding: 0.875rem 1rem;
+  padding: 0.875rem 1.125rem;
   font-size: var(--font-size-sm);
   color: var(--text-primary);
   vertical-align: middle;
+  line-height: 1.4;
 }
 
 .table-empty {
-  padding: 3rem 1rem;
+  padding: 3.5rem 1.5rem;
   text-align: center;
   color: var(--text-muted);
 }
+

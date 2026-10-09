@@ -95,9 +95,18 @@ export function tenantPlugin(schema: Schema) {
   });
 
   // --------------------------------------------------------------------------
-  // STEP 3: Automatic Pre-Save Tenant Attachment
-  // If an entity is created without explicit company_id, pull it from context.
+  // STEP 3: Automatic Pre-Validate & Pre-Save Tenant Attachment
+  // If an entity is created without explicit company_id, pull it from context
+  // before Mongoose schema validation executes.
   // --------------------------------------------------------------------------
+  schema.pre('validate', function (next) {
+    const currentCompanyId = getCurrentTenantId();
+    if (currentCompanyId && !this.get('company_id')) {
+      this.set('company_id', currentCompanyId);
+    }
+    next();
+  });
+
   schema.pre('save', function (next) {
     const currentCompanyId = getCurrentTenantId();
     if (currentCompanyId && !this.get('company_id')) {

@@ -54,6 +54,7 @@
   --bg-app: #f8fafc;
   --bg-surface: #ffffff;
   --bg-surface-elevated: #ffffff;
+  --color-surface: #ffffff;
   --bg-sidebar: #0f172a;
   --bg-sidebar-hover: #1e293b;
   --bg-sidebar-active: #2563eb;
@@ -63,11 +64,18 @@
   --text-secondary: #475569;
   --text-muted: #64748b;
   --text-inverse: #ffffff;
+  --text-main: #0f172a;
 
   /* Borders */
   --border-light: #e2e8f0;
   --border-subtle: #cbd5e1;
   --border-focus: #3b82f6;
+  --border-color: #e2e8f0;
+
+  /* Status and Accent Color Aliases */
+  --color-rose-500: #f43f5e;
+  --color-emerald-500: #10b981;
+  --color-amber-500: #f59e0b;
 
   /* Elevation Shadows */
   --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.05);

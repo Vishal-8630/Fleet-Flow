@@ -30,6 +30,10 @@ import morgan from 'morgan';
 import mongoose from 'mongoose';
 import authRoutes from './routes/authRoutes.js';
 import companyRoutes from './routes/companyRoutes.js';
+import truckRoutes from './routes/truckRoutes.js';
+import driverRoutes from './routes/driverRoutes.js';
+import partyRoutes from './routes/partyRoutes.js';
+import documentRoutes from './routes/documentRoutes.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -84,6 +88,10 @@ app.get('/health', (_req, res) => {
 // ----------------------------------------------------------------------------
 app.use('/api/auth', authRoutes);
 app.use('/api/company', companyRoutes);
+app.use('/api/fleet/trucks', truckRoutes);
+app.use('/api/fleet/drivers', driverRoutes);
+app.use('/api/parties', partyRoutes);
+app.use('/api/documents', documentRoutes);
 
 // ----------------------------------------------------------------------------
 // 4. Centralized Global Error Handler

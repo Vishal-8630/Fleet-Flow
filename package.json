@@ -10,6 +10,7 @@
     "build:frontend": "npm --prefix frontend run build",
     "build": "npm run build:backend && npm run build:frontend",
     "test:phase1": "npm --prefix backend run test:phase1",
+    "test:phase2": "npm --prefix backend run test:phase2",
     "start": "npm --prefix backend run start"
   },
   "keywords": [

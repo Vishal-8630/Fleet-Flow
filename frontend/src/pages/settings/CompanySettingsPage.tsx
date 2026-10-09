@@ -217,256 +217,286 @@ export const CompanySettingsPage: React.FC = () => {
 
       <form onSubmit={handleSubmit}>
         {activeTab === 'profile' && (
-          <div className="card">
-            <h3 style={{ fontSize: 'var(--font-size-base)', fontWeight: 'var(--font-weight-bold)', marginBottom: '1.25rem' }}>
-              Legal Business Information
-            </h3>
+          <div className="card" style={{ padding: '1.75rem' }}>
+            <div style={{ marginBottom: '1.5rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '1rem' }}>
+              <h3 style={{ fontSize: 'var(--font-size-base)', fontWeight: 'var(--font-weight-bold)', margin: 0, color: 'var(--text-main)' }}>
+                Legal Business Information
+              </h3>
+              <p style={{ margin: '0.25rem 0 0 0', fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
+                Primary identity and registered physical establishment details of your enterprise.
+              </p>
+            </div>
 
-            <div className="grid-12">
-              <div className="col-span-6 col-span-md-12">
-                <div className="form-group">
-                  <label className="form-label" htmlFor="name">
-                    Company Name <span style={{ color: 'var(--color-rose-500)' }}>*</span>
-                  </label>
-                  <input
-                    id="name"
-                    name="name"
-                    type="text"
-                    className="form-input"
-                    value={formData.name}
-                    onChange={handleChange}
-                    disabled={!isAdmin || isLoading}
-                    required
-                  />
-                </div>
+            {/* Row 1: Company Name & Official Business Email */}
+            <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: '1.25rem', marginBottom: '1.25rem' }}>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label" htmlFor="name">
+                  Company Name <span style={{ color: 'var(--color-danger)' }}>*</span>
+                </label>
+                <input
+                  id="name"
+                  name="name"
+                  type="text"
+                  className="form-control"
+                  placeholder="e.g. Patel Roadways Logistics"
+                  value={formData.name}
+                  onChange={handleChange}
+                  disabled={!isAdmin || isLoading}
+                  required
+                />
               </div>
 
-              <div className="col-span-6 col-span-md-12">
-                <div className="form-group">
-                  <label className="form-label" htmlFor="email">
-                    Official Business Email <span style={{ color: 'var(--color-rose-500)' }}>*</span>
-                  </label>
-                  <input
-                    id="email"
-                    name="email"
-                    type="email"
-                    className="form-input"
-                    value={formData.email}
-                    onChange={handleChange}
-                    disabled={!isAdmin || isLoading}
-                    required
-                  />
-                </div>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label" htmlFor="email">
+                  Official Business Email <span style={{ color: 'var(--color-danger)' }}>*</span>
+                </label>
+                <input
+                  id="email"
+                  name="email"
+                  type="email"
+                  className="form-control"
+                  placeholder="e.g. rohit@patellogistics.com"
+                  value={formData.email}
+                  onChange={handleChange}
+                  disabled={!isAdmin || isLoading}
+                  required
+                />
+              </div>
+            </div>
+
+            {/* Row 2: Phone / Contact Number & GSTIN */}
+            <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: '1.25rem', marginBottom: '1.25rem' }}>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label" htmlFor="phone">
+                  Phone / Contact Number <span style={{ color: 'var(--color-danger)' }}>*</span>
+                </label>
+                <input
+                  id="phone"
+                  name="phone"
+                  type="tel"
+                  className="form-control"
+                  placeholder="e.g. 9876543210"
+                  value={formData.phone}
+                  onChange={handleChange}
+                  disabled={!isAdmin || isLoading}
+                  required
+                />
               </div>
 
-              <div className="col-span-6 col-span-md-12">
-                <div className="form-group">
-                  <label className="form-label" htmlFor="phone">
-                    Phone / Contact Number <span style={{ color: 'var(--color-rose-500)' }}>*</span>
-                  </label>
-                  <input
-                    id="phone"
-                    name="phone"
-                    type="tel"
-                    className="form-input"
-                    value={formData.phone}
-                    onChange={handleChange}
-                    disabled={!isAdmin || isLoading}
-                    required
-                  />
-                </div>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label" htmlFor="gstin">
+                  GSTIN (Goods and Services Tax ID)
+                </label>
+                <input
+                  id="gstin"
+                  name="gstin"
+                  type="text"
+                  className="form-control"
+                  placeholder="e.g. 27AAAAA0000A1Z5"
+                  value={formData.gstin}
+                  onChange={handleChange}
+                  disabled={!isAdmin || isLoading}
+                  style={{ textTransform: 'uppercase' }}
+                />
+              </div>
+            </div>
+
+            {/* Row 3: Street Address */}
+            <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+              <label className="form-label" htmlFor="street">
+                Registered Office Street Address
+              </label>
+              <input
+                id="street"
+                name="street"
+                type="text"
+                className="form-control"
+                placeholder="e.g. 104, Logistics Hub, Ring Road"
+                value={formData.street}
+                onChange={handleChange}
+                disabled={!isAdmin || isLoading}
+              />
+            </div>
+
+            {/* Row 4: City, State, PIN */}
+            <div className="grid grid-cols-1 md:grid-cols-3" style={{ gap: '1.25rem' }}>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label" htmlFor="city">
+                  City
+                </label>
+                <input
+                  id="city"
+                  name="city"
+                  type="text"
+                  className="form-control"
+                  placeholder="e.g. Mumbai"
+                  value={formData.city}
+                  onChange={handleChange}
+                  disabled={!isAdmin || isLoading}
+                />
               </div>
 
-              <div className="col-span-6 col-span-md-12">
-                <div className="form-group">
-                  <label className="form-label" htmlFor="gstin">
-                    GSTIN (Goods and Services Tax ID)
-                  </label>
-                  <input
-                    id="gstin"
-                    name="gstin"
-                    type="text"
-                    className="form-input"
-                    placeholder="e.g. 27AAAAA0000A1Z5"
-                    value={formData.gstin}
-                    onChange={handleChange}
-                    disabled={!isAdmin || isLoading}
-                  />
-                </div>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label" htmlFor="state">
+                  State / Province
+                </label>
+                <input
+                  id="state"
+                  name="state"
+                  type="text"
+                  className="form-control"
+                  placeholder="e.g. Maharashtra"
+                  value={formData.state}
+                  onChange={handleChange}
+                  disabled={!isAdmin || isLoading}
+                />
               </div>
 
-              <div className="col-span-12">
-                <div className="form-group">
-                  <label className="form-label" htmlFor="street">
-                    Registered Office Street Address
-                  </label>
-                  <input
-                    id="street"
-                    name="street"
-                    type="text"
-                    className="form-input"
-                    placeholder="e.g. 104, Logistics Hub, Ring Road"
-                    value={formData.street}
-                    onChange={handleChange}
-                    disabled={!isAdmin || isLoading}
-                  />
-                </div>
-              </div>
-
-              <div className="col-span-4 col-span-md-12">
-                <div className="form-group">
-                  <label className="form-label" htmlFor="city">
-                    City
-                  </label>
-                  <input
-                    id="city"
-                    name="city"
-                    type="text"
-                    className="form-input"
-                    value={formData.city}
-                    onChange={handleChange}
-                    disabled={!isAdmin || isLoading}
-                  />
-                </div>
-              </div>
-
-              <div className="col-span-4 col-span-md-12">
-                <div className="form-group">
-                  <label className="form-label" htmlFor="state">
-                    State / Province
-                  </label>
-                  <input
-                    id="state"
-                    name="state"
-                    type="text"
-                    className="form-input"
-                    value={formData.state}
-                    onChange={handleChange}
-                    disabled={!isAdmin || isLoading}
-                  />
-                </div>
-              </div>
-
-              <div className="col-span-4 col-span-md-12">
-                <div className="form-group">
-                  <label className="form-label" htmlFor="postal_code">
-                    Postal / PIN Code
-                  </label>
-                  <input
-                    id="postal_code"
-                    name="postal_code"
-                    type="text"
-                    className="form-input"
-                    value={formData.postal_code}
-                    onChange={handleChange}
-                    disabled={!isAdmin || isLoading}
-                  />
-                </div>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label" htmlFor="postal_code">
+                  Postal / PIN Code
+                </label>
+                <input
+                  id="postal_code"
+                  name="postal_code"
+                  type="text"
+                  className="form-control"
+                  placeholder="e.g. 400001"
+                  value={formData.postal_code}
+                  onChange={handleChange}
+                  disabled={!isAdmin || isLoading}
+                />
               </div>
             </div>
           </div>
         )}
 
         {activeTab === 'operations' && (
-          <div className="card">
-            <h3 style={{ fontSize: 'var(--font-size-base)', fontWeight: 'var(--font-weight-bold)', marginBottom: '1.25rem' }}>
-              Operational Defaults & Numbering Formats
-            </h3>
+          <div className="card" style={{ padding: '1.75rem' }}>
+            <div style={{ marginBottom: '1.5rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '1rem' }}>
+              <h3 style={{ fontSize: 'var(--font-size-base)', fontWeight: 'var(--font-weight-bold)', margin: 0, color: 'var(--text-main)' }}>
+                Operational Defaults & Numbering Formats
+              </h3>
+              <p style={{ margin: '0.25rem 0 0 0', fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
+                Standardize transactional documents, bilty numbering, currencies, and calendar displays.
+              </p>
+            </div>
 
-            <div className="grid-12">
-              <div className="col-span-6 col-span-md-12">
-                <div className="form-group">
-                  <label className="form-label" htmlFor="currency">
-                    Operating Currency
-                  </label>
-                  <select
-                    id="currency"
-                    name="currency"
-                    className="form-select"
-                    value={formData.currency}
-                    onChange={handleChange}
-                    disabled={!isAdmin || isLoading}
-                  >
-                    <option value="INR">INR (₹) — Indian Rupee</option>
-                    <option value="USD">USD ($) — US Dollar</option>
-                    <option value="AED">AED (د.إ) — UAE Dirham</option>
-                  </select>
-                </div>
+            {/* Row 1: Operating Currency & System Timezone */}
+            <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: '1.25rem', marginBottom: '1.25rem' }}>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label" htmlFor="currency">
+                  Operating Currency
+                </label>
+                <select
+                  id="currency"
+                  name="currency"
+                  className="form-control"
+                  value={formData.currency}
+                  onChange={handleChange}
+                  disabled={!isAdmin || isLoading}
+                >
+                  <option value="INR">INR (₹) — Indian Rupee</option>
+                  <option value="USD">USD ($) — US Dollar</option>
+                  <option value="AED">AED (د.إ) — UAE Dirham</option>
+                </select>
+                <span className="form-hint">Applied across freight rates, advances, and ledger calculations.</span>
               </div>
 
-              <div className="col-span-6 col-span-md-12">
-                <div className="form-group">
-                  <label className="form-label" htmlFor="timezone">
-                    System Timezone
-                  </label>
-                  <select
-                    id="timezone"
-                    name="timezone"
-                    className="form-select"
-                    value={formData.timezone}
-                    onChange={handleChange}
-                    disabled={!isAdmin || isLoading}
-                  >
-                    <option value="Asia/Kolkata">Asia/Kolkata (IST +5:30)</option>
-                    <option value="Asia/Dubai">Asia/Dubai (GST +4:00)</option>
-                    <option value="UTC">UTC (+0:00)</option>
-                  </select>
-                </div>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label" htmlFor="timezone">
+                  System Timezone
+                </label>
+                <select
+                  id="timezone"
+                  name="timezone"
+                  className="form-control"
+                  value={formData.timezone}
+                  onChange={handleChange}
+                  disabled={!isAdmin || isLoading}
+                >
+                  <option value="Asia/Kolkata">Asia/Kolkata (IST +5:30)</option>
+                  <option value="Asia/Dubai">Asia/Dubai (GST +4:00)</option>
+                  <option value="UTC">UTC (+0:00)</option>
+                </select>
+                <span className="form-hint">Used to timestamp loading receipts, logs, and system events.</span>
+              </div>
+            </div>
+
+            {/* Row 2: LR Prefix & Tax Invoice Prefix */}
+            <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: '1.25rem', marginBottom: '1.25rem' }}>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label" htmlFor="lr_prefix">
+                  LR (Lorry Receipt / Bilty) Prefix
+                </label>
+                <input
+                  id="lr_prefix"
+                  name="lr_prefix"
+                  type="text"
+                  className="form-control"
+                  placeholder="e.g. LR-"
+                  value={formData.lr_prefix}
+                  onChange={handleChange}
+                  disabled={!isAdmin || isLoading}
+                />
+                <span className="form-hint">Auto-prepended to newly generated bilty tracking documents.</span>
               </div>
 
-              <div className="col-span-6 col-span-md-12">
-                <div className="form-group">
-                  <label className="form-label" htmlFor="lr_prefix">
-                    LR (Lorry Receipt / Bilty) Prefix
-                  </label>
-                  <input
-                    id="lr_prefix"
-                    name="lr_prefix"
-                    type="text"
-                    className="form-input"
-                    placeholder="e.g. LR-"
-                    value={formData.lr_prefix}
-                    onChange={handleChange}
-                    disabled={!isAdmin || isLoading}
-                  />
-                </div>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label" htmlFor="invoice_prefix">
+                  Tax Invoice Prefix
+                </label>
+                <input
+                  id="invoice_prefix"
+                  name="invoice_prefix"
+                  type="text"
+                  className="form-control"
+                  placeholder="e.g. INV-"
+                  value={formData.invoice_prefix}
+                  onChange={handleChange}
+                  disabled={!isAdmin || isLoading}
+                />
+                <span className="form-hint">Auto-prepended to customer billing and tax invoice numbers.</span>
+              </div>
+            </div>
+
+            {/* Row 3: Display Date Format & Standards Note */}
+            <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: '1.25rem' }}>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label" htmlFor="date_format">
+                  Display Date Format
+                </label>
+                <select
+                  id="date_format"
+                  name="date_format"
+                  className="form-control"
+                  value={formData.date_format}
+                  onChange={handleChange}
+                  disabled={!isAdmin || isLoading}
+                >
+                  <option value="DD/MM/YYYY">DD/MM/YYYY (e.g. 09/10/2026)</option>
+                  <option value="YYYY-MM-DD">YYYY-MM-DD (e.g. 2026-10-09)</option>
+                  <option value="MM/DD/YYYY">MM/DD/YYYY (e.g. 10/09/2026)</option>
+                </select>
+                <span className="form-hint">Governs how dates render across tables, printouts, and reports.</span>
               </div>
 
-              <div className="col-span-6 col-span-md-12">
-                <div className="form-group">
-                  <label className="form-label" htmlFor="invoice_prefix">
-                    Tax Invoice Prefix
-                  </label>
-                  <input
-                    id="invoice_prefix"
-                    name="invoice_prefix"
-                    type="text"
-                    className="form-input"
-                    placeholder="e.g. INV-"
-                    value={formData.invoice_prefix}
-                    onChange={handleChange}
-                    disabled={!isAdmin || isLoading}
-                  />
-                </div>
-              </div>
-
-              <div className="col-span-6 col-span-md-12">
-                <div className="form-group">
-                  <label className="form-label" htmlFor="date_format">
-                    Display Date Format
-                  </label>
-                  <select
-                    id="date_format"
-                    name="date_format"
-                    className="form-select"
-                    value={formData.date_format}
-                    onChange={handleChange}
-                    disabled={!isAdmin || isLoading}
-                  >
-                    <option value="DD/MM/YYYY">DD/MM/YYYY (e.g. 09/10/2026)</option>
-                    <option value="YYYY-MM-DD">YYYY-MM-DD (e.g. 2026-10-09)</option>
-                    <option value="MM/DD/YYYY">MM/DD/YYYY (e.g. 10/09/2026)</option>
-                  </select>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  padding: '1rem 1.25rem',
+                  backgroundColor: 'var(--color-slate-50)',
+                  border: '1px solid var(--border-light)',
+                  borderRadius: 'var(--radius-md)',
+                  alignSelf: 'flex-start',
+                }}
+              >
+                <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                  <strong style={{ color: 'var(--text-main)', display: 'block', marginBottom: '0.25rem' }}>
+                    Document Standard Compliance
+                  </strong>
+                  Prefixes and formatting preferences apply seamlessly to all company branches and operational team members.
                 </div>
               </div>
             </div>
@@ -478,6 +508,7 @@ export const CompanySettingsPage: React.FC = () => {
             <button
               type="submit"
               className="btn btn-primary"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
               disabled={updateMutation.isPending || isLoading}
             >
               <Save size={16} />
