@@ -37,6 +37,7 @@
  * ============================================================================
  */
 
+import 'dotenv/config';
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { User, IUser } from '../models/User.js';

@@ -63,7 +63,7 @@ export const AcceptInvitePage: React.FC = () => {
         setLoadingVerify(false);
       })
       .catch((err: any) => {
-        setVerifyError(err.response?.data?.error || 'Invitation is invalid or has expired.');
+        setVerifyError(err.message || err.response?.data?.error || 'Invitation is invalid or has expired.');
         setLoadingVerify(false);
       });
   }, [token]);
@@ -97,7 +97,7 @@ export const AcceptInvitePage: React.FC = () => {
       toast.success(`Welcome to ${res.data.company.name}!`);
       navigate('/dashboard');
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to accept invitation.');
+      toast.error(err.message || err.response?.data?.error || 'Failed to accept invitation.');
     } finally {
       setSubmitting(false);
     }

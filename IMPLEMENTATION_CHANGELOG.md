@@ -67,8 +67,17 @@
     * Validated `AsyncLocalStorage` zero-data-leakage boundary (Tenant A queries cannot return Tenant B data).
     * Validated invitation isolation and teardown cleanup.
     * 100% of Phase 1 acceptance criteria verified and passed.
-* **[Code Documentation & Developer Experience]:**
-  * Added comprehensive function-level, architecture, and lifecycle comments across all 28 source files (backend & frontend).
-  * Documented architectural rationale ("What is this?", "Why are we doing this?", "How the flow works"), safety mechanisms (anti-lockout, PII isolation, role safeguards), and data flow pipelines.
-  * Committed and pushed to GitHub: commit `8dc389e`.
+* **[Bug Fixes & Hardening]:**
+  * **ESM Hoisting & JWT Secret Mismatch Resolution:**
+    * *Root Cause:* In `backend/src/server.ts`, static ES Module `import` statements were evaluated before `dotenv.config()` ran. As a consequence, `authController.ts` evaluated its top-level `JWT_SECRET` constant before environment variables were parsed, falling back to `'dev_secret_fallback_key'`. When `authMiddleware.ts` verified tokens at runtime, it used the loaded `process.env.JWT_SECRET`, triggering a signature mismatch (`JsonWebTokenError: invalid signature`) resulting in `401 Unauthorized: Invalid or expired session` across all subsequent protected API requests (`PUT /api/company/profile` and `POST /api/company/members/invite`).
+    * *Resolution:*
+      1. Placed `import 'dotenv/config';` at line 1 of `server.ts`, `authController.ts`, `companyController.ts`, and `authMiddleware.ts`.
+      2. Replaced static constants with dynamic getters `const getJwtSecret = (): string => process.env.JWT_SECRET || 'dev_secret_fallback_key';` and dynamic `getCookieOptions()`.
+      3. Sanitized optional input fields in `updateCompanyProfile` so empty string submissions do not trip Mongoose required validations.
+  * **Frontend Error Toast Unwrapping:**
+    * *Issue:* The Axios response interceptor rejects with standard `new Error(message)` instances. Frontend mutation handlers inspecting `err.response?.data?.error` failed to unpack the server error message, falling back to generic placeholder messages.
+    * *Resolution:* Updated mutation `onError` handlers in `CompanySettingsPage.tsx`, `TeamMembersPage.tsx`, and `AcceptInvitePage.tsx` to read `err.message || err.response?.data?.error || fallback`.
+  * **Automated E2E API Verification:**
+    * Executed live integration test (`testFix.mjs`) verifying company registration, `PUT /api/company/profile` (status 200), and `POST /api/company/members/invite` (status 201). Both succeeded without errors.
+
 

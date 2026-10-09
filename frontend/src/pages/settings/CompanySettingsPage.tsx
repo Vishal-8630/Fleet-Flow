@@ -113,7 +113,7 @@ export const CompanySettingsPage: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['company-profile'] });
     },
     onError: (err: any) => {
-      toast.error(err.response?.data?.error || 'Failed to save settings.');
+      toast.error(err.message || err.response?.data?.error || 'Failed to save settings.');
     },
   });
 

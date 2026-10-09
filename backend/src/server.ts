@@ -21,18 +21,15 @@
  * ============================================================================
  */
 
+import 'dotenv/config'; // MUST be first import so process.env is initialized before any ESM module evaluation
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import morgan from 'morgan';
 import mongoose from 'mongoose';
-import dotenv from 'dotenv';
 import authRoutes from './routes/authRoutes.js';
 import companyRoutes from './routes/companyRoutes.js';
-
-// Load environment variables from .env
-dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;

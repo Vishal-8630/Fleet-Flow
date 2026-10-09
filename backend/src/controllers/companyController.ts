@@ -21,6 +21,7 @@
  * ============================================================================
  */
 
+import 'dotenv/config';
 import { Request, Response } from 'express';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
@@ -30,13 +31,21 @@ import { Company } from '../models/Company.js';
 import { CompanyMember } from '../models/CompanyMember.js';
 import { User } from '../models/User.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_fallback_key';
-const COOKIE_OPTIONS = {
+/**
+ * Returns the JWT signing secret dynamically from process.env to guarantee
+ * consistent secret resolution across ES Module evaluation and runtime execution.
+ */
+const getJwtSecret = (): string => process.env.JWT_SECRET || 'dev_secret_fallback_key';
+
+/**
+ * Returns the secure session cookie configuration dynamically.
+ */
+const getCookieOptions = () => ({
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production',
   sameSite: 'strict' as const,
   maxAge: 7 * 24 * 60 * 60 * 1000,
-};
+});
 
 /**
  * 1. getCompanyProfile
@@ -83,10 +92,10 @@ export const updateCompanyProfile = async (req: Request, res: Response): Promise
       return;
     }
 
-    if (name) company.name = name.trim();
-    if (phone) company.phone = phone.trim();
-    if (email) company.email = email.toLowerCase().trim();
-    if (gstin !== undefined) company.gstin = gstin ? gstin.toUpperCase().trim() : undefined;
+    if (name && name.trim()) company.name = name.trim();
+    if (phone && phone.trim()) company.phone = phone.trim();
+    if (email && email.trim()) company.email = email.toLowerCase().trim();
+    if (gstin !== undefined) company.gstin = gstin && gstin.trim() ? gstin.toUpperCase().trim() : undefined;
 
     if (address) {
       company.address = {
@@ -463,11 +472,11 @@ export const acceptInvitation = async (req: Request, res: Response): Promise<voi
     // Issue JWT cookie and response
     const authToken = jwt.sign(
       { userId: user._id, companyId: company._id },
-      JWT_SECRET,
+      getJwtSecret(),
       { expiresIn: '7d' }
     );
 
-    res.cookie('token', authToken, COOKIE_OPTIONS);
+    res.cookie('token', authToken, getCookieOptions());
 
     res.json({
       message: 'Invitation accepted! Welcome to ' + company.name,

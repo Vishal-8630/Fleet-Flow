@@ -19,6 +19,7 @@
  * ============================================================================
  */
 
+import 'dotenv/config';
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
@@ -27,13 +28,21 @@ import { User } from '../models/User.js';
 import { Company } from '../models/Company.js';
 import { CompanyMember } from '../models/CompanyMember.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_fallback_key';
-const COOKIE_OPTIONS = {
+/**
+ * Returns the JWT signing secret dynamically from process.env to guarantee
+ * consistent secret resolution across ES Module evaluation and runtime execution.
+ */
+const getJwtSecret = (): string => process.env.JWT_SECRET || 'dev_secret_fallback_key';
+
+/**
+ * Returns the secure session cookie configuration dynamically.
+ */
+const getCookieOptions = () => ({
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production',
   sameSite: 'strict' as const,
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days session lifetime
-};
+});
 
 /**
  * 1. registerCompany
@@ -106,9 +115,9 @@ export async function registerCompany(req: Request, res: Response): Promise<void
     });
 
     // 5. Issue JWT session cookie
-    const token = jwt.sign({ userId: user._id, companyId: company._id }, JWT_SECRET, { expiresIn: '7d' });
+    const token = jwt.sign({ userId: user._id, companyId: company._id }, getJwtSecret(), { expiresIn: '7d' });
 
-    res.cookie('token', token, COOKIE_OPTIONS);
+    res.cookie('token', token, getCookieOptions());
 
     res.status(201).json({
       message: 'Company workspace successfully registered!',
@@ -161,9 +170,9 @@ export async function login(req: Request, res: Response): Promise<void> {
     }
 
     const company = membership.company_id as any;
-    const token = jwt.sign({ userId: user._id, companyId: company._id }, JWT_SECRET, { expiresIn: '7d' });
+    const token = jwt.sign({ userId: user._id, companyId: company._id }, getJwtSecret(), { expiresIn: '7d' });
 
-    res.cookie('token', token, COOKIE_OPTIONS);
+    res.cookie('token', token, getCookieOptions());
 
     res.json({
       message: 'Login successful.',
@@ -182,7 +191,7 @@ export async function login(req: Request, res: Response): Promise<void> {
  * Terminates the active session by clearing the HttpOnly cookie.
  */
 export async function logout(_req: Request, res: Response): Promise<void> {
-  res.clearCookie('token', COOKIE_OPTIONS);
+  res.clearCookie('token', getCookieOptions());
   res.json({ message: 'Logged out successfully.' });
 }
 

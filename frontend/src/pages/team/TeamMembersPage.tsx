@@ -99,7 +99,7 @@ export const TeamMembersPage: React.FC = () => {
       }
     },
     onError: (err: any) => {
-      toast.error(err.response?.data?.error || 'Failed to send invitation.');
+      toast.error(err.message || err.response?.data?.error || 'Failed to send invitation.');
     },
   });
 
@@ -116,7 +116,7 @@ export const TeamMembersPage: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['company-members'] });
     },
     onError: (err: any) => {
-      toast.error(err.response?.data?.error || 'Failed to update member role.');
+      toast.error(err.message || err.response?.data?.error || 'Failed to update member role.');
     },
   });
 
@@ -131,7 +131,7 @@ export const TeamMembersPage: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['company-members'] });
     },
     onError: (err: any) => {
-      toast.error(err.response?.data?.error || 'Failed to update member status.');
+      toast.error(err.message || err.response?.data?.error || 'Failed to update member status.');
     },
   });
 
@@ -146,7 +146,7 @@ export const TeamMembersPage: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['company-members'] });
     },
     onError: (err: any) => {
-      toast.error(err.response?.data?.error || 'Failed to remove member.');
+      toast.error(err.message || err.response?.data?.error || 'Failed to remove member.');
     },
   });
 
