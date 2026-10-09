@@ -1,3 +1,28 @@
+/**
+ * ============================================================================
+ * FLEET FLOW — ROOT ROUTER & APPLICATION SHELL (App.tsx)
+ * ============================================================================
+ * 
+ * WHAT IS THIS FILE?
+ * ------------------
+ * The root React application component. Sets up React Router (`BrowserRouter`),
+ * route protection (`ProtectedRoute`), session hydration on startup, and
+ * mounts the global floating toast container.
+ * 
+ * ROUTING STRUCTURE:
+ * ------------------
+ * 1. Public Routes:
+ *    - `/login`: User login screen.
+ *    - `/register`: Company registration wizard.
+ *    - `/accept-invite`: Employee onboarding & password creation.
+ * 2. Protected Workspace Routes (wrapped in `ProtectedRoute` and `AppLayout`):
+ *    - `/dashboard`: Primary operational and KPI overview.
+ *    - `/team`: Workspace members and RBAC directory.
+ *    - `/settings/company`: Business profile and numbering configurations.
+ *    - Future Phase Routes: Fleet, Drivers, Trips, LR, Invoices, Settlements, Ledger.
+ * ============================================================================
+ */
+
 import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './stores/authStore';
@@ -10,6 +35,12 @@ import { TeamMembersPage } from './pages/team/TeamMembersPage';
 import { CompanySettingsPage } from './pages/settings/CompanySettingsPage';
 import { ToastContainer } from './components/common/ToastContainer';
 
+/**
+ * Route Guard Component:
+ * - Shows branded loading spinner while session hydration check is in-flight.
+ * - Redirects unauthenticated visitors to `/login`.
+ * - Renders protected children if session is verified.
+ */
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isAuthenticated, isLoading } = useAuthStore();
 
@@ -36,6 +67,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
 export const App: React.FC = () => {
   const { checkAuth } = useAuthStore();
 
+  // Verify session cookie upon application initialization
   useEffect(() => {
     checkAuth();
   }, [checkAuth]);
@@ -73,11 +105,11 @@ export const App: React.FC = () => {
           <Route path="super-admin" element={<div className="page-header-title">Super-Admin Control Plane (Phase 5)</div>} />
         </Route>
 
-        {/* Fallback */}
+        {/* Catch-all Fallback */}
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
 
-      {/* Global Toast Container */}
+      {/* Global Floating Toast Alerts */}
       <ToastContainer />
     </BrowserRouter>
   );

@@ -1,3 +1,42 @@
+/**
+ * ============================================================================
+ * FLEET FLOW — AUTHENTICATION & RBAC MIDDLEWARE (authMiddleware.ts)
+ * ============================================================================
+ * 
+ * WHAT IS THIS FILE?
+ * ------------------
+ * This file contains the security pipeline through which all protected API
+ * requests pass. It handles user authentication (JWT verification), multi-tenant
+ * workspace context resolution, Role-Based Access Control (RBAC), and subscription
+ * lifecycle status gating (read-only enforcement when expired/suspended).
+ * 
+ * WHY ARE WE DOING THIS?
+ * ----------------------
+ * Security and multi-tenancy cannot be afterthoughts. By decoupling authentication,
+ * tenant context resolution, and permission authorization into distinct, composable
+ * middleware functions:
+ * 1. Endpoints can easily declare required roles (e.g., `requireRole(['admin'])`).
+ * 2. Every authenticated handler is guaranteed that `req.tenant.id` is verified
+ *    and that all database calls run within the scoped `tenantStorage` context.
+ * 3. Expired or suspended companies are gracefully locked down to read-only mode
+ *    without crashing the user experience.
+ * 
+ * THE REQUEST PIPELINE:
+ * ---------------------
+ * [Client HTTP Request]
+ *        ↓
+ * 1. requireAuth               → Validates JWT in HttpOnly cookie or Bearer header.
+ *        ↓
+ * 2. resolveTenantContext      → Loads company membership, attaches `req.tenant`, wraps in AsyncLocalStorage.
+ *        ↓
+ * 3. requireRole (optional)    → Checks if user's role satisfies endpoint requirement.
+ *        ↓
+ * 4. requireActiveSubscription → Restricts suspended tenants to read-only GET requests.
+ *        ↓
+ * [Target Route Controller]
+ * ============================================================================
+ */
+
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { User, IUser } from '../models/User.js';
@@ -5,7 +44,10 @@ import { Company, ICompany } from '../models/Company.js';
 import { CompanyMember, ICompanyMember, UserRole } from '../models/CompanyMember.js';
 import { tenantStorage } from '../plugins/tenantPlugin.js';
 
-// Extend Express Request interface
+// ----------------------------------------------------------------------------
+// TypeScript Global Request Augmentation
+// Enables type-safe access to req.user, req.company, req.member, and req.tenant.
+// ----------------------------------------------------------------------------
 declare global {
   namespace Express {
     interface Request {
@@ -26,6 +68,18 @@ interface JWTPayload {
   companyId?: string;
 }
 
+/**
+ * 1. requireAuth
+ * ----------------------------------------------------------------------------
+ * Ensures the incoming request originates from an authenticated user.
+ * 
+ * Flow:
+ * - Checks HttpOnly cookie `token` (primary for web browsers) or `Bearer <token>` header.
+ * - Decodes and verifies token signature using the server's `JWT_SECRET`.
+ * - Looks up the User record in MongoDB.
+ * - Attaches the populated user document to `req.user`.
+ * - If invalid, expired, or missing, immediately halts with 401 Unauthorized.
+ */
 export async function requireAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const token = req.cookies?.token || req.headers.authorization?.replace('Bearer ', '');
@@ -51,6 +105,19 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   }
 }
 
+/**
+ * 2. resolveTenantContext
+ * ----------------------------------------------------------------------------
+ * Resolves the authenticated user's workspace membership and enters the
+ * AsyncLocalStorage tenant context.
+ * 
+ * Flow:
+ * - Queries `CompanyMember` for an `active` membership belonging to `req.user._id`.
+ * - Validates that the associated company exists and is not soft-deleted.
+ * - Attaches `req.company`, `req.member`, and `req.tenant` to the Express Request.
+ * - Wraps execution of downstream handlers inside `tenantStorage.run({ companyId }, () => next())`
+ *   so that all Mongoose queries automatically filter by `company_id`.
+ */
 export async function resolveTenantContext(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     if (!req.user) {
@@ -58,7 +125,7 @@ export async function resolveTenantContext(req: Request, res: Response, next: Ne
       return;
     }
 
-    // Find the user's active membership (or use specified company context from cookie/header if multi-org)
+    // Find the user's active membership
     const membership = await CompanyMember.findOne({
       user_id: req.user._id,
       status: 'active',
@@ -92,6 +159,19 @@ export async function resolveTenantContext(req: Request, res: Response, next: Ne
   }
 }
 
+/**
+ * 3. requireRole
+ * ----------------------------------------------------------------------------
+ * Higher-order middleware factory that enforces Role-Based Access Control (RBAC).
+ * 
+ * Supported Roles:
+ * - `admin`: Full administrative control (team management, billing, settings).
+ * - `dispatcher`: Daily operational tasks (trucks, drivers, trips, dispatches).
+ * - `accountant`: Financial workflows (invoices, ledgers, driver settlements, GST).
+ * - `viewer`: Read-only access across enabled modules.
+ * 
+ * @param allowedRoles - Array of roles permitted to invoke the downstream route.
+ */
 export function requireRole(allowedRoles: UserRole[]) {
   return (req: Request, res: Response, next: NextFunction): void => {
     if (!req.member || !allowedRoles.includes(req.member.role)) {
@@ -104,6 +184,18 @@ export function requireRole(allowedRoles: UserRole[]) {
   };
 }
 
+/**
+ * 4. requireActiveSubscription
+ * ----------------------------------------------------------------------------
+ * Enforces SaaS subscription lifecycle status without lock-out disruptions.
+ * 
+ * Rules:
+ * - HTTP GET, HEAD, and OPTIONS requests are ALWAYS permitted (operators can
+ *   always view past invoices, trip history, and driver files even if expired).
+ * - Write operations (POST, PUT, PATCH, DELETE) are blocked with code
+ *   `SUBSCRIPTION_SUSPENDED` if the workspace status is `suspended`, `cancelled`,
+ *   or `expired`.
+ */
 export function requireActiveSubscription(req: Request, res: Response, next: NextFunction): void {
   const status = req.tenant?.status;
 

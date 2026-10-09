@@ -1,3 +1,26 @@
+/**
+ * ============================================================================
+ * FLEET FLOW — COMPANY & TEAM CONTROLLER (companyController.ts)
+ * ============================================================================
+ * 
+ * WHAT IS THIS FILE?
+ * ------------------
+ * Manages the workspace profile, operational formatting settings, and the
+ * employee team directory (inviting members, updating roles, deactivating,
+ * removing members, and the public invitation onboarding workflow).
+ * 
+ * WHY IS IT STRUCTURED THIS WAY?
+ * ------------------------------
+ * - Strict RBAC Enforcement: Only users with the `admin` role can edit company
+ *   settings, invite employees, change roles, or deactivate members.
+ * - Anti-Lockout Safeguard: The system checks that a company always has at least
+ *   one active administrator before allowing role demotions or account deletions.
+ * - Idempotent Re-invitations: If an admin invites an email that was previously
+ *   invited, the system re-issues a fresh 7-day token instead of throwing a
+ *   duplicate key error.
+ * ============================================================================
+ */
+
 import { Request, Response } from 'express';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
@@ -15,7 +38,12 @@ const COOKIE_OPTIONS = {
   maxAge: 7 * 24 * 60 * 60 * 1000,
 };
 
-// 1. Get Company Profile & Settings
+/**
+ * 1. getCompanyProfile
+ * ----------------------------------------------------------------------------
+ * Retrieves the current company's legal profile, contact info, and settings.
+ * Accessible to any authenticated member of the workspace.
+ */
 export const getCompanyProfile = async (req: Request, res: Response): Promise<void> => {
   try {
     const companyId = req.tenant?.id;
@@ -37,7 +65,13 @@ export const getCompanyProfile = async (req: Request, res: Response): Promise<vo
   }
 };
 
-// 2. Update Company Profile & Settings
+/**
+ * 2. updateCompanyProfile
+ * ----------------------------------------------------------------------------
+ * Updates business details, GSTIN, registered office address, and operational
+ * numbering formats (LR prefix, Invoice prefix, currency, timezone).
+ * Restricted strictly to company administrators.
+ */
 export const updateCompanyProfile = async (req: Request, res: Response): Promise<void> => {
   try {
     const companyId = req.tenant?.id;
@@ -87,7 +121,12 @@ export const updateCompanyProfile = async (req: Request, res: Response): Promise
   }
 };
 
-// 3. List Company Members
+/**
+ * 3. listCompanyMembers
+ * ----------------------------------------------------------------------------
+ * Lists all active, invited, and deactivated members belonging to the current
+ * company workspace, populating their global User accounts.
+ */
 export const listCompanyMembers = async (req: Request, res: Response): Promise<void> => {
   try {
     const companyId = req.tenant?.id;
@@ -104,7 +143,18 @@ export const listCompanyMembers = async (req: Request, res: Response): Promise<v
   }
 };
 
-// 4. Invite Company Member
+/**
+ * 4. inviteCompanyMember
+ * ----------------------------------------------------------------------------
+ * Invites a new team member to the workspace.
+ * 
+ * Flow:
+ * 1. Checks if member already exists. If active, rejects duplicate invitation.
+ *    If previously invited, regenerates token and extends expiration.
+ * 2. Checks if the invited email already has a User account on Fleet Flow.
+ * 3. Creates a new CompanyMember record with status: 'invited' and a secure 32-byte token.
+ * 4. Generates an invitation URL for the frontend.
+ */
 export const inviteCompanyMember = async (req: Request, res: Response): Promise<void> => {
   try {
     const companyId = req.tenant?.id;
@@ -172,7 +222,15 @@ export const inviteCompanyMember = async (req: Request, res: Response): Promise<
   }
 };
 
-// 5. Update Member Role
+/**
+ * 5. updateMemberRole
+ * ----------------------------------------------------------------------------
+ * Updates a member's role (admin, dispatcher, accountant, viewer).
+ * 
+ * Safety Check:
+ * Prevents demoting the last remaining active admin in the company, which would
+ * permanently lock out the organization from administration.
+ */
 export const updateMemberRole = async (req: Request, res: Response): Promise<void> => {
   try {
     const companyId = req.tenant?.id;
@@ -213,7 +271,14 @@ export const updateMemberRole = async (req: Request, res: Response): Promise<voi
   }
 };
 
-// 6. Update Member Status (Active / Deactivated)
+/**
+ * 6. updateMemberStatus
+ * ----------------------------------------------------------------------------
+ * Toggles a member between 'active' and 'deactivated'.
+ * 
+ * Safety Check:
+ * Prevents an administrator from deactivating their own account.
+ */
 export const updateMemberStatus = async (req: Request, res: Response): Promise<void> => {
   try {
     const companyId = req.tenant?.id;
@@ -248,7 +313,14 @@ export const updateMemberStatus = async (req: Request, res: Response): Promise<v
   }
 };
 
-// 7. Delete / Revoke Member
+/**
+ * 7. removeMember
+ * ----------------------------------------------------------------------------
+ * Permanently removes a member from the company workspace.
+ * 
+ * Safety Check:
+ * Enforces that you cannot delete yourself or delete the last remaining admin.
+ */
 export const removeMember = async (req: Request, res: Response): Promise<void> => {
   try {
     const companyId = req.tenant?.id;
@@ -287,7 +359,12 @@ export const removeMember = async (req: Request, res: Response): Promise<void> =
   }
 };
 
-// 8. Verify Invitation Token (Public)
+/**
+ * 8. verifyInvitationToken (Public)
+ * ----------------------------------------------------------------------------
+ * Verifies an invitation token before rendering the employee signup form.
+ * Returns the company name, invited email, and assigned role if valid.
+ */
 export const verifyInvitationToken = async (req: Request, res: Response): Promise<void> => {
   try {
     const { token } = req.query;
@@ -321,7 +398,17 @@ export const verifyInvitationToken = async (req: Request, res: Response): Promis
   }
 };
 
-// 9. Accept Invitation (Public)
+/**
+ * 9. acceptInvitation (Public)
+ * ----------------------------------------------------------------------------
+ * Completes employee onboarding when an invited user submits their password.
+ * 
+ * Flow:
+ * 1. Validates token existence and expiry.
+ * 2. Finds or creates the global User account.
+ * 3. Marks the CompanyMember status as 'active' and clears the single-use token.
+ * 4. Signs an HttpOnly JWT cookie and logs the user in immediately.
+ */
 export const acceptInvitation = async (req: Request, res: Response): Promise<void> => {
   try {
     const { token, name, password } = req.body;

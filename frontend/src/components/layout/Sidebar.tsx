@@ -1,3 +1,25 @@
+/**
+ * ============================================================================
+ * FLEET FLOW — ROLE-AWARE SIDEBAR NAVIGATION (layout/Sidebar.tsx)
+ * ============================================================================
+ * 
+ * WHAT IS THIS COMPONENT?
+ * -----------------------
+ * The primary vertical navigation bar for the Fleet Flow web application.
+ * Filters navigation items dynamically based on the authenticated user's role.
+ * 
+ * WHY IS IT DESIGNED THIS WAY?
+ * ----------------------------
+ * - Role-Based Link Filtering: Dispatchers only see operational tools (trucks,
+ *   trips, dispatches); Accountants see financial tools (settlements, general ledger,
+ *   invoices); Administrators see full company configuration and team management.
+ * - Active State Indication: Uses React Router `<NavLink>` to highlight the
+ *   currently visited page with distinct primary accent styling.
+ * - Super-Admin Section: Renders an exclusive "Control Plane" entry for platform
+ *   operators (`isSuperAdmin: true`).
+ * ============================================================================
+ */
+
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import {
@@ -18,6 +40,7 @@ import { useAuthStore } from '../../stores/authStore';
 export const Sidebar: React.FC = () => {
   const { role, user } = useAuthStore();
 
+  // Navigation Items Catalog with optional role restrictions
   const navItems = [
     { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
     { label: 'Fleet & Trucks', path: '/fleet/trucks', icon: Truck },
@@ -31,6 +54,7 @@ export const Sidebar: React.FC = () => {
     { label: 'Company Settings', path: '/settings/company', icon: Settings, roles: ['admin'] },
   ];
 
+  // Filter links based on the authenticated user's company role
   const filteredNavItems = navItems.filter((item) => {
     if (!item.roles) return true;
     return role ? item.roles.includes(role) : false;
@@ -38,6 +62,7 @@ export const Sidebar: React.FC = () => {
 
   return (
     <aside className="sidebar">
+      {/* 1. Brand Logo & Name */}
       <div className="sidebar-header">
         <div style={{ backgroundColor: 'var(--color-primary-600)', borderRadius: 'var(--radius-md)', padding: '0.5rem', display: 'flex' }}>
           <Truck size={22} color="#ffffff" />
@@ -50,6 +75,7 @@ export const Sidebar: React.FC = () => {
         </div>
       </div>
 
+      {/* 2. Navigation Links */}
       <nav className="sidebar-nav">
         <div className="nav-section-title">Core Operations</div>
         {filteredNavItems.map((item) => {
@@ -66,6 +92,7 @@ export const Sidebar: React.FC = () => {
           );
         })}
 
+        {/* 3. Platform Super-Admin Section */}
         {user?.isSuperAdmin && (
           <>
             <div className="nav-section-title" style={{ marginTop: '1rem', color: 'var(--color-warning)' }}>
@@ -79,6 +106,7 @@ export const Sidebar: React.FC = () => {
         )}
       </nav>
 
+      {/* 4. Footer Version Tag */}
       <div style={{ padding: '1rem', borderTop: '1px solid rgba(255, 255, 255, 0.1)', fontSize: 'var(--font-size-xs)', color: 'var(--color-slate-400)' }}>
         <div>v1.0.0 Enterprise</div>
         <div style={{ marginTop: '0.25rem', color: 'var(--color-slate-500)' }}>Zero-Data Leakage Verified</div>

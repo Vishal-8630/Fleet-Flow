@@ -1,3 +1,26 @@
+/**
+ * ============================================================================
+ * FLEET FLOW — PHASE 1 AUTOMATED VERIFICATION SUITE (verifyPhase1.ts)
+ * ============================================================================
+ * 
+ * WHAT IS THIS SCRIPT?
+ * --------------------
+ * An automated, live verification test suite that executes against MongoDB Atlas.
+ * It systematically tests:
+ * 1. Live database cluster connectivity.
+ * 2. Multi-tenant provisioning (creating two completely distinct companies: Alpha & Beta).
+ * 3. Logical boundary isolation: Asserts that queries executed under Tenant A's
+ *    AsyncLocalStorage context return only Tenant A data and NEVER leak Tenant B records.
+ * 4. Invitation lifecycle isolation: Confirms Tenant B cannot see Tenant A's pending invitations.
+ * 5. Clean teardown: Drops test records to prevent test artifact pollution.
+ * 
+ * HOW TO RUN THIS TEST:
+ * ---------------------
+ * In backend folder:
+ * $ npx tsx src/scripts/verifyPhase1.ts
+ * ============================================================================
+ */
+
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import bcrypt from 'bcryptjs';

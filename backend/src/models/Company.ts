@@ -1,3 +1,26 @@
+/**
+ * ============================================================================
+ * FLEET FLOW — COMPANY WORKSPACE SCHEMA (Company.ts)
+ * ============================================================================
+ * 
+ * WHAT IS THIS MODEL?
+ * -------------------
+ * Represents a discrete transport company / tenant organization in the SaaS platform.
+ * Every truck, driver, trip, bill entry, invoice, and ledger entry belongs to
+ * exactly one Company via `company_id`.
+ * 
+ * WHY IS IT STRUCTURED THIS WAY?
+ * ------------------------------
+ * - `slug`: Unique URL-friendly identifier for the company workspace (e.g., "alpha-logistics").
+ * - `settings`: Stores company-specific formatting defaults (currency symbol, LR bill prefix,
+ *   invoice prefix, timezone, and date format) so that users see their preferred numbers
+ *   without requiring separate databases.
+ * - `subscription_status` & `trial_ends_at`: Drives billing access. New companies
+ *   start with a 14-day free trial ('trialing') without needing a credit card upfront.
+ * - `is_deleted`: Soft-delete flag ensuring audit compliance and preventing accidental data loss.
+ * ============================================================================
+ */
+
 import mongoose, { Document, Schema } from 'mongoose';
 
 export interface ICompany extends Document {
@@ -58,7 +81,7 @@ const CompanySchema = new Schema<ICompany>(
     },
     trial_ends_at: {
       type: Date,
-      default: () => new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), // 14 days trial
+      default: () => new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), // 14 days default trial
     },
     is_deleted: { type: Boolean, default: false },
   },

@@ -1,3 +1,25 @@
+/**
+ * ============================================================================
+ * FLEET FLOW — STANDARDIZED PAGE HEADER (common/PageHeader.tsx)
+ * ============================================================================
+ * 
+ * WHAT IS THIS COMPONENT?
+ * -----------------------
+ * Reusable header rendered at the top of every major workspace screen.
+ * Displays:
+ * 1. Optional breadcrumb navigation hierarchy.
+ * 2. Primary page title (`<h1>`) and optional subtitle.
+ * 3. Status badges (e.g., active status, plan indicators).
+ * 4. Action button slot (e.g., "+ Add Truck", "+ New Trip", "+ Invite Member").
+ * 
+ * WHY IS IT DESIGNED THIS WAY?
+ * ----------------------------
+ * Enforces visual consistency across all modules. Built using responsive flex
+ * properties so on narrow screens (smartphones/tablets), action buttons wrap
+ * neatly below the title without horizontal scrolling or layout shifts.
+ * ============================================================================
+ */
+
 import React from 'react';
 
 interface PageHeaderProps {
@@ -17,6 +39,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
 }) => {
   return (
     <div className="page-header" style={{ marginBottom: '1.75rem' }}>
+      {/* 1. Breadcrumbs Navigation Trail */}
       {breadcrumbs && breadcrumbs.length > 0 && (
         <nav
           style={{
@@ -58,6 +81,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
         </nav>
       )}
 
+      {/* 2. Title & Action Buttons Row */}
       <div
         style={{
           display: 'flex',
@@ -96,6 +120,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
           )}
         </div>
 
+        {/* 3. Action Buttons Slot */}
         {actions && (
           <div
             style={{

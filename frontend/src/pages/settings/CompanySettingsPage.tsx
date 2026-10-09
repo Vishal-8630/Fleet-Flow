@@ -1,3 +1,24 @@
+/**
+ * ============================================================================
+ * FLEET FLOW — COMPANY SETTINGS & OPERATIONAL DEFAULTS (CompanySettingsPage.tsx)
+ * ============================================================================
+ * 
+ * WHAT IS THIS COMPONENT?
+ * -----------------------
+ * The organization preferences configuration portal for company administrators.
+ * Manages:
+ * 1. Business Profile: Registered name, contact email, phone, GSTIN, and physical address.
+ * 2. Operational Formatting: Operating currency (INR, USD, AED), timezone (Asia/Kolkata),
+ *    Lorry Receipt (LR) bill prefix, Invoice prefix, and date format.
+ * 
+ * RBAC SAFEGUARD:
+ * ---------------
+ * - If logged-in user is `admin`: Full editing capabilities and save button.
+ * - If non-admin (`dispatcher`, `accountant`, `viewer`): Renders form fields in
+ *   `disabled` state with a yellow alert banner explaining read-only access.
+ * ============================================================================
+ */
+
 import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../api/client';

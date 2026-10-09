@@ -1,3 +1,25 @@
+/**
+ * ============================================================================
+ * FLEET FLOW — TEAM MEMBERS & ACCESS CONTROL (pages/team/TeamMembersPage.tsx)
+ * ============================================================================
+ * 
+ * WHAT IS THIS COMPONENT?
+ * -----------------------
+ * The organization team management portal where Company Admins can:
+ * 1. View all employees, operators, dispatchers, and accountants in the workspace.
+ * 2. Send invitations with specific roles (`admin`, `dispatcher`, `accountant`, `viewer`).
+ * 3. Copy invitation links directly to the clipboard for WhatsApp/SMS dispatch.
+ * 4. Change member roles or toggle active/deactivated account status.
+ * 5. Remove members from the workspace.
+ * 
+ * WHY IS IT DESIGNED THIS WAY?
+ * ----------------------------
+ * Uses TanStack Query (`useQuery` and `useMutation`) for optimistic cache updates,
+ * integrates with `uiStore` toast alerts, and displays status badges styled with
+ * generic CSS design tokens.
+ * ============================================================================
+ */
+
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../api/client';

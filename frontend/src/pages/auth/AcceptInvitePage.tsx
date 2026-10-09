@@ -1,3 +1,26 @@
+/**
+ * ============================================================================
+ * FLEET FLOW — INVITATION ONBOARDING PAGE (pages/auth/AcceptInvitePage.tsx)
+ * ============================================================================
+ * 
+ * WHAT IS THIS COMPONENT?
+ * -----------------------
+ * The onboarding screen for invited employees (operators, dispatchers, accountants).
+ * When an admin invites a team member, an activation link with a crypto token
+ * is generated (e.g., `/accept-invite?token=xyz...`).
+ * 
+ * FLOW:
+ * -----
+ * 1. Reads `token` parameter from URL query string.
+ * 2. On mount: Calls `GET /api/company/invitations/verify?token=xyz`.
+ *    - Valid: Displays company name, assigned role, and pre-fills email (read-only).
+ *    - Expired/Invalid: Displays prominent error card with return-to-login button.
+ * 3. User inputs full name, creates a password (min 6 chars), and submits.
+ * 4. Submits to `POST /api/company/invitations/accept`.
+ * 5. Calls `setAuth()`, storing the session in `authStore`, and redirects to `/dashboard`.
+ * ============================================================================
+ */
+
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import api from '../../api/client';
@@ -25,6 +48,7 @@ export const AcceptInvitePage: React.FC = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  // Validate the invitation token against backend upon component mount
   useEffect(() => {
     if (!token) {
       setVerifyError('Missing invitation token in URL.');
@@ -44,6 +68,7 @@ export const AcceptInvitePage: React.FC = () => {
       });
   }, [token]);
 
+  // Handle invitation acceptance and account activation
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!password || !confirmPassword) {
@@ -67,6 +92,7 @@ export const AcceptInvitePage: React.FC = () => {
         password,
       });
 
+      // Update client session store and enter workspace
       setAuth(res.data.user, res.data.company, res.data.company?.role);
       toast.success(`Welcome to ${res.data.company.name}!`);
       navigate('/dashboard');
@@ -98,6 +124,7 @@ export const AcceptInvitePage: React.FC = () => {
           padding: '2rem',
         }}
       >
+        {/* Header */}
         <div style={{ textAlign: 'center', marginBottom: '1.75rem' }}>
           <div
             style={{
@@ -122,6 +149,7 @@ export const AcceptInvitePage: React.FC = () => {
           </p>
         </div>
 
+        {/* State 1: Verifying token */}
         {loadingVerify ? (
           <div style={{ textAlign: 'center', padding: '2rem 0' }}>
             <div
@@ -140,6 +168,7 @@ export const AcceptInvitePage: React.FC = () => {
             </div>
           </div>
         ) : verifyError ? (
+          /* State 2: Invalid or expired token */
           <div style={{ textAlign: 'center', padding: '1rem 0' }}>
             <div style={{ color: 'var(--color-rose-600)', marginBottom: '1rem' }}>
               <AlertCircle size={44} style={{ margin: '0 auto' }} />
@@ -155,6 +184,7 @@ export const AcceptInvitePage: React.FC = () => {
             </Link>
           </div>
         ) : (
+          /* State 3: Valid token — Onboarding Form */
           <div>
             <div
               style={{

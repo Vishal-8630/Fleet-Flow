@@ -1,11 +1,36 @@
+/**
+ * ============================================================================
+ * FLEET FLOW — TOAST CONTAINER & TOAST ITEM (common/ToastContainer.tsx)
+ * ============================================================================
+ * 
+ * WHAT IS THIS COMPONENT?
+ * -----------------------
+ * Renders floating notification cards in the lower-right corner of the viewport.
+ * Consumes the `toasts` array from `uiStore`.
+ * 
+ * WHY IS IT STRUCTURED THIS WAY?
+ * ------------------------------
+ * - Portaled at Root: Mounted once in `App.tsx` so any page or modal can emit toasts
+ *   without affecting local layout flow.
+ * - Auto-Dismissal: `ToastItem` runs an isolated `setTimeout` hook tied to the
+ *   configured toast duration (default 4.5s) and clears itself on unmount.
+ * - Screen Reader Accessibility: Uses `aria-live="polite"` and `role="alert"` so
+ *   assistive technologies announce status changes cleanly.
+ * ============================================================================
+ */
+
 import React, { useEffect } from 'react';
 import { useUiStore, Toast } from '../../stores/uiStore';
 import { CheckCircle2, AlertTriangle, AlertCircle, Info, X } from 'lucide-react';
 
+/**
+ * Individual Toast Item with auto-dismiss timer and dismissal action
+ */
 const ToastItem: React.FC<{ toast: Toast; onDismiss: (id: string) => void }> = ({
   toast,
   onDismiss,
 }) => {
+  // Auto-dismiss countdown timer
   useEffect(() => {
     if (toast.duration && toast.duration > 0) {
       const timer = setTimeout(() => {
@@ -15,6 +40,7 @@ const ToastItem: React.FC<{ toast: Toast; onDismiss: (id: string) => void }> = (
     }
   }, [toast, onDismiss]);
 
+  // Icon mapping according to alert severity
   const renderIcon = () => {
     switch (toast.type) {
       case 'success':
@@ -48,6 +74,9 @@ const ToastItem: React.FC<{ toast: Toast; onDismiss: (id: string) => void }> = (
   );
 };
 
+/**
+ * Fixed container rendered in App.tsx that iterates through active toasts
+ */
 export const ToastContainer: React.FC = () => {
   const { toasts, removeToast } = useUiStore();
 

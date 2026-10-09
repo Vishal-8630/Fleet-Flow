@@ -1,3 +1,21 @@
+/**
+ * ============================================================================
+ * FLEET FLOW — USER LOGIN PAGE (pages/auth/LoginPage.tsx)
+ * ============================================================================
+ * 
+ * WHAT IS THIS COMPONENT?
+ * -----------------------
+ * The primary authentication login portal for Fleet Flow workspace users.
+ * 
+ * FLOW:
+ * -----
+ * 1. Collects email and password with client-side validation.
+ * 2. Invokes `login()` in `authStore.ts`, sending credentials to `POST /api/auth/login`.
+ * 3. On success: Backend sets secure HttpOnly JWT cookie; frontend navigates to `/dashboard`.
+ * 4. On failure: Renders error alert banner and retains input state.
+ * ============================================================================
+ */
+
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Truck, Lock, Mail, ArrowRight, AlertCircle } from 'lucide-react';
@@ -18,7 +36,7 @@ export const LoginPage: React.FC = () => {
       await login({ email, password });
       navigate('/dashboard');
     } catch {
-      // Error is set in authStore
+      // Error message is set in authStore and displayed in the alert box
     } finally {
       setLoading(false);
     }
@@ -28,6 +46,7 @@ export const LoginPage: React.FC = () => {
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--color-slate-100)', padding: '1.5rem' }}>
       <div className="card" style={{ width: '100%', maxWidth: '28rem', boxShadow: 'var(--shadow-xl)', borderRadius: 'var(--radius-xl)' }}>
         <div className="card-body" style={{ padding: '2.5rem' }}>
+          {/* Header & Logo */}
           <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
             <div style={{ width: '3.5rem', height: '3.5rem', backgroundColor: 'var(--color-primary-600)', borderRadius: 'var(--radius-lg)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1rem', boxShadow: '0 4px 14px rgba(37,99,235,0.3)' }}>
               <Truck size={30} color="#ffffff" />
@@ -40,6 +59,7 @@ export const LoginPage: React.FC = () => {
             </p>
           </div>
 
+          {/* Error Alert Box */}
           {error && (
             <div style={{ backgroundColor: 'var(--color-danger-bg)', border: '1px solid var(--color-danger-border)', padding: '0.75rem', borderRadius: 'var(--radius-md)', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <AlertCircle size={16} color="var(--color-danger)" />
@@ -49,6 +69,7 @@ export const LoginPage: React.FC = () => {
             </div>
           )}
 
+          {/* Login Form */}
           <form onSubmit={handleSubmit}>
             <div className="form-group">
               <label className="form-label">Email Address</label>
@@ -72,7 +93,7 @@ export const LoginPage: React.FC = () => {
                 <input
                   type="password"
                   className="form-input"
-                  placeholder="••••••••••••"
+                  placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
@@ -82,19 +103,22 @@ export const LoginPage: React.FC = () => {
 
             <button
               type="submit"
-              className="btn btn-primary"
-              style={{ width: '100%', marginTop: '0.5rem', padding: '0.75rem' }}
+              className="btn btn-primary btn-block"
               disabled={loading}
+              style={{ marginTop: '1.5rem', width: '100%' }}
             >
-              {loading ? 'Authenticating...' : 'Sign In to Workspace'}
+              <span>{loading ? 'Signing in...' : 'Sign In'}</span>
               <ArrowRight size={16} />
             </button>
           </form>
 
-          <div style={{ textAlign: 'center', marginTop: '1.75rem', borderTop: '1px solid var(--border-light)', paddingTop: '1.25rem', fontSize: 'var(--font-size-sm)', color: 'var(--text-muted)' }}>
-            Need a new company workspace?{' '}
-            <Link to="/register" style={{ color: 'var(--color-primary-600)', fontWeight: 'var(--font-weight-semibold)' }}>
-              Start 14-day free trial
+          {/* Registration Navigation Link */}
+          <div style={{ textAlign: 'center', marginTop: '1.75rem', borderTop: '1px solid var(--border-light)', paddingTop: '1.25rem' }}>
+            <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--text-muted)' }}>
+              Starting a new transport business?{' '}
+            </span>
+            <Link to="/register" style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-primary-600)', fontWeight: 'var(--font-weight-semibold)', textDecoration: 'none' }}>
+              Start 14-Day Free Trial
             </Link>
           </div>
         </div>
