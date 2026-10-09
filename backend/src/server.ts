@@ -43,6 +43,9 @@ import ledgerRoutes from './routes/ledgerRoutes.js';
 import billingRoutes from './routes/billingRoutes.js';
 import customFieldRoutes from './routes/customFieldRoutes.js';
 import superAdminRoutes from './routes/superAdminRoutes.js';
+import trackingRoutes from './routes/trackingRoutes.js';
+import dashboardRoutes from './routes/dashboardRoutes.js';
+import { noSqlSanitizer } from './middleware/securityMiddleware.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -69,6 +72,9 @@ app.use(cookieParser());
 // Express body parsers support JSON and URL-encoded bodies up to 10MB
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Sanitize request data against NoSQL injection
+app.use(noSqlSanitizer);
 
 // HTTP request logger in development mode
 if (process.env.NODE_ENV !== 'test') {
@@ -110,6 +116,8 @@ app.use('/api/commercial/ledger', ledgerRoutes);
 app.use('/api/billing', billingRoutes);
 app.use('/api/settings/custom-fields', customFieldRoutes);
 app.use('/api/super-admin', superAdminRoutes);
+app.use('/api/public/track', trackingRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 
 // ----------------------------------------------------------------------------
 // 4. Centralized Global Error Handler

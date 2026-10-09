@@ -14,6 +14,7 @@ import { Entry } from '../models/Entry.js';
 import { BillingParty } from '../models/BillingParty.js';
 import { Company } from '../models/Company.js';
 import { Ledger } from '../models/Ledger.js';
+import { logAuditEvent } from '../utils/auditService.js';
 
 export const getInvoices = async (req: Request, res: Response) => {
   try {
@@ -297,6 +298,17 @@ export const createInvoice = async (req: Request, res: Response) => {
         { $set: { status: 'invoiced', invoice_id: newInvoice._id } }
       );
     }
+
+    logAuditEvent({
+      company_id: companyId,
+      entity_type: 'invoice',
+      entity_id: newInvoice._id,
+      entity_identifier: newInvoice.invoice_number,
+      action: 'CREATE',
+      description: `GST Freight Invoice ${newInvoice.invoice_number} generated for ${newInvoice.billing_party_snapshot?.name} (Total: ₹${newInvoice.total_amount}).`,
+      req,
+      after_snapshot: { invoice_number: newInvoice.invoice_number, total_amount: newInvoice.total_amount },
+    });
 
     res.status(201).json({
       message: 'GST Freight Invoice created successfully.',

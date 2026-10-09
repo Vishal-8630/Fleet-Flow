@@ -27,6 +27,8 @@ import { TruckJourney, JourneyStatus } from '../models/TruckJourney.js';
 import { Truck } from '../models/Truck.js';
 import { Driver } from '../models/Driver.js';
 import { Company } from '../models/Company.js';
+import { notifyTripDispatched, notifyDeliveryCompleted } from '../utils/notificationService.js';
+import { logAuditEvent } from '../utils/auditService.js';
 
 /**
  * ----------------------------------------------------------------------------
@@ -312,7 +314,24 @@ export const createJourney = async (req: Request, res: Response) => {
       truck.status = 'on_trip';
       truck.current_driver_id = driver._id;
       await truck.save();
+
+      if (company) {
+        notifyTripDispatched(journey, driver, company).catch((err) =>
+          console.error('[Notification Trigger Error - Dispatch]:', err)
+        );
+      }
     }
+
+    logAuditEvent({
+      company_id: companyId,
+      entity_type: 'journey',
+      entity_id: journey._id,
+      entity_identifier: journey.journey_number,
+      action: 'CREATE',
+      description: `Journey ${journey.journey_number} created in ${status.toUpperCase()} state (${from_location.city} → ${to_location.city}).`,
+      req,
+      after_snapshot: { journey_number: journey.journey_number, status: journey.status },
+    });
 
     return res.status(201).json({
       message: 'Journey successfully scheduled.',
@@ -407,6 +426,25 @@ export const dispatchJourney = async (req: Request, res: Response) => {
     truck.status = 'on_trip';
     truck.current_driver_id = driver._id;
     await truck.save();
+
+    // Trigger driver WhatsApp dispatch alert
+    const company = await Company.findById(journey.company_id);
+    if (company) {
+      notifyTripDispatched(journey, driver, company).catch((err) =>
+        console.error('[Notification Trigger Error - Dispatch]:', err)
+      );
+    }
+
+    logAuditEvent({
+      company_id: journey.company_id,
+      entity_type: 'journey',
+      entity_id: journey._id,
+      entity_identifier: journey.journey_number,
+      action: 'STATUS_CHANGE',
+      description: `Journey ${journey.journey_number} departed origin facility (Status: ACTIVE).`,
+      req,
+      after_snapshot: { status: 'active', start_date: journey.start_date },
+    });
 
     return res.json({
       message: `Journey ${journey.journey_number} successfully dispatched.`,
@@ -662,6 +700,25 @@ export const completeDeliveryAndPOD = async (req: Request, res: Response) => {
       }
       await truck.save();
     }
+
+    // Notify delivery completion
+    const company = await Company.findById(journey.company_id);
+    if (company && journey.delivered_to?.contact_name) {
+      notifyDeliveryCompleted(journey, '', journey.delivered_to.contact_name, company).catch((err) =>
+        console.error('[Notification Trigger Error - Delivery]:', err)
+      );
+    }
+
+    logAuditEvent({
+      company_id: journey.company_id,
+      entity_type: 'journey',
+      entity_id: journey._id,
+      entity_identifier: journey.journey_number,
+      action: 'STATUS_CHANGE',
+      description: `Journey ${journey.journey_number} marked completed at destination. Contact: ${journey.delivered_to?.contact_name}.`,
+      req,
+      after_snapshot: { status: 'completed', delivered_to: journey.delivered_to },
+    });
 
     return res.json({
       message: `Journey ${journey.journey_number} marked completed and delivery acknowledged.`,

@@ -11,6 +11,8 @@
 import { Request, Response } from 'express';
 import { Entry } from '../models/Entry.js';
 import { Company } from '../models/Company.js';
+import { notifyLRGenerated } from '../utils/notificationService.js';
+import { logAuditEvent } from '../utils/auditService.js';
 
 export const getEntries = async (req: Request, res: Response) => {
   try {
@@ -176,6 +178,23 @@ export const createEntry = async (req: Request, res: Response) => {
     });
 
     await newEntry.save();
+
+    if (company) {
+      notifyLRGenerated(newEntry, company).catch((err) =>
+        console.error('[Notification Trigger Error - LR]:', err)
+      );
+    }
+
+    logAuditEvent({
+      company_id: companyId,
+      entity_type: 'entry',
+      entity_id: newEntry._id,
+      entity_identifier: newEntry.lr_no,
+      action: 'CREATE',
+      description: `Lorry Receipt ${newEntry.lr_no} registered for route ${newEntry.from_location} to ${newEntry.to_location}.`,
+      req,
+      after_snapshot: { lr_no: newEntry.lr_no, freight_amount: newEntry.freight_amount },
+    });
 
     res.status(201).json({
       message: 'Lorry Receipt created successfully.',

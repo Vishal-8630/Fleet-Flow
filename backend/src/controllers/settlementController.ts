@@ -14,6 +14,9 @@ import { Settlement } from '../models/Settlement.js';
 import { TruckJourney } from '../models/TruckJourney.js';
 import { Driver } from '../models/Driver.js';
 import { Ledger } from '../models/Ledger.js';
+import { Company } from '../models/Company.js';
+import { notifyDriverSettlement } from '../utils/notificationService.js';
+import { logAuditEvent } from '../utils/auditService.js';
 
 export const getSettlements = async (req: Request, res: Response) => {
   try {
@@ -409,6 +412,25 @@ export const confirmSettlement = async (req: Request, res: Response) => {
     // 9. Commit Transaction Atomically
     await session.commitTransaction();
     session.endSession();
+
+    // Trigger WhatsApp notification for driver settlement
+    const company = await Company.findById(companyId);
+    if (company) {
+      notifyDriverSettlement(newSettlement, driver, company).catch((err) =>
+        console.error('[Notification Trigger Error - Settlement]:', err)
+      );
+    }
+
+    logAuditEvent({
+      company_id: companyId,
+      entity_type: 'settlement',
+      entity_id: newSettlement._id,
+      entity_identifier: newSettlement.settlement_number,
+      action: 'CREATE',
+      description: `Settlement ${newSettlement.settlement_number} confirmed for driver ${driver.name} (Net: ₹${Math.abs(newSettlement.net_amount)}).`,
+      req,
+      after_snapshot: { settlement_number: newSettlement.settlement_number, net_amount: newSettlement.net_amount },
+    });
 
     res.status(201).json({
       message: 'Driver trip settlement confirmed and locked.',

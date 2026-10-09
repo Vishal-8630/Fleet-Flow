@@ -206,6 +206,9 @@ export interface ITruckJourney extends Document {
   // Soft delete flag
   is_deleted: boolean;
   custom_fields?: Record<string, any>;
+  createdAt: Date;
+  updatedAt: Date;
+  created_at?: Date;
 }
 
 const TruckJourneySchema = new Schema<ITruckJourney>(

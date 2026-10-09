@@ -50,6 +50,7 @@ import { LedgerListPage } from './pages/commercial/LedgerListPage';
 import { BillingPage } from './pages/settings/BillingPage';
 import { CustomFieldsPage } from './pages/settings/CustomFieldsPage';
 import { SuperAdminDashboardPage } from './pages/superadmin/SuperAdminDashboardPage';
+import { PublicTrackingPage } from './pages/public/PublicTrackingPage';
 import { ToastContainer } from './components/common/ToastContainer';
 
 /**
@@ -96,6 +97,8 @@ export const App: React.FC = () => {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/accept-invite" element={<AcceptInvitePage />} />
+        <Route path="/track" element={<PublicTrackingPage />} />
+        <Route path="/track/:lrNumber" element={<PublicTrackingPage />} />
 
         {/* Protected Tenant Routes */}
         <Route
