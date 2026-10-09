@@ -1,0 +1,323 @@
+/**
+ * ============================================================================
+ * FLEET FLOW — COMMERCIAL ENGINE STYLES (commercial.css)
+ * ============================================================================
+ * Zero Tailwind CSS — Pure CSS tokens and component classes for:
+ * - Printable 3-part Lorry Receipt (Bilty) stationary
+ * - Official GST Freight Tax Invoice presentation
+ * - Driver trip settlement wage & fuel variance calculator
+ * - Double-entry ledger journal cards & party balance reconciliations
+ * ============================================================================
+ */
+
+/* Metric Cards Grid for Commercial Dashboards */
+.commercial-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.commercial-metric-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.commercial-metric-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.commercial-metric-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.commercial-metric-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.commercial-metric-val {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.commercial-metric-label {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  font-weight: var(--font-weight-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: 0.25rem;
+}
+
+/* Printable 3-Part Lorry Receipt (Bilty) Stationary */
+.lr-print-container {
+  background: #ffffff;
+  color: #1e293b;
+  font-family: inherit;
+  padding: 1.5rem;
+  border-radius: var(--radius-md);
+  border: 1px solid #cbd5e1;
+  box-shadow: var(--shadow-md);
+}
+
+.lr-part-section {
+  border: 2px solid #0f172a;
+  border-radius: 4px;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+  background: #ffffff;
+}
+
+.lr-part-header-tag {
+  display: inline-block;
+  background: #0f172a;
+  color: #ffffff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.25rem 0.75rem;
+  border-radius: 2px;
+  margin-bottom: 0.75rem;
+}
+
+.lr-tear-line {
+  border-top: 2px dashed #94a3b8;
+  margin: 1.5rem 0;
+  position: relative;
+  text-align: center;
+}
+
+.lr-tear-line::after {
+  content: '✂ TEAR HERE / PERFORATION';
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #ffffff;
+  padding: 0 10px;
+  font-size: 0.65rem;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.lr-table-grid {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.75rem 0;
+}
+
+.lr-table-grid th,
+.lr-table-grid td {
+  border: 1px solid #cbd5e1;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.825rem;
+  text-align: left;
+}
+
+.lr-table-grid th {
+  background: #f1f5f9;
+  font-weight: 600;
+  color: #334155;
+}
+
+.lr-sign-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px dashed #cbd5e1;
+  text-align: center;
+}
+
+.lr-sign-box {
+  border-top: 1px solid #0f172a;
+  padding-top: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #475569;
+}
+
+/* GST Freight Tax Invoice Printable Stationary */
+.invoice-sheet {
+  background: #ffffff;
+  color: #0f172a;
+  border: 1px solid #cbd5e1;
+  border-radius: var(--radius-md);
+  padding: 2rem;
+  box-shadow: var(--shadow-lg);
+}
+
+.invoice-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  border-bottom: 2px solid #0284c7;
+  padding-bottom: 1.25rem;
+  margin-bottom: 1.25rem;
+}
+
+.invoice-company-brand {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #0284c7;
+  line-height: 1.2;
+}
+
+.invoice-number-badge {
+  text-align: right;
+}
+
+.invoice-number-badge h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 0.25rem;
+}
+
+.rcm-callout-banner {
+  background: #eff6ff;
+  border: 1px solid #93c5fd;
+  border-left: 4px solid #2563eb;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-sm);
+  margin: 1rem 0;
+  font-size: 0.85rem;
+  color: #1e3a8a;
+  font-weight: 600;
+}
+
+.invoice-party-box {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.invoice-totals-box {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  margin-top: 1rem;
+  margin-left: auto;
+  max-width: 360px;
+}
+
+.invoice-totals-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.35rem 0;
+  font-size: 0.875rem;
+  color: #475569;
+}
+
+.invoice-totals-row.grand-total {
+  border-top: 2px solid #0f172a;
+  padding-top: 0.5rem;
+  margin-top: 0.5rem;
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+/* Driver Trip Settlement Calculator */
+.settlement-calc-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.settlement-trip-selector {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  margin: 1rem 0;
+}
+
+.settlement-calc-summary-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.5rem 0;
+  font-size: var(--font-size-sm);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.settlement-calc-net-banner {
+  padding: 1rem;
+  border-radius: var(--radius-md);
+  margin-top: 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.settlement-calc-net-banner.payable {
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: #059669;
+}
+
+.settlement-calc-net-banner.receivable {
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  color: #d97706;
+}
+
+/* Double-entry Ledger Category Tags & Badges */
+.ledger-type-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+}
+
+.ledger-type-badge.credit {
+  background: rgba(16, 185, 129, 0.12);
+  color: #059669;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+.ledger-type-badge.debit {
+  background: rgba(239, 68, 68, 0.12);
+  color: #dc2626;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.ledger-reversed-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: rgba(100, 116, 139, 0.15);
+  color: #64748b;
+  border: 1px dashed #94a3b8;
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.7rem;
+  font-weight: var(--font-weight-medium);
+}

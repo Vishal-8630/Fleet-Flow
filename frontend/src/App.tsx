@@ -43,6 +43,10 @@ import { JourneyListPage } from './pages/operations/JourneyListPage';
 import { NewJourneyPage } from './pages/operations/NewJourneyPage';
 import { JourneyDetailPage } from './pages/operations/JourneyDetailPage';
 import { VehicleEntryListPage } from './pages/operations/VehicleEntryListPage';
+import { LRListPage } from './pages/commercial/LRListPage';
+import { InvoiceListPage } from './pages/commercial/InvoiceListPage';
+import { SettlementListPage } from './pages/commercial/SettlementListPage';
+import { LedgerListPage } from './pages/commercial/LedgerListPage';
 import { ToastContainer } from './components/common/ToastContainer';
 
 /**
@@ -124,11 +128,17 @@ export const App: React.FC = () => {
           <Route path="vehicle-entry/all" element={<Navigate to="/operations/market-entries" replace />} />
           <Route path="vehicle-entry/all-vehicle-entries" element={<Navigate to="/operations/market-entries" replace />} />
 
+          {/* Phase 4: Commercial Engine — LR, Invoicing, Settlements & Ledger */}
+          <Route path="bill-entry/all" element={<LRListPage />} />
+          <Route path="commercial/entries" element={<LRListPage />} />
+          <Route path="invoices" element={<InvoiceListPage />} />
+          <Route path="commercial/invoices" element={<InvoiceListPage />} />
+          <Route path="settlements" element={<SettlementListPage />} />
+          <Route path="commercial/settlements" element={<SettlementListPage />} />
+          <Route path="ledger" element={<LedgerListPage />} />
+          <Route path="commercial/ledger" element={<LedgerListPage />} />
+
           {/* Placeholders for subsequent phases */}
-          <Route path="bill-entry/all" element={<div className="page-header-title">Bill Entries & LR (Phase 4)</div>} />
-          <Route path="invoices" element={<div className="page-header-title">Freight Invoices (Phase 4)</div>} />
-          <Route path="settlements" element={<div className="page-header-title">Driver Settlements (Phase 4)</div>} />
-          <Route path="ledger" element={<div className="page-header-title">General Ledger (Phase 4)</div>} />
           <Route path="super-admin" element={<div className="page-header-title">Super-Admin Control Plane (Phase 5)</div>} />
         </Route>
 

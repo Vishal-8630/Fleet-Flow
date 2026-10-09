@@ -199,6 +199,10 @@ export interface ITruckJourney extends Document {
   total_driver_expenses: number;
   actual_mileage_km_per_litre: number;
 
+  // Settlement reconciliation
+  is_settled: boolean;
+  settlement_id?: Types.ObjectId;
+
   // Soft delete flag
   is_deleted: boolean;
 }
@@ -456,6 +460,16 @@ const TruckJourneySchema = new Schema<ITruckJourney>(
     actual_mileage_km_per_litre: {
       type: Number,
       default: 0,
+    },
+
+    is_settled: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    settlement_id: {
+      type: Schema.Types.ObjectId,
+      ref: 'Settlement',
     },
 
     is_deleted: {

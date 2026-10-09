@@ -12,7 +12,7 @@
 | **Phase 1** | Foundation, Multi-Tenancy & Design System | ✅ Completed | 100% |
 | **Phase 2** | Master Data Registries & Compliance Vault | ✅ Completed | 100% |
 | **Phase 3** | Operations, Dispatch & Vehicle Movements | ✅ Completed | 100% |
-| **Phase 4** | Commercial Engine, Invoices & Settlements | ⚪ Not Started | 0% |
+| **Phase 4** | Commercial Engine, Invoices & Settlements | ✅ Completed | 100% |
 | **Phase 5** | SaaS Billing, Entitlements & Customization | ⚪ Not Started | 0% |
 | **Phase 6** | Public Tracking, Automation & Release | ⚪ Not Started | 0% |
 
@@ -246,6 +246,81 @@
     * Driver cash advance financial reconciliation bar (surplus vs. deficit).
     * Consignee handover verification, odometer journey audit, and digital POD document vault.
 
+---
 
+## [Phase 4: Commercial Engine — LR, Invoicing, Settlements & Ledger] - 2026-10-09
 
+### 1. Lorry Receipt (LR / Bilty) Engine & Consignment Notes
+* **Data Model & Tenant Isolation (`Entry.ts`):**
+  * Auto-generated, company-prefixed sequencing (`LR-0001` or custom workspace prefix).
+  * Consignor, consignee, package count, packaging type, goods description, risk type (`owner_risk` vs `carrier_risk`).
+  * Tonnes chargeable weight vs actual weight, rate per tonne, freight terms (`to_be_billed`, `paid`, `to_pay`), E-Way bill, BE#, and container numbers.
+* **Controller & API Endpoints (`entryController.ts`, `entryRoutes.ts`):**
+  * `GET /api/commercial/entries`: Paginated lookup with search across LR #, Bill #, Vehicle #, and Consignor/Consignee names.
+  * `GET /api/commercial/entries/metrics`: Real-time KPI aggregation for active, invoiced, and to-be-billed freight values.
+  * `POST /api/commercial/entries`: Safe LR issuance with uniqueness enforcement.
+  * `GET /api/commercial/entries/:id/printable`: Stationary payload retrieval for printing.
+* **Frontend UI (`LRListPage.tsx`):**
+  * Consignment roster with freight term badges and active/invoiced status.
+  * Modal with persistent form state preventing accidental data loss on backdrop click.
+  * Official 3-part vector printable consignment note stationary (Consignor Copy, Consignee Copy, Transporter Copy) with perforation tear-line dividers.
 
+### 2. GST Freight Tax Invoicing Engine
+* **Data Model & Compliance Architecture (`Invoice.ts`):**
+  * Indian Goods Transport Agency (GTA) statutory compliance engine.
+  * Section 9(3) Reverse Charge Mechanism (RCM): Recipient pays GST directly, invoice total = subtotal.
+  * Forward Charge: Intra-state (CGST + SGST) vs Inter-state (IGST) tax math.
+  * Itemized line aggregation across multiple LRs with extra charges (loading, unloading, halting, toll, detention).
+  * Payment history sub-ledger tracking partial collections and TDS deductions.
+* **Controller & API Endpoints (`invoiceController.ts`, `invoiceRoutes.ts`):**
+  * `GET /api/commercial/invoices`: Filter by RCM, status, date, or search query.
+  * `POST /api/commercial/invoices`: Automated sequencing (`INV-0001`), tax calculation, and batch-locking of LRs to `invoiced`.
+  * `POST /api/commercial/invoices/:id/payments`: Payment collection recording that automatically posts a credit journal entry into the General Ledger.
+  * `POST /api/commercial/invoices/:id/cancel`: Cancellation releasing associated LRs back to `active`.
+* **Frontend UI (`InvoiceListPage.tsx`):**
+  * KPI metrics ribbon: Invoiced value, Collections, Receivables Outstanding, RCM Count, and Overdue count.
+  * Interactive invoice creation wizard with live auto-summing subtotal, extra charges, and tax preview.
+  * Payment collection modal with TDS deductions.
+  * Printable GTA Freight Tax Invoice with letterhead, statutory RCM notification, and bank payment coordinates.
+
+### 3. Driver Trip Settlement Engine
+* **Data Model (`Settlement.ts`) & ACID Execution (`settlementController.ts`):**
+  * MongoDB session transaction guaranteeing atomic consistency across multi-entity writes:
+    * Reconciles completed journeys for the selected driver.
+    * Base earnings calculation: $\text{Total Kms} \times \text{Rate Per Km}$.
+    * Expense reimbursements added to gross earnings.
+    * Running trip advances deducted.
+    * Diesel Mileage Variance Audit: If actual fuel efficiency is below benchmark km/L, deducts excess fuel cost ($\text{Excess Litres} \times \text{Diesel Price}$).
+    * Locks reconciled journeys (`is_settled: true`, `settlement_id`).
+    * Resets driver running advance balance to ₹0 and updates driver owes balance.
+    * Double-Settlement Conflict Guard: Rejects any attempt to settle an already settled trip with HTTP 409 Conflict.
+    * Automatically posts a debit journal entry into the General Ledger.
+* **Frontend UI (`SettlementListPage.tsx`):**
+  * Dynamic trip reconciliation calculator: selecting a driver fetches pending completed trips in real-time.
+  * Live wage, advance, and fuel variance penalty calculator displaying net payable vs receivable.
+  * Printable trip settlement slip and disbursement recording modal.
+
+### 4. General Financial Double-Entry Ledger & Vendor Reconciliation
+* **Data Model & Accounting Categories (`Ledger.ts`, `ledgerController.ts`):**
+  * 17 commercial accounting categories: `freight_income`, `diesel_expense`, `driver_advance`, `driver_settlement`, `halting_charges`, `toll_fastag`, `weighbridge_charges`, `loading_unloading`, `vehicle_maintenance`, `tyre_expense`, `rto_border_tax`, `office_expense`, `payment_received`, `payment_made`, `bank_transfer`, `cash_transfer`, `other_adjustment`.
+  * Enforces immutability: Auto-generated entries cannot be directly deleted.
+  * Counter-balancing reversal engine: Creates paired `REV-xxxx` entries with inverted balance type (`debit` $\leftrightarrow$ `credit`) and audit reason.
+  * Financial summary API computing total credits, debits, net financial position, and category breakdowns.
+* **Sub-Contracted Market Vendor Reconciliation (`BalanceParty`):**
+  * Tracks balances and statements for hired third-party trucks.
+  * Computes net balance payable: $\text{Freight} - \text{Advance} - \text{Diesel} - \text{Kamisan} - \text{Dala} + \text{Halting}$.
+  * Vendor payout modal posting directly to General Ledger.
+* **Frontend UI (`LedgerListPage.tsx`):**
+  * Dual-tab workspace for General Financial Ledger and Market Vendor Balances.
+  * Manual journal entry dialog and counter-balancing reversal modal.
+  * Vendor statement view modal and direct payout disbursement.
+
+### 5. Automated Verification Suite (`verifyPhase4.ts`)
+* Executed end-to-end integration test directly against live MongoDB Atlas:
+  * ✅ LR / Bilty Engine: Verified auto-sequencing, commercial terms, and metrics.
+  * ✅ GST Tax Invoicing: Verified RCM 5% calculation, Forward Charge IGST/CGST/SGST, and payment collection auto-posting to Ledger.
+  * ✅ Driver Trip Settlement: Verified wage math, fuel penalty, ACID transactional commit, journey locking, advance balance clearing, and double-settlement 409 rejection.
+  * ✅ General Ledger: Verified 17 categories, net cash calculation, and counter-balancing reversal (`REV-0001`).
+  * ✅ Vendor Statement: Verified market vehicle math and payout recording.
+  * ✅ Multi-Tenant Isolation: Verified Tenant B queries return 0 commercial records from Tenant A.
+  * **100% of Phase 4 architectural criteria verified and passed.**

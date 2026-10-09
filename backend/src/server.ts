@@ -36,6 +36,10 @@ import partyRoutes from './routes/partyRoutes.js';
 import documentRoutes from './routes/documentRoutes.js';
 import journeyRoutes from './routes/journeyRoutes.js';
 import vehicleEntryRoutes from './routes/vehicleEntryRoutes.js';
+import entryRoutes from './routes/entryRoutes.js';
+import invoiceRoutes from './routes/invoiceRoutes.js';
+import settlementRoutes from './routes/settlementRoutes.js';
+import ledgerRoutes from './routes/ledgerRoutes.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -96,6 +100,10 @@ app.use('/api/parties', partyRoutes);
 app.use('/api/documents', documentRoutes);
 app.use('/api/operations/journeys', journeyRoutes);
 app.use('/api/operations/vehicle-entries', vehicleEntryRoutes);
+app.use('/api/commercial/entries', entryRoutes);
+app.use('/api/commercial/invoices', invoiceRoutes);
+app.use('/api/commercial/settlements', settlementRoutes);
+app.use('/api/commercial/ledger', ledgerRoutes);
 
 // ----------------------------------------------------------------------------
 // 4. Centralized Global Error Handler
