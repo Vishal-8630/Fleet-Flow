@@ -36,6 +36,7 @@ import {
   ShieldCheck,
   Building2,
   Briefcase,
+  Layers,
 } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 
@@ -49,7 +50,8 @@ export const Sidebar: React.FC = () => {
     { label: 'Driver Master', path: '/fleet/drivers', icon: UserSquare2 },
     { label: 'Billing Parties', path: '/parties/billing', icon: Building2 },
     { label: 'Balance Parties', path: '/parties/balance', icon: Briefcase },
-    { label: 'Trips & Dispatch', path: '/journey/all', icon: Navigation },
+    { label: 'Trip Dispatch', path: '/operations/journeys', icon: Navigation },
+    { label: 'Market Movements', path: '/operations/market-entries', icon: Layers },
     { label: 'Bill Entries & LR', path: '/bill-entry/all', icon: Receipt },
     { label: 'Freight Invoices', path: '/invoices', icon: FileSpreadsheet },
     { label: 'Driver Settlements', path: '/settlements', icon: BadgeCent, roles: ['admin', 'accountant'] },

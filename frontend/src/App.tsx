@@ -39,6 +39,10 @@ import { DriverListPage } from './pages/fleet/DriverListPage';
 import { DriverDetailPage } from './pages/fleet/DriverDetailPage';
 import { BillingPartyListPage } from './pages/parties/BillingPartyListPage';
 import { BalancePartyListPage } from './pages/parties/BalancePartyListPage';
+import { JourneyListPage } from './pages/operations/JourneyListPage';
+import { NewJourneyPage } from './pages/operations/NewJourneyPage';
+import { JourneyDetailPage } from './pages/operations/JourneyDetailPage';
+import { VehicleEntryListPage } from './pages/operations/VehicleEntryListPage';
 import { ToastContainer } from './components/common/ToastContainer';
 
 /**
@@ -108,8 +112,19 @@ export const App: React.FC = () => {
           <Route path="parties/billing" element={<BillingPartyListPage />} />
           <Route path="parties/balance" element={<BalancePartyListPage />} />
 
+          {/* Phase 3: Operations, Dispatch & Vehicle Movements */}
+          <Route path="operations/journeys" element={<JourneyListPage />} />
+          <Route path="operations/journeys/new" element={<NewJourneyPage />} />
+          <Route path="operations/journeys/:id" element={<JourneyDetailPage />} />
+          <Route path="journey/all" element={<Navigate to="/operations/journeys" replace />} />
+          <Route path="journey/all-journey-entries" element={<Navigate to="/operations/journeys" replace />} />
+          <Route path="journey/new-journey" element={<Navigate to="/operations/journeys/new" replace />} />
+          <Route path="journey/journey-detail/:id" element={<Navigate to="/operations/journeys/:id" replace />} />
+          <Route path="operations/market-entries" element={<VehicleEntryListPage />} />
+          <Route path="vehicle-entry/all" element={<Navigate to="/operations/market-entries" replace />} />
+          <Route path="vehicle-entry/all-vehicle-entries" element={<Navigate to="/operations/market-entries" replace />} />
+
           {/* Placeholders for subsequent phases */}
-          <Route path="journey/all" element={<div className="page-header-title">Trips & Dispatch (Phase 3)</div>} />
           <Route path="bill-entry/all" element={<div className="page-header-title">Bill Entries & LR (Phase 4)</div>} />
           <Route path="invoices" element={<div className="page-header-title">Freight Invoices (Phase 4)</div>} />
           <Route path="settlements" element={<div className="page-header-title">Driver Settlements (Phase 4)</div>} />

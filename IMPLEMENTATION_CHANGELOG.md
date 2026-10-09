@@ -11,7 +11,7 @@
 | :--- | :--- | :--- | :--- |
 | **Phase 1** | Foundation, Multi-Tenancy & Design System | ✅ Completed | 100% |
 | **Phase 2** | Master Data Registries & Compliance Vault | ✅ Completed | 100% |
-| **Phase 3** | Operations, Dispatch & Vehicle Movements | ⚪ Not Started | 0% |
+| **Phase 3** | Operations, Dispatch & Vehicle Movements | ✅ Completed | 100% |
 | **Phase 4** | Commercial Engine, Invoices & Settlements | ⚪ Not Started | 0% |
 | **Phase 5** | SaaS Billing, Entitlements & Customization | ⚪ Not Started | 0% |
 | **Phase 6** | Public Tracking, Automation & Release | ⚪ Not Started | 0% |
@@ -153,6 +153,99 @@
     * ✅ Tested S3 Presigned URL Boundary: Verified cross-tenant key requests are rejected with 403 Forbidden.
     * ✅ Tested Soft-Delete Integrity: Confirmed soft-deleted trucks are omitted from active queries.
     * 100% of Phase 2 acceptance criteria verified and passed.
+
+---
+
+### Phase 3: Operations, Dispatch & Vehicle Movements
+* **[Backend] Data Modeling & Core Logic:**
+  * **Truck Journey Master (`backend/src/models/TruckJourney.ts`):**
+    * Multi-tenant model with compound unique index on `{ company_id: 1, journey_number: 1 }`.
+    * Lifecycle states: `draft` -> `active` -> `completed` (or `delayed` / `cancelled`) with full `status_history` chronological audit log.
+    * Multi-stop route tracking: Origin (`from_location`), Destination (`to_location`), and intermediate `route_checkpoints`.
+    * Pre-save mathematical hooks:
+      * `total_distance_kms`: Evaluates `end_odometer_kms - start_odometer_kms`.
+      * `total_diesel_litres` & `total_diesel_cost`: Decimal-safe aggregates of en-route fuel stops.
+      * `actual_mileage_km_per_litre`: $\text{total\_distance\_kms} / \text{total\_diesel\_litres}$.
+      * `total_driver_expenses`: Sum of toll, weighbridge, loading, food, and emergency repairs.
+      * Automatic `last_known_location` update from latest `daily_progress` milestone.
+  * **Market Vehicle Movement (`backend/src/models/VehicleEntry.ts`):**
+    * Multi-tenant model with compound unique index on `{ company_id: 1, entry_number: 1 }`.
+    * Third-party vehicle movement ledger for hired vendor trucks (`NL01A9876`).
+    * **Brokerage Financial Settlement Equation:**
+      * Pre-save hook automatically computes:
+        $$\text{Net Balance Due} = \text{Freight} - \text{Cash Advance} - \text{Diesel Advance} - \text{Dala} - \text{Commission} + \text{Halting}$$
+      * Settlement state automation: Automatically transitions between `pending`, `partially_paid`, and `paid` based on payment ledger balance.
+      * Proof of Delivery (POD) physical receipt and stock date logging.
+* **[Backend Controllers & Routes]:**
+  * `journeyController.ts` & `journeyRoutes.ts` (`/api/operations/journeys`):
+    * **Resource Conflict Prevention Safeguard:** Rejects dispatch with `409 Conflict` if the assigned Truck or Driver is already in transit on another active trip.
+    * **Statutory Compliance Safeguard:** Rejects dispatch with `422 Unprocessable Entity` if vehicle compliance certificates are expired.
+    * Sequential `journey_number` generation (`JRN-0001` or company prefix).
+    * `PUT /:id/dispatch`: Locks Truck to `on_trip` and binds Driver.
+    * `POST /:id/milestones`: Daily physical checkpoint and progress notes logging.
+    * `POST /:id/delays`: Logs delay duration (hours) and reasons (`breakdown`, `traffic`, `weather`, `rto_check`).
+    * `POST /:id/diesel`: Fuel stop logging with pump name, slip number, litres, and rate.
+    * `POST /:id/expenses`: Driver cash expenditure vouchers.
+    * `POST /:id/pod`: Delivery completion closeout, releases Truck back to `available`, and synchronizes vehicle odometer.
+    * `GET /metrics`: Aggregates active convoys, delays, monthly completions, total fuel, and average fleet mileage.
+  * `vehicleEntryController.ts` & `vehicleEntryRoutes.ts` (`/api/operations/vehicle-entries`):
+    * CRUD for hired third-party truck movements.
+    * Automatic `entry_number` generation (`MKT-0001`).
+    * Vendor (Balance Party) account linkage and net balance tracking.
+    * POD receipt document attachment.
+    * Operational metrics: Freight booked, advances disbursed, net balance payable to suppliers.
+* **[Frontend UI Components & Views]:**
+  * **Trip Dispatch Roster (`JourneyListPage.tsx`):**
+    * 4 Operational KPI Cards: In-Transit Fleet, Transit Delays, Completed This Month, Fleet Fuel Economy (km/L).
+    * Status tab filters: All, In Transit, Delayed, Draft, Completed, Cancelled.
+    * Real-time search by Journey #, Route, or Cargo.
+    * Interactive table with visual route arrows ($\to$), status badges, last known checkpoints, and quick actions.
+    * Quick "Log Milestone" modal directly from the roster.
+  * **Plan & Dispatch Wizard (`NewJourneyPage.tsx`):**
+    * Multi-section trip creation workflow.
+    * Live conflict detection indicators: displays warning if vehicle or driver is currently busy or compliance is expired.
+    * Automatic vehicle odometer pre-population into trip start odometer.
+    * Multi-stop dynamic intermediate checkpoint editor.
+    * Dual submit actions: "Save as Draft Plan" or "Dispatch Vehicle Now".
+  * **Trip Command Center (`JourneyDetailPage.tsx`):**
+    * Real-time convoy overview with vehicle and driver inspection shortcuts.
+    * Visual route progress bar and cargo manifest.
+    * Chronological transit milestone and delay incident timeline.
+    * **Fuel Tracking Panel:** Fuel economy summary card ($\text{km/L}$), diesel stops table, and "+ Record Fuel Stop" modal with receipt upload.
+    * **Cash Expenses Panel:** Tolls, weighbridge, and repair vouchers with document viewer.
+    * **Proof of Delivery (POD) Closeout:** Delivery acknowledgment, final odometer synchronization, and signed POD slip viewer/modal.
+  * **Market Vehicle Movement Ledger (`VehicleEntryListPage.tsx`):**
+    * Brokerage ledger table with freight, advances, deductions, and net balance due.
+    * 4 Financial KPI cards: Total Movements, Freight Booked, Advances Given, Net Balance Due.
+    * "+ Record Market Vehicle Move" modal with real-time net balance equation calculator preview.
+    * Acknowledge POD receipt modal.
+  * **Navigation & Shell Integration:**
+    * Updated `Sidebar.tsx` with "Trip Dispatch" (`/operations/journeys`) and "Market Movements" (`/operations/market-entries`).
+    * Updated `App.tsx` router with all Phase 3 operational routes and backward-compatible route aliases (`/journey/all`, `/journey/new-journey`, etc.).
+* **[Testing & Automated Verification]:**
+  * Created and executed `backend/src/scripts/verifyPhase3.ts` against live MongoDB Atlas:
+    * ✅ Tested Journey Planning & Auto-Sequencing (`JRN-0001`).
+    * ✅ Tested Resource Conflict Prevention: Confirmed double-booking Truck MH12AA5555 or Driver Ramesh Singh is blocked with 409 Conflict.
+    * ✅ Tested Statutory Compliance Safeguard: Confirmed dispatching truck with expired certificates is blocked with 422 Unprocessable Entity.
+    * ✅ Tested Daily Milestone & Delay Tracking: Verified automatic update of `last_known_location`.
+    * ✅ Tested High-Precision Fuel Math: Verified 3 diesel stops totaling 355.75L cost ₹32,403.75, yielding 4.0 km/L on 1,423 km travel.
+    * ✅ Tested Driver Cash Expenses: Verified toll, loading, and weighbridge totaling ₹2,500.
+    * ✅ Tested POD Delivery Closeout: Verified status transitions to COMPLETED, Truck released to AVAILABLE, and Truck odometer updated to 11,423 km.
+    * ✅ Tested Market Vehicle Brokerage Settlement Equation: Verified $\text{Net} = 50000 - 15000 - 10000 - 500 - 2000 + 1500 = ₹24,000$ matches vendor balance exactly.
+    * ✅ Tested Multi-Tenant Zero-Data-Leakage Barrier: Verified Tenant B queries return 0 Tenant A records.
+    * 100% of Phase 3 acceptance criteria verified and passed.
+* **[UI Polishing & Design System Enhancements]:**
+  * Added complete 50–700 color scales for Emerald, Amber, Indigo, and Rose in `variables.css`.
+  * Added `.nav-tab-list`, `.nav-tab-item`, and `.nav-tab-badge` in `buttons.css` with clean active indicators, count badges, and zero browser focus outlines or scrollbars (`overflow: visible`).
+  * Built `.journey-timeline-grid` and expanded full 1–12 column span responsive utilities across all breakpoints (`sm:`, `md:`, `lg:`) in `grid.css`.
+  * Redesigned all 5 command center tabs in `JourneyDetailPage.tsx`:
+    * Indian license plate badge & verified driver cards in Overview.
+    * Route corridor visualizer with dynamic distance badges and commercial cargo metrics.
+    * Balanced dual-column chronological waypoint stream with delay alerts and corridor radar.
+    * Fuel tracking KPI ribbon with real-time mileage calculus.
+    * Driver cash advance financial reconciliation bar (surplus vs. deficit).
+    * Consignee handover verification, odometer journey audit, and digital POD document vault.
+
 
 
 
