@@ -41,7 +41,7 @@ export const Sidebar: React.FC = () => {
           <Truck size={22} color="#ffffff" />
         </div>
         <div>
-          <div className="sidebar-brand-name">FleetFlow</div>
+          <div className="sidebar-brand-name">Fleet Flow</div>
           <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-slate-400)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
             SaaS Transport OS
           </div>

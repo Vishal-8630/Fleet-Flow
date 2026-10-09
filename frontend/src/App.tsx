@@ -15,7 +15,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
           <div style={{ width: '2.5rem', height: '2.5rem', border: '3px solid var(--color-primary-200)', borderTopColor: 'var(--color-primary-600)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
           <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--text-muted)', fontWeight: 'var(--font-weight-medium)' }}>
-            Loading FleetFlow Workspace...
+            Loading Fleet Flow Workspace...
           </div>
         </div>
       </div>

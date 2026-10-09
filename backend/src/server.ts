@@ -61,7 +61,7 @@ export async function startServer() {
     }
 
     app.listen(PORT, () => {
-      console.log(`🚀 FleetFlow SaaS Backend running on http://localhost:${PORT}`);
+      console.log(`🚀 Fleet Flow SaaS Backend running on http://localhost:${PORT}`);
     });
   } catch (error) {
     console.error('❌ Database connection failure:', error);
