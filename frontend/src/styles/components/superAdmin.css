@@ -5,82 +5,286 @@
  * ============================================================================
  */
 
-/* Impersonation Banner */
-.impersonation-active-banner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background: linear-gradient(90deg, #b91c1c 0%, #dc2626 100%);
-  color: #ffffff;
-  padding: 10px 24px;
-  font-size: var(--font-size-sm);
-  font-weight: 700;
-  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.4);
-}
-
 /* Super Admin KPI Cards */
 .superadmin-kpis-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: var(--spacing-4);
-  margin-bottom: var(--spacing-6);
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1.25rem;
+  margin-bottom: 2rem;
+}
+
+@media (max-width: 1024px) {
+  .superadmin-kpis-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .superadmin-kpis-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .superadmin-kpi-card {
-  background: var(--surface-card);
-  border: 1px solid var(--border-color);
-  border-radius: var(--border-radius-md);
-  padding: var(--spacing-4) var(--spacing-5);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem 1.5rem;
   display: flex;
   align-items: center;
-  gap: var(--spacing-4);
+  gap: 1.125rem;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.superadmin-kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
 }
 
 .superadmin-kpi-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: var(--border-radius-md);
+  width: 3.25rem;
+  height: 3.25rem;
+  border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
 }
 
-.superadmin-kpi-icon.revenue { background: rgba(16, 185, 129, 0.15); color: #10b981; }
-.superadmin-kpi-icon.tenants { background: rgba(59, 130, 246, 0.15); color: #3b82f6; }
-.superadmin-kpi-icon.fleet { background: rgba(245, 158, 11, 0.15); color: #f59e0b; }
-.superadmin-kpi-icon.churn { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
+.superadmin-kpi-icon.revenue {
+  background: var(--color-emerald-50);
+  color: var(--color-emerald-600);
+  border: 1px solid var(--color-emerald-200);
+}
+
+.superadmin-kpi-icon.arr {
+  background: var(--color-primary-50);
+  color: var(--color-primary-600);
+  border: 1px solid var(--color-primary-200);
+}
+
+.superadmin-kpi-icon.tenants {
+  background: var(--color-indigo-50);
+  color: var(--color-indigo-600);
+  border: 1px solid var(--color-indigo-200);
+}
+
+.superadmin-kpi-icon.fleet {
+  background: var(--color-amber-50);
+  color: var(--color-amber-600);
+  border: 1px solid var(--color-amber-200);
+}
 
 .superadmin-kpi-content {
   flex: 1;
+  min-width: 0;
 }
 
 .superadmin-kpi-label {
-  font-size: var(--font-size-xs);
+  font-size: 0.75rem;
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  font-weight: 700;
-  margin-bottom: 2px;
+  font-weight: var(--font-weight-bold);
+  margin-bottom: 0.25rem;
 }
 
 .superadmin-kpi-value {
-  font-size: var(--font-size-xl);
+  font-size: 1.5rem;
   font-weight: 800;
+  color: var(--text-primary);
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.superadmin-kpi-subtext {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: 0.35rem;
+}
+
+/* Tenant Directory Table Container */
+.tenant-table-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  margin-bottom: 2rem;
+}
+
+.tenant-table-header {
+  padding: 1.125rem 1.5rem;
+  border-bottom: 1px solid var(--border-light);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  background: var(--bg-surface);
+}
+
+.tenant-table-title {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.tenant-table-title h3 {
+  margin: 0;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-bold);
   color: var(--text-primary);
 }
 
-/* Tenants Control Table */
-.tenant-plan-pill {
-  display: inline-flex;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
+.tenant-search-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
 }
 
-.tenant-plan-pill.starter { background: rgba(148, 163, 184, 0.2); color: #cbd5e1; }
-.tenant-plan-pill.standard { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }
-.tenant-plan-pill.pro { background: rgba(168, 85, 247, 0.2); color: #c084fc; }
-.tenant-plan-pill.enterprise { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+.tenant-search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 280px;
+}
+
+.tenant-search-box input {
+  width: 100%;
+  padding: 0.5rem 0.75rem 0.5rem 2.25rem;
+  font-size: var(--font-size-xs);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  background-color: var(--color-slate-50);
+  color: var(--text-primary);
+  transition: all var(--transition-fast);
+}
+
+.tenant-search-box input:focus {
+  outline: none;
+  background-color: #ffffff;
+  border-color: var(--color-primary-500);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.tenant-search-box .search-icon {
+  position: absolute;
+  left: 0.75rem;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.tenant-filter-select {
+  padding: 0.5rem 2rem 0.5rem 0.75rem;
+  font-size: var(--font-size-xs);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  background-color: var(--color-slate-50);
+  color: var(--text-primary);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  outline: none;
+  transition: all var(--transition-fast);
+}
+
+.tenant-filter-select:focus {
+  border-color: var(--color-primary-500);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+/* Tenant Plan Badges */
+.tenant-plan-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.6rem;
+  border-radius: var(--radius-full);
+  font-size: 0.7rem;
+  font-weight: var(--font-weight-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.tenant-plan-pill.starter {
+  background: var(--color-slate-100);
+  color: var(--color-slate-600);
+  border: 1px solid var(--color-slate-200);
+}
+
+.tenant-plan-pill.growth {
+  background: var(--color-info-bg);
+  color: var(--color-info-text);
+  border: 1px solid var(--color-info-border);
+}
+
+.tenant-plan-pill.pro {
+  background: #faf5ff;
+  color: #7e22ce;
+  border: 1px solid #e9d5ff;
+}
+
+.tenant-plan-pill.enterprise {
+  background: var(--color-amber-50);
+  color: var(--color-amber-700);
+  border: 1px solid var(--color-amber-200);
+}
+
+/* Row Action Buttons Group */
+.tenant-actions-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  justify-content: flex-end;
+}
+
+.tenant-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.6rem;
+  font-size: 0.75rem;
+  font-weight: var(--font-weight-semibold);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-light);
+  background: #ffffff;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.tenant-action-btn:hover {
+  background: var(--color-slate-50);
+  border-color: var(--border-subtle);
+  color: var(--text-primary);
+}
+
+.tenant-action-btn.impersonate {
+  background: var(--color-primary-600);
+  color: #ffffff;
+  border-color: var(--color-primary-600);
+}
+
+.tenant-action-btn.impersonate:hover {
+  background: var(--color-primary-700);
+  border-color: var(--color-primary-700);
+}
+
+.tenant-action-btn.danger {
+  color: var(--color-danger);
+  border-color: var(--color-danger-border);
+}
+
+.tenant-action-btn.danger:hover {
+  background: var(--color-danger-bg);
+}
+
+.tenant-action-btn.activate {
+  color: var(--color-success);
+  border-color: var(--color-success-border);
+}
+
+.tenant-action-btn.activate:hover {
+  background: var(--color-success-bg);
+}

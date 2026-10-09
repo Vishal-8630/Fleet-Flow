@@ -45,15 +45,13 @@ export const Sidebar: React.FC = () => {
 
   // Platform Operator Super-Admin Exclusive Navigation Links
   const platformNavItems = [
-    { label: 'Control Plane & MRR', path: '/super-admin', icon: ShieldCheck },
-    { label: 'SaaS Plans & Catalogs', path: '/settings/billing', icon: CreditCard },
-    { label: 'Custom Fields Studio', path: '/settings/custom-fields', icon: Sliders },
-    { label: 'Company Settings', path: '/settings/company', icon: Settings },
+    { label: 'Control Plane & Tenants', path: '/super-admin', icon: ShieldCheck, end: true },
+    { label: 'SaaS Plans & Catalogs', path: '/super-admin/plans', icon: CreditCard, end: true },
   ];
 
   // Tenant / Company Operational Navigation Links
   const workspaceNavItems = [
-    { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
+    { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard, end: true },
     { label: 'Fleet & Trucks', path: '/fleet/trucks', icon: Truck },
     { label: 'Driver Master', path: '/fleet/drivers', icon: UserSquare2 },
     { label: 'Billing Parties', path: '/parties/billing', icon: Building2 },
@@ -103,6 +101,7 @@ export const Sidebar: React.FC = () => {
                 <NavLink
                   key={item.path}
                   to={item.path}
+                  end={item.end}
                   className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
                 >
                   <Icon size={18} />
@@ -122,6 +121,7 @@ export const Sidebar: React.FC = () => {
                 <NavLink
                   key={item.path}
                   to={item.path}
+                  end={item.end}
                   className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
                 >
                   <Icon size={18} />

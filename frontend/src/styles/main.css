@@ -23,5 +23,6 @@
 @import './components/billing.css';
 @import './components/settings.css';
 @import './components/superAdmin.css';
+@import './components/superAdminPlans.css';
 @import './components/tracking.css';
 @import './components/drawer.css';

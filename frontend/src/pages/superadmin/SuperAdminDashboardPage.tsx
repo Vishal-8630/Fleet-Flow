@@ -10,7 +10,7 @@
  * 
  * CAPABILITIES:
  * -------------
- * - Executive SaaS Telemetry (MRR, ARR, active fleet under management, churn).
+ * - Executive SaaS Telemetry (MRR, ARR, active fleet under management, active ratio).
  * - Multi-tenant directory with live search and status filters.
  * - 1-Click Trial Extensions (+7, +14, +30 days).
  * - Resource Quota Overrides (custom fleet caps).
@@ -26,14 +26,17 @@ import {
   Truck,
   Users,
   Clock,
-  ShieldAlert,
   Sliders,
   LogIn,
   Search,
   CheckCircle,
   AlertOctagon,
+  RefreshCw,
+  ShieldCheck,
+  Calendar,
+  Layers,
+  ArrowUpRight,
 } from 'lucide-react';
-import { PageHeader } from '../../components/common/PageHeader';
 import { Modal } from '../../components/common/Modal';
 import { toast } from '../../stores/uiStore';
 import { useAuthStore } from '../../stores/authStore';
@@ -63,6 +66,7 @@ interface TenantProfile {
 export const SuperAdminDashboardPage: React.FC = () => {
   const { user } = useAuthStore();
   const [loading, setLoading] = useState<boolean>(true);
+  const [refreshing, setRefreshing] = useState<boolean>(false);
   const [metrics, setMetrics] = useState<any>(null);
   const [tenants, setTenants] = useState<TenantProfile[]>([]);
   const [search, setSearch] = useState<string>('');
@@ -79,11 +83,6 @@ export const SuperAdminDashboardPage: React.FC = () => {
     max_users: 5,
   });
 
-  useEffect(() => {
-    fetchTelemetry();
-    fetchTenants();
-  }, [statusFilter]);
-
   const fetchTelemetry = async () => {
     try {
       const res = await axios.get('/api/super-admin/kpis', { withCredentials: true });
@@ -96,7 +95,7 @@ export const SuperAdminDashboardPage: React.FC = () => {
   const fetchTenants = async () => {
     try {
       setLoading(true);
-      let url = '/api/super-admin/tenants?limit=30';
+      let url = '/api/super-admin/tenants?limit=50';
       if (search) url += `&search=${encodeURIComponent(search)}`;
       if (statusFilter) url += `&status=${statusFilter}`;
 
@@ -108,6 +107,18 @@ export const SuperAdminDashboardPage: React.FC = () => {
       setLoading(false);
     }
   };
+
+  const handleRefreshAll = async () => {
+    setRefreshing(true);
+    await Promise.all([fetchTelemetry(), fetchTenants()]);
+    setRefreshing(false);
+    toast.success('Telemetry and tenant directory synced.');
+  };
+
+  useEffect(() => {
+    fetchTelemetry();
+    fetchTenants();
+  }, [statusFilter]);
 
   const handleExtendTrial = async () => {
     if (!selectedTenant) return;
@@ -168,16 +179,45 @@ export const SuperAdminDashboardPage: React.FC = () => {
     }
   };
 
-  return (
-    <div className="shell-container">
-      <PageHeader
-        title="Platform Super-Admin Control Plane"
-        subtitle="Multi-Tenant SaaS Health, Telemetry, and Tenant Quota Governance"
-      />
+  const calculateDaysRemaining = (expiryDateStr: string) => {
+    if (!expiryDateStr) return 0;
+    const diff = new Date(expiryDateStr).getTime() - Date.now();
+    return Math.ceil(diff / (1000 * 60 * 60 * 24));
+  };
 
-      {/* 1. Macro Health Telemetry KPIs */}
+  return (
+    <div>
+      {/* 1. Executive Control Plane Header */}
+      <div className="flex items-center justify-between" style={{ marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
+        <div>
+          <div className="flex items-center" style={{ gap: '0.75rem' }}>
+            <h1 className="page-header-title" style={{ margin: 0 }}>Platform Control Plane</h1>
+            <span className="badge badge-warning" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+              <ShieldCheck size={13} />
+              SaaS Engine Root
+            </span>
+          </div>
+          <p className="page-header-subtitle" style={{ margin: '0.35rem 0 0 0' }}>
+            Multi-Tenant SaaS Telemetry, Financial Run Rates & Tenant Quota Governance
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleRefreshAll}
+          className="btn btn-outline btn-sm"
+          style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+          disabled={refreshing}
+        >
+          <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
+          <span>{refreshing ? 'Syncing...' : 'Sync Telemetry'}</span>
+        </button>
+      </div>
+
+      {/* 2. Macro Telemetry KPI Cards */}
       {metrics && (
         <div className="superadmin-kpis-grid">
+          {/* Card 1: Monthly Run Rate */}
           <div className="superadmin-kpi-card">
             <div className="superadmin-kpi-icon revenue">
               <TrendingUp size={24} />
@@ -185,19 +225,23 @@ export const SuperAdminDashboardPage: React.FC = () => {
             <div className="superadmin-kpi-content">
               <div className="superadmin-kpi-label">Monthly Run Rate (MRR)</div>
               <div className="superadmin-kpi-value">₹{metrics.mrr_rupees.toLocaleString('en-IN')}</div>
+              <div className="superadmin-kpi-subtext">Active subscription revenue</div>
             </div>
           </div>
 
+          {/* Card 2: Annual Run Rate */}
           <div className="superadmin-kpi-card">
-            <div className="superadmin-kpi-icon revenue">
-              <TrendingUp size={24} />
+            <div className="superadmin-kpi-icon arr">
+              <ArrowUpRight size={24} />
             </div>
             <div className="superadmin-kpi-content">
-              <div className="superadmin-kpi-label">Annual Run Rate (ARR)</div>
+              <div className="superadmin-kpi-label">Annualized Run Rate (ARR)</div>
               <div className="superadmin-kpi-value">₹{metrics.arr_rupees.toLocaleString('en-IN')}</div>
+              <div className="superadmin-kpi-subtext">Projected 12-month ARR</div>
             </div>
           </div>
 
+          {/* Card 3: Active Transporters */}
           <div className="superadmin-kpi-card">
             <div className="superadmin-kpi-icon tenants">
               <Building size={24} />
@@ -205,9 +249,15 @@ export const SuperAdminDashboardPage: React.FC = () => {
             <div className="superadmin-kpi-content">
               <div className="superadmin-kpi-label">Active Transporters</div>
               <div className="superadmin-kpi-value">{metrics.active_tenants} / {metrics.total_tenants}</div>
+              <div className="superadmin-kpi-subtext">
+                {metrics.total_tenants > 0
+                  ? `${Math.round((metrics.active_tenants / metrics.total_tenants) * 100)}% conversion rate`
+                  : '0% conversion'}
+              </div>
             </div>
           </div>
 
+          {/* Card 4: Fleet Under Management */}
           <div className="superadmin-kpi-card">
             <div className="superadmin-kpi-icon fleet">
               <Truck size={24} />
@@ -215,24 +265,29 @@ export const SuperAdminDashboardPage: React.FC = () => {
             <div className="superadmin-kpi-content">
               <div className="superadmin-kpi-label">Fleet Under Management</div>
               <div className="superadmin-kpi-value">{metrics.fleet_trucks_managed} Trucks</div>
+              <div className="superadmin-kpi-subtext">Across all tenant registries</div>
             </div>
           </div>
         </div>
       )}
 
-      {/* 2. Tenant Directory & Controls */}
-      <div className="card" style={{ padding: 0 }}>
-        <div style={{ padding: 'var(--spacing-4) var(--spacing-6)', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
-          <h3 style={{ margin: 0, fontSize: 'var(--font-size-base)', fontWeight: 700 }}>
-            Registered Tenant Directory ({tenants.length})
-          </h3>
+      {/* 3. Registered Tenant Directory Card */}
+      <div className="tenant-table-card">
+        <div className="tenant-table-header">
+          <div className="tenant-table-title">
+            <Building size={18} color="var(--color-primary-600)" />
+            <h3>Registered Tenant Directory</h3>
+            <span className="badge badge-info" style={{ fontSize: '0.7rem' }}>
+              {tenants.length} Workspaces
+            </span>
+          </div>
 
-          <div style={{ display: 'flex', gap: '12px' }}>
-            <div className="search-box">
-              <Search size={16} className="search-icon" />
+          <div className="tenant-search-toolbar">
+            <div className="tenant-search-box">
+              <Search size={15} className="search-icon" />
               <input
                 type="text"
-                placeholder="Search company or email..."
+                placeholder="Search enterprise, slug, or email..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && fetchTenants()}
@@ -240,8 +295,7 @@ export const SuperAdminDashboardPage: React.FC = () => {
             </div>
 
             <select
-              className="form-control"
-              style={{ width: '160px' }}
+              className="tenant-filter-select"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
             >
@@ -255,112 +309,157 @@ export const SuperAdminDashboardPage: React.FC = () => {
         </div>
 
         {loading ? (
-          <div style={{ padding: '60px', textAlign: 'center' }}>
-            <div className="loading-spinner" />
-            <p style={{ marginTop: '16px', color: 'var(--text-muted)' }}>Loading tenant directory...</p>
+          <div style={{ padding: '4rem 1rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+            <div style={{ width: '2rem', height: '2rem', border: '3px solid var(--color-primary-200)', borderTopColor: 'var(--color-primary-600)', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 1rem' }} />
+            <p style={{ margin: 0 }}>Syncing tenant directory...</p>
+          </div>
+        ) : tenants.length === 0 ? (
+          <div style={{ padding: '4rem 1rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+            <Building size={32} style={{ margin: '0 auto 0.75rem', opacity: 0.4 }} />
+            <p style={{ margin: 0, fontWeight: 'var(--font-weight-semibold)' }}>No tenants matching your filters</p>
+            <p style={{ margin: '0.25rem 0 0', fontSize: 'var(--font-size-xs)' }}>Try clearing your search query or status filter.</p>
           </div>
         ) : (
           <div className="table-responsive">
             <table className="table">
               <thead>
                 <tr>
-                  <th>Company</th>
+                  <th>Enterprise Tenant</th>
                   <th>Plan Tier</th>
                   <th>Status</th>
                   <th>Fleet Utilization</th>
                   <th>Trial Expiry</th>
-                  <th style={{ textAlign: 'right' }}>Admin Actions</th>
+                  <th style={{ textAlign: 'right' }}>Admin Governance</th>
                 </tr>
               </thead>
               <tbody>
-                {tenants.map((tenant) => (
-                  <tr key={tenant.id}>
-                    <td>
-                      <strong>{tenant.name}</strong>
-                      <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                        {tenant.slug} • {tenant.email}
-                      </div>
-                    </td>
-                    <td>
-                      <span className={`tenant-plan-pill ${tenant.plan?.code || 'starter'}`}>
-                        {tenant.plan?.name || 'Starter Trial'}
-                      </span>
-                    </td>
-                    <td>
-                      <span className={`badge ${tenant.status === 'active' ? 'badge-success' : tenant.status === 'suspended' ? 'badge-danger' : 'badge-warning'}`}>
-                        {tenant.status}
-                      </span>
-                    </td>
-                    <td>
-                      <div style={{ fontSize: '12px' }}>
-                        {tenant.usage.trucks} Trucks • {tenant.usage.drivers} Drivers
-                      </div>
-                      {tenant.quota_overrides?.max_trucks && (
-                        <small style={{ color: 'var(--color-primary)' }}>
-                          (Override: {tenant.quota_overrides.max_trucks} max)
-                        </small>
-                      )}
-                    </td>
-                    <td>
-                      <div style={{ fontSize: '12px' }}>
-                        {new Date(tenant.trial_ends_at).toLocaleDateString()}
-                      </div>
-                    </td>
-                    <td style={{ textAlign: 'right' }}>
-                      <div style={{ display: 'inline-flex', gap: '8px' }}>
-                        <button
-                          type="button"
-                          className="btn btn-outline btn-sm"
-                          title="Extend Trial"
-                          onClick={() => {
-                            setSelectedTenant(tenant);
-                            setTrialModalOpen(true);
-                          }}
-                        >
-                          <Clock size={14} />
-                          +Trial
-                        </button>
+                {tenants.map((tenant) => {
+                  const daysRemaining = calculateDaysRemaining(tenant.trial_ends_at);
+                  const isExpired = daysRemaining < 0;
 
-                        <button
-                          type="button"
-                          className="btn btn-outline btn-sm"
-                          title="Override Quotas"
-                          onClick={() => {
-                            setSelectedTenant(tenant);
-                            setQuotaForm({
-                              max_trucks: tenant.quota_overrides?.max_trucks || 25,
-                              max_drivers: tenant.quota_overrides?.max_drivers || 30,
-                              max_users: tenant.quota_overrides?.max_users || 10,
-                            });
-                            setQuotaModalOpen(true);
-                          }}
-                        >
-                          <Sliders size={14} />
-                          Quotas
-                        </button>
+                  return (
+                    <tr key={tenant.id}>
+                      {/* Enterprise Tenant */}
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                          <div style={{ width: '2.25rem', height: '2.25rem', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--color-primary-100)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            <Building size={16} color="var(--color-primary-600)" />
+                          </div>
+                          <div>
+                            <div style={{ fontWeight: 'var(--font-weight-bold)', color: 'var(--text-primary)' }}>
+                              {tenant.name}
+                            </div>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>
+                              <span style={{ fontFamily: 'monospace' }}>{tenant.slug}</span> • {tenant.email}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
 
-                        <button
-                          type="button"
-                          className="btn btn-outline btn-sm"
-                          style={{ color: tenant.status === 'suspended' ? '#10b981' : '#ef4444' }}
-                          title={tenant.status === 'suspended' ? 'Activate Tenant' : 'Suspend Tenant'}
-                          onClick={() => handleToggleStatus(tenant, tenant.status === 'suspended' ? 'active' : 'suspended')}
-                        >
-                          {tenant.status === 'suspended' ? <CheckCircle size={14} /> : <AlertOctagon size={14} />}
-                        </button>
+                      {/* Plan Tier */}
+                      <td>
+                        <span className={`tenant-plan-pill ${tenant.plan?.code || 'starter'}`}>
+                          {tenant.plan?.name || 'Starter Trial'}
+                        </span>
+                      </td>
 
-                        <button
-                          type="button"
-                          className="btn btn-primary btn-sm"
-                          title="1-Hour Support Impersonation"
-                          onClick={() => handleImpersonate(tenant)}
-                        >
-                          <LogIn size={14} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      {/* Status */}
+                      <td>
+                        <span className={`badge ${
+                          tenant.status === 'active'
+                            ? 'badge-success'
+                            : tenant.status === 'suspended'
+                            ? 'badge-danger'
+                            : 'badge-warning'
+                        }`}>
+                          {tenant.status}
+                        </span>
+                      </td>
+
+                      {/* Fleet Utilization */}
+                      <td>
+                        <div style={{ fontSize: '0.75rem', fontWeight: 'var(--font-weight-semibold)', color: 'var(--text-primary)' }}>
+                          {tenant.usage.trucks} Trucks • {tenant.usage.drivers} Drivers
+                        </div>
+                        {tenant.quota_overrides?.max_trucks && (
+                          <div style={{ fontSize: '0.68rem', color: 'var(--color-primary-600)', marginTop: '0.15rem' }}>
+                            Quota Override: {tenant.quota_overrides.max_trucks} Max Trucks
+                          </div>
+                        )}
+                      </td>
+
+                      {/* Trial Expiry */}
+                      <td>
+                        <div style={{ fontSize: '0.75rem', fontWeight: 'var(--font-weight-medium)', color: 'var(--text-primary)' }}>
+                          {new Date(tenant.trial_ends_at).toLocaleDateString('en-IN')}
+                        </div>
+                        <div style={{ fontSize: '0.68rem', color: isExpired ? 'var(--color-danger)' : 'var(--text-muted)', marginTop: '0.15rem' }}>
+                          {isExpired ? 'Expired' : `${daysRemaining} days left`}
+                        </div>
+                      </td>
+
+                      {/* Governance Actions */}
+                      <td style={{ textAlign: 'right' }}>
+                        <div className="tenant-actions-group">
+                          {/* +Trial Button */}
+                          <button
+                            type="button"
+                            className="tenant-action-btn"
+                            title="Extend Trial Days"
+                            onClick={() => {
+                              setSelectedTenant(tenant);
+                              setTrialModalOpen(true);
+                            }}
+                          >
+                            <Clock size={13} />
+                            <span>+Trial</span>
+                          </button>
+
+                          {/* Quota Override Button */}
+                          <button
+                            type="button"
+                            className="tenant-action-btn"
+                            title="Configure Quota Limits"
+                            onClick={() => {
+                              setSelectedTenant(tenant);
+                              setQuotaForm({
+                                max_trucks: tenant.quota_overrides?.max_trucks || 25,
+                                max_drivers: tenant.quota_overrides?.max_drivers || 30,
+                                max_users: tenant.quota_overrides?.max_users || 10,
+                              });
+                              setQuotaModalOpen(true);
+                            }}
+                          >
+                            <Sliders size={13} />
+                            <span>Quotas</span>
+                          </button>
+
+                          {/* Suspend / Activate Toggle */}
+                          <button
+                            type="button"
+                            className={`tenant-action-btn ${tenant.status === 'suspended' ? 'activate' : 'danger'}`}
+                            title={tenant.status === 'suspended' ? 'Reactivate Tenant' : 'Suspend Tenant'}
+                            onClick={() => handleToggleStatus(tenant, tenant.status === 'suspended' ? 'active' : 'suspended')}
+                          >
+                            {tenant.status === 'suspended' ? <CheckCircle size={13} /> : <AlertOctagon size={13} />}
+                            <span>{tenant.status === 'suspended' ? 'Activate' : 'Suspend'}</span>
+                          </button>
+
+                          {/* Impersonation Button */}
+                          <button
+                            type="button"
+                            className="tenant-action-btn impersonate"
+                            title="1-Hour Support Impersonation"
+                            onClick={() => handleImpersonate(tenant)}
+                          >
+                            <LogIn size={13} />
+                            <span>Access</span>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -374,14 +473,15 @@ export const SuperAdminDashboardPage: React.FC = () => {
         title="Extend Company Trial Period"
         subtitle={`Grant extra trial days to ${selectedTenant?.name}`}
       >
-        <div style={{ marginBottom: '16px' }}>
-          <label className="form-label">Extension Duration</label>
-          <div style={{ display: 'flex', gap: '10px' }}>
+        <div style={{ marginBottom: '1.25rem' }}>
+          <label className="form-label" style={{ marginBottom: '0.5rem', display: 'block' }}>Extension Duration</label>
+          <div style={{ display: 'flex', gap: '0.75rem' }}>
             {[7, 14, 30].map((days) => (
               <button
                 key={days}
                 type="button"
                 className={`btn ${additionalDays === days ? 'btn-primary' : 'btn-outline'}`}
+                style={{ flex: 1, padding: '0.6rem 0.5rem' }}
                 onClick={() => setAdditionalDays(days)}
               >
                 +{days} Days
@@ -390,7 +490,7 @@ export const SuperAdminDashboardPage: React.FC = () => {
           </div>
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
           <button type="button" className="btn btn-secondary" onClick={() => setTrialModalOpen(false)}>
             Cancel
           </button>
@@ -404,10 +504,10 @@ export const SuperAdminDashboardPage: React.FC = () => {
       <Modal
         isOpen={quotaModalOpen}
         onClose={() => setQuotaModalOpen(false)}
-        title="Custom Quota Overrides"
-        subtitle={`Set custom fleet and user caps for ${selectedTenant?.name}`}
+        title="Custom Resource Quota Overrides"
+        subtitle={`Set custom fleet and user capacity caps for ${selectedTenant?.name}`}
       >
-        <div className="form-group" style={{ marginBottom: '14px' }}>
+        <div className="form-group" style={{ marginBottom: '1rem' }}>
           <label className="form-label">Maximum Fleet Trucks (-1 for unlimited)</label>
           <input
             type="number"
@@ -417,7 +517,7 @@ export const SuperAdminDashboardPage: React.FC = () => {
           />
         </div>
 
-        <div className="form-group" style={{ marginBottom: '14px' }}>
+        <div className="form-group" style={{ marginBottom: '1rem' }}>
           <label className="form-label">Maximum Commercial Drivers (-1 for unlimited)</label>
           <input
             type="number"
@@ -427,7 +527,7 @@ export const SuperAdminDashboardPage: React.FC = () => {
           />
         </div>
 
-        <div className="form-group" style={{ marginBottom: '20px' }}>
+        <div className="form-group" style={{ marginBottom: '1.5rem' }}>
           <label className="form-label">Maximum Team Accounts</label>
           <input
             type="number"
@@ -437,12 +537,12 @@ export const SuperAdminDashboardPage: React.FC = () => {
           />
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
           <button type="button" className="btn btn-secondary" onClick={() => setQuotaModalOpen(false)}>
             Cancel
           </button>
           <button type="button" className="btn btn-primary" onClick={handleOverrideQuotas}>
-            Save Overrides
+            Save Quotas
           </button>
         </div>
       </Modal>

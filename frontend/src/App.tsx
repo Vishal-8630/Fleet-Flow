@@ -50,6 +50,7 @@ import { LedgerListPage } from './pages/commercial/LedgerListPage';
 import { BillingPage } from './pages/settings/BillingPage';
 import { CustomFieldsPage } from './pages/settings/CustomFieldsPage';
 import { SuperAdminDashboardPage } from './pages/superadmin/SuperAdminDashboardPage';
+import { SuperAdminPlansPage } from './pages/superadmin/SuperAdminPlansPage';
 import { PublicTrackingPage } from './pages/public/PublicTrackingPage';
 import { ToastContainer } from './components/common/ToastContainer';
 
@@ -164,6 +165,7 @@ export const App: React.FC = () => {
           <Route path="settings/billing" element={<BillingPage />} />
           <Route path="settings/custom-fields" element={<CustomFieldsPage />} />
           <Route path="super-admin" element={<SuperAdminDashboardPage />} />
+          <Route path="super-admin/plans" element={<SuperAdminPlansPage />} />
         </Route>
 
         {/* Catch-all Fallback */}

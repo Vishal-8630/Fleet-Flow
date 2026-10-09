@@ -15,7 +15,9 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { Navigate } from 'react-router-dom';
 import axios from 'axios';
+import { useAuthStore } from '../../stores/authStore';
 import {
   CreditCard,
   CheckCircle,
@@ -61,6 +63,13 @@ interface AddOn {
 }
 
 export const BillingPage: React.FC = () => {
+  const { user } = useAuthStore();
+
+  // Platform super-admins manage catalog governance and do not have tenant billing contracts
+  if (user?.isSuperAdmin) {
+    return <Navigate to="/super-admin/plans" replace />;
+  }
+
   const [loading, setLoading] = useState<boolean>(true);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [addons, setAddons] = useState<AddOn[]>([]);

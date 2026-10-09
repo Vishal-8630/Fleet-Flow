@@ -23,6 +23,8 @@ import { Truck } from '../models/Truck.js';
 import { Driver } from '../models/Driver.js';
 import { CompanyMember } from '../models/CompanyMember.js';
 import { PlatformAuditLog } from '../models/PlatformAuditLog.js';
+import { PlatformSetting } from '../models/PlatformSetting.js';
+import { PromoCode } from '../models/PromoCode.js';
 import { seedBillingCatalog } from '../utils/billingSeedService.js';
 
 /**
@@ -367,3 +369,360 @@ export async function getAuditLogs(req: Request, res: Response): Promise<void> {
     res.status(500).json({ error: error.message || 'Failed to fetch audit logs.' });
   }
 }
+
+/**
+ * GET /api/super-admin/plans-catalog
+ * Retrieves all tiers, add-ons, platform billing settings, and promo codes.
+ */
+export async function getPlatformPlansCatalog(req: Request, res: Response): Promise<void> {
+  try {
+    await seedBillingCatalog();
+    const [plans, addons, promoCodes] = await Promise.all([
+      Plan.find().sort({ monthly_price_paise: 1 }),
+      AddOn.find().sort({ monthly_price_paise: 1 }),
+      PromoCode.find().sort({ created_at: -1 }),
+    ]);
+
+    let settings = await PlatformSetting.findOne({ key: 'platform_billing_config' });
+    if (!settings) {
+      settings = await PlatformSetting.create({
+        key: 'platform_billing_config',
+        trial_days: 14,
+        grace_period_days: 7,
+        gst_rate_percent: 18,
+        currency: 'INR',
+        gateway_provider: 'razorpay',
+        gateway_mode: 'sandbox',
+        razorpay_key_id: process.env.RAZORPAY_KEY_ID || 'rzp_test_fleetflow_demo',
+        support_email: 'billing@fleetflow.io',
+        auto_suspend_overdue: true,
+      });
+    }
+
+    res.json({
+      plans,
+      addons,
+      settings,
+      promoCodes,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Failed to load plans catalog.' });
+  }
+}
+
+/**
+ * PUT /api/super-admin/plans/:id
+ * Updates pricing, resource quotas, and modular feature entitlements for a tier.
+ */
+export async function updatePlan(req: Request, res: Response): Promise<void> {
+  try {
+    const { id } = req.params;
+    const {
+      name,
+      description,
+      monthly_price_paise,
+      annual_price_paise,
+      max_trucks,
+      max_drivers,
+      max_users,
+      included_features,
+      is_active,
+      is_public,
+    } = req.body;
+
+    const plan = await Plan.findById(id);
+    if (!plan) {
+      res.status(404).json({ error: 'Plan not found.' });
+      return;
+    }
+
+    if (name !== undefined) plan.name = name;
+    if (description !== undefined) plan.description = description;
+    if (monthly_price_paise !== undefined) plan.monthly_price_paise = Number(monthly_price_paise);
+    if (annual_price_paise !== undefined) plan.annual_price_paise = Number(annual_price_paise);
+    if (max_trucks !== undefined) plan.max_trucks = Number(max_trucks);
+    if (max_drivers !== undefined) plan.max_drivers = Number(max_drivers);
+    if (max_users !== undefined) plan.max_users = Number(max_users);
+    if (included_features !== undefined) plan.included_features = included_features;
+    if (is_active !== undefined) plan.is_active = Boolean(is_active);
+    if (is_public !== undefined) plan.is_public = Boolean(is_public);
+
+    await plan.save();
+
+    await PlatformAuditLog.create({
+      actor_user_id: req.user!._id,
+      actor_email: req.user!.email,
+      action: 'update_plan_catalog',
+      ip_address: req.ip,
+      user_agent: req.headers['user-agent'],
+      details: {
+        plan_id: plan._id,
+        plan_code: plan.code,
+        monthly_price_paise: plan.monthly_price_paise,
+        annual_price_paise: plan.annual_price_paise,
+      },
+    });
+
+    res.json({ success: true, message: `Plan '${plan.name}' updated successfully.`, plan });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Failed to update plan.' });
+  }
+}
+
+/**
+ * POST /api/super-admin/plans
+ * Adds a new custom SaaS plan tier to the platform catalog.
+ */
+export async function createPlan(req: Request, res: Response): Promise<void> {
+  try {
+    const {
+      name,
+      code,
+      description,
+      monthly_price_paise,
+      annual_price_paise,
+      max_trucks,
+      max_drivers,
+      max_users,
+      included_features,
+      is_active,
+      is_public,
+    } = req.body;
+
+    const existing = await Plan.findOne({ code });
+    if (existing) {
+      res.status(400).json({ error: `Plan code '${code}' already exists.` });
+      return;
+    }
+
+    const plan = await Plan.create({
+      name,
+      code,
+      description,
+      monthly_price_paise: Number(monthly_price_paise),
+      annual_price_paise: Number(annual_price_paise),
+      max_trucks: Number(max_trucks ?? 5),
+      max_drivers: Number(max_drivers ?? 5),
+      max_users: Number(max_users ?? 2),
+      included_features: included_features || ['MOD_FLEET', 'MOD_DRIVERS'],
+      is_active: is_active ?? true,
+      is_public: is_public ?? true,
+    });
+
+    await PlatformAuditLog.create({
+      actor_user_id: req.user!._id,
+      actor_email: req.user!.email,
+      action: 'create_plan_catalog',
+      ip_address: req.ip,
+      user_agent: req.headers['user-agent'],
+      details: { plan_id: plan._id, plan_code: plan.code },
+    });
+
+    res.status(201).json({ success: true, message: `Plan '${plan.name}' created.`, plan });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Failed to create plan.' });
+  }
+}
+
+/**
+ * PUT /api/super-admin/addons/:id
+ * Updates an add-on module's pricing and configuration.
+ */
+export async function updateAddOn(req: Request, res: Response): Promise<void> {
+  try {
+    const { id } = req.params;
+    const { name, description, monthly_price_paise, annual_price_paise, quota_boost, is_active } = req.body;
+
+    const addon = await AddOn.findById(id);
+    if (!addon) {
+      res.status(404).json({ error: 'Add-on not found.' });
+      return;
+    }
+
+    if (name !== undefined) addon.name = name;
+    if (description !== undefined) addon.description = description;
+    if (monthly_price_paise !== undefined) addon.monthly_price_paise = Number(monthly_price_paise);
+    if (annual_price_paise !== undefined) addon.annual_price_paise = Number(annual_price_paise);
+    if (quota_boost !== undefined) addon.quota_boost = quota_boost;
+    if (is_active !== undefined) addon.is_active = Boolean(is_active);
+
+    await addon.save();
+
+    await PlatformAuditLog.create({
+      actor_user_id: req.user!._id,
+      actor_email: req.user!.email,
+      action: 'update_addon_catalog',
+      ip_address: req.ip,
+      user_agent: req.headers['user-agent'],
+      details: { addon_id: addon._id, code: addon.code },
+    });
+
+    res.json({ success: true, message: `Add-on '${addon.name}' updated successfully.`, addon });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Failed to update add-on.' });
+  }
+}
+
+/**
+ * POST /api/super-admin/addons
+ * Creates a new add-on item in the platform catalog.
+ */
+export async function createAddOn(req: Request, res: Response): Promise<void> {
+  try {
+    const { name, code, description, type, feature_key, quota_boost, monthly_price_paise, annual_price_paise, is_active } = req.body;
+
+    const existing = await AddOn.findOne({ code });
+    if (existing) {
+      res.status(400).json({ error: `Add-on code '${code}' already exists.` });
+      return;
+    }
+
+    const addon = await AddOn.create({
+      name,
+      code,
+      description,
+      type: type || 'module',
+      feature_key,
+      quota_boost,
+      monthly_price_paise: Number(monthly_price_paise || 0),
+      annual_price_paise: Number(annual_price_paise || 0),
+      is_active: is_active ?? true,
+    });
+
+    await PlatformAuditLog.create({
+      actor_user_id: req.user!._id,
+      actor_email: req.user!.email,
+      action: 'create_addon_catalog',
+      ip_address: req.ip,
+      user_agent: req.headers['user-agent'],
+      details: { addon_id: addon._id, code: addon.code },
+    });
+
+    res.status(201).json({ success: true, message: `Add-on '${addon.name}' created.`, addon });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Failed to create add-on.' });
+  }
+}
+
+/**
+ * PUT /api/super-admin/settings
+ * Updates global platform billing rules, tax rates, trial periods, and payment gateway config.
+ */
+export async function updatePlatformSettings(req: Request, res: Response): Promise<void> {
+  try {
+    const {
+      trial_days,
+      grace_period_days,
+      gst_rate_percent,
+      currency,
+      gateway_provider,
+      gateway_mode,
+      razorpay_key_id,
+      support_email,
+      auto_suspend_overdue,
+    } = req.body;
+
+    let settings = await PlatformSetting.findOne({ key: 'platform_billing_config' });
+    if (!settings) {
+      settings = new PlatformSetting({ key: 'platform_billing_config' });
+    }
+
+    if (trial_days !== undefined) settings.trial_days = Number(trial_days);
+    if (grace_period_days !== undefined) settings.grace_period_days = Number(grace_period_days);
+    if (gst_rate_percent !== undefined) settings.gst_rate_percent = Number(gst_rate_percent);
+    if (currency !== undefined) settings.currency = currency;
+    if (gateway_provider !== undefined) settings.gateway_provider = gateway_provider;
+    if (gateway_mode !== undefined) settings.gateway_mode = gateway_mode;
+    if (razorpay_key_id !== undefined) settings.razorpay_key_id = razorpay_key_id;
+    if (support_email !== undefined) settings.support_email = support_email;
+    if (auto_suspend_overdue !== undefined) settings.auto_suspend_overdue = Boolean(auto_suspend_overdue);
+
+    await settings.save();
+
+    await PlatformAuditLog.create({
+      actor_user_id: req.user!._id,
+      actor_email: req.user!.email,
+      action: 'update_platform_billing_settings',
+      ip_address: req.ip,
+      user_agent: req.headers['user-agent'],
+      details: {
+        trial_days: settings.trial_days,
+        grace_period_days: settings.grace_period_days,
+        gst_rate_percent: settings.gst_rate_percent,
+        gateway_mode: settings.gateway_mode,
+      },
+    });
+
+    res.json({ success: true, message: 'Platform commercial settings updated successfully.', settings });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Failed to update platform settings.' });
+  }
+}
+
+/**
+ * POST /api/super-admin/promo-codes
+ * Issues a new promotional coupon code.
+ */
+export async function createPromoCode(req: Request, res: Response): Promise<void> {
+  try {
+    const {
+      code,
+      discount_type,
+      discount_value,
+      max_discount_paise,
+      min_order_paise,
+      valid_until,
+      max_redemptions,
+      applicable_plan_codes,
+    } = req.body;
+
+    if (!code || !discount_type || !discount_value || !valid_until) {
+      res.status(400).json({ error: 'Missing required promo code attributes.' });
+      return;
+    }
+
+    const existing = await PromoCode.findOne({ code: code?.toUpperCase() });
+    if (existing) {
+      res.status(400).json({ error: `Promo code '${code}' already exists.` });
+      return;
+    }
+
+    const promo = await PromoCode.create({
+      code: code?.toUpperCase(),
+      discount_type,
+      discount_value: Number(discount_value),
+      max_discount_paise: max_discount_paise ? Number(max_discount_paise) : undefined,
+      min_order_paise: min_order_paise ? Number(min_order_paise) : 0,
+      valid_until: new Date(valid_until),
+      max_redemptions: Number(max_redemptions || 100),
+      applicable_plan_codes: applicable_plan_codes || [],
+    });
+
+    res.status(201).json({ success: true, message: `Promo code '${promo.code}' created.`, promo });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Failed to create promo code.' });
+  }
+}
+
+/**
+ * PATCH /api/super-admin/promo-codes/:id/toggle
+ * Toggles active status of a coupon code.
+ */
+export async function togglePromoCode(req: Request, res: Response): Promise<void> {
+  try {
+    const { id } = req.params;
+    const promo = await PromoCode.findById(id);
+    if (!promo) {
+      res.status(404).json({ error: 'Promo code not found.' });
+      return;
+    }
+
+    promo.is_active = !promo.is_active;
+    await promo.save();
+
+    res.json({ success: true, message: `Promo code is now ${promo.is_active ? 'active' : 'inactive'}.`, promo });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Failed to toggle promo code.' });
+  }
+}
+
