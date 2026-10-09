@@ -3,8 +3,12 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './stores/authStore';
 import { LoginPage } from './pages/auth/LoginPage';
 import { RegisterPage } from './pages/auth/RegisterPage';
+import { AcceptInvitePage } from './pages/auth/AcceptInvitePage';
 import { AppLayout } from './components/layout/AppLayout';
 import { DashboardPage } from './pages/dashboard/DashboardPage';
+import { TeamMembersPage } from './pages/team/TeamMembersPage';
+import { CompanySettingsPage } from './pages/settings/CompanySettingsPage';
+import { ToastContainer } from './components/common/ToastContainer';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isAuthenticated, isLoading } = useAuthStore();
@@ -42,6 +46,7 @@ export const App: React.FC = () => {
         {/* Public Routes */}
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
+        <Route path="/accept-invite" element={<AcceptInvitePage />} />
 
         {/* Protected Tenant Routes */}
         <Route
@@ -54,6 +59,10 @@ export const App: React.FC = () => {
         >
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<DashboardPage />} />
+          <Route path="team" element={<TeamMembersPage />} />
+          <Route path="settings/company" element={<CompanySettingsPage />} />
+
+          {/* Placeholders for subsequent phases */}
           <Route path="fleet/trucks" element={<div className="page-header-title">Truck Registry (Phase 2)</div>} />
           <Route path="fleet/drivers" element={<div className="page-header-title">Driver Master (Phase 2)</div>} />
           <Route path="journey/all" element={<div className="page-header-title">Trips & Dispatch (Phase 3)</div>} />
@@ -61,13 +70,15 @@ export const App: React.FC = () => {
           <Route path="invoices" element={<div className="page-header-title">Freight Invoices (Phase 4)</div>} />
           <Route path="settlements" element={<div className="page-header-title">Driver Settlements (Phase 4)</div>} />
           <Route path="ledger" element={<div className="page-header-title">General Ledger (Phase 4)</div>} />
-          <Route path="settings/company" element={<div className="page-header-title">Company Settings (Phase 5)</div>} />
           <Route path="super-admin" element={<div className="page-header-title">Super-Admin Control Plane (Phase 5)</div>} />
         </Route>
 
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
+
+      {/* Global Toast Container */}
+      <ToastContainer />
     </BrowserRouter>
   );
 };

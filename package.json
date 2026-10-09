@@ -1,0 +1,22 @@
+{
+  "name": "fleet-flow",
+  "version": "1.0.0",
+  "description": "Fleet Flow — Enterprise Multi-Tenant Transport & Fleet Management SaaS",
+  "scripts": {
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "build:backend": "npm --prefix backend run build",
+    "build:frontend": "npm --prefix frontend run build",
+    "build": "npm run build:backend && npm run build:frontend",
+    "start": "npm --prefix backend run start"
+  },
+  "keywords": [
+    "transport-management",
+    "fleet-management",
+    "multi-tenant",
+    "saas",
+    "logistics"
+  ],
+  "author": "Vishal",
+  "license": "UNLICENSED"
+}

@@ -17,4 +17,5 @@
 @import './components/cards.css';
 @import './components/badges.css';
 @import './components/modals.css';
+@import './components/toasts.css';
 @import './components/shell.css';

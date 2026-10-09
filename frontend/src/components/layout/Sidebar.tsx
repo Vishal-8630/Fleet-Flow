@@ -3,6 +3,7 @@ import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard,
   Truck,
+  UserSquare2,
   Users,
   Navigation,
   Receipt,
@@ -20,12 +21,13 @@ export const Sidebar: React.FC = () => {
   const navItems = [
     { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
     { label: 'Fleet & Trucks', path: '/fleet/trucks', icon: Truck },
-    { label: 'Driver Master', path: '/fleet/drivers', icon: Users },
+    { label: 'Driver Master', path: '/fleet/drivers', icon: UserSquare2 },
     { label: 'Trips & Dispatch', path: '/journey/all', icon: Navigation },
     { label: 'Bill Entries & LR', path: '/bill-entry/all', icon: Receipt },
     { label: 'Freight Invoices', path: '/invoices', icon: FileSpreadsheet },
     { label: 'Driver Settlements', path: '/settlements', icon: BadgeCent, roles: ['admin', 'accountant'] },
     { label: 'General Ledger', path: '/ledger', icon: BookOpen, roles: ['admin', 'accountant'] },
+    { label: 'Team & Access', path: '/team', icon: Users, roles: ['admin'] },
     { label: 'Company Settings', path: '/settings/company', icon: Settings, roles: ['admin'] },
   ];
 

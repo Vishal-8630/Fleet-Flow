@@ -50,3 +50,27 @@
   justify-content: flex-end;
   gap: 0.75rem;
 }
+
+.modal-close-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  padding: 0.375rem;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.modal-close-btn:hover {
+  color: var(--text-primary);
+  background-color: var(--color-slate-100);
+}
+
+.modal-sm { max-width: 24rem; }
+.modal-md { max-width: 36rem; }
+.modal-lg { max-width: 48rem; }
+.modal-xl { max-width: 64rem; }
+

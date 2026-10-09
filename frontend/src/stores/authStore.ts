@@ -46,6 +46,7 @@ interface AuthState {
     gstin?: string;
   }) => Promise<void>;
   logout: () => Promise<void>;
+  setAuth: (user: User, company: Company, role?: UserRole) => void;
   clearError: () => void;
 }
 
@@ -126,6 +127,17 @@ export const useAuthStore = create<AuthState>((set) => ({
         error: null,
       });
     }
+  },
+
+  setAuth: (user, company, role = 'dispatcher') => {
+    set({
+      user,
+      company,
+      role,
+      isAuthenticated: true,
+      isLoading: false,
+      error: null,
+    });
   },
 
   clearError: () => set({ error: null }),
