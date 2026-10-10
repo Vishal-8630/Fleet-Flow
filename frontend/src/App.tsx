@@ -29,10 +29,13 @@ import { useAuthStore } from './stores/authStore';
 import { LoginPage } from './pages/auth/LoginPage';
 import { RegisterPage } from './pages/auth/RegisterPage';
 import { AcceptInvitePage } from './pages/auth/AcceptInvitePage';
+import { ForgotPasswordPage } from './pages/auth/ForgotPasswordPage';
+import { ResetPasswordPage } from './pages/auth/ResetPasswordPage';
 import { AppLayout } from './components/layout/AppLayout';
 import { DashboardPage } from './pages/dashboard/DashboardPage';
 import { TeamMembersPage } from './pages/team/TeamMembersPage';
 import { CompanySettingsPage } from './pages/settings/CompanySettingsPage';
+import { ProfileSecurityPage } from './pages/settings/ProfileSecurityPage';
 import { TruckListPage } from './pages/fleet/TruckListPage';
 import { TruckDetailPage } from './pages/fleet/TruckDetailPage';
 import { DriverListPage } from './pages/fleet/DriverListPage';
@@ -114,6 +117,8 @@ export const App: React.FC = () => {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/accept-invite" element={<AcceptInvitePage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/track" element={<PublicTrackingPage />} />
         <Route path="/track/:lrNumber" element={<PublicTrackingPage />} />
 
@@ -130,6 +135,7 @@ export const App: React.FC = () => {
           <Route path="dashboard" element={<DashboardRoute />} />
           <Route path="team" element={<TeamMembersPage />} />
           <Route path="settings/company" element={<CompanySettingsPage />} />
+          <Route path="settings/profile" element={<ProfileSecurityPage />} />
 
           {/* Phase 2: Master Data Registries */}
           <Route path="fleet/trucks" element={<TruckListPage />} />

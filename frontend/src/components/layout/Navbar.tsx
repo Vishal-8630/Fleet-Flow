@@ -9,18 +9,13 @@
  * Displays:
  * 1. Current workspace name and active subscription badge.
  * 2. 14-day free trial countdown pill (if status is 'trialing').
- * 3. Logged-in user's name and assigned role.
+ * 3. Logged-in user's name and assigned role (clickable link to `/settings/profile`).
  * 4. Sign-out button triggering `logout()` in `authStore`.
- * 
- * WHY IS IT DESIGNED THIS WAY?
- * ----------------------------
- * Gives operators constant visual context of which transport company workspace
- * they are working in, provides transparent billing visibility (days left in trial),
- * and allows instant session termination.
  * ============================================================================
  */
 
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { Building2, LogOut, Clock, UserCheck } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 
@@ -44,8 +39,8 @@ export const Navbar: React.FC = () => {
       <div className="flex items-center" style={{ gap: '1rem' }}>
         <div className="flex items-center" style={{ gap: '0.5rem', backgroundColor: 'var(--color-slate-100)', padding: '0.375rem 0.75rem', borderRadius: 'var(--radius-md)' }}>
           <Building2 size={16} color="var(--color-primary-600)" />
-          <span style={{ fontWeight: 'var(--font-weight-semibold)', fontSize: 'var(--font-size-sm)' }}>
-            {user?.isSuperAdmin ? 'Fleet Flow Platform' : company?.name || 'Workspace'}
+          <span style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-semibold)' }}>
+            {user?.isSuperAdmin ? 'FleetFlow Global Operator' : company?.name || 'My Transport Co.'}
           </span>
           <span className={`badge ${user?.isSuperAdmin ? 'badge-warning' : 'badge-info'}`} style={{ textTransform: 'uppercase', fontSize: '10px' }}>
             {user?.isSuperAdmin ? 'Super-Admin' : company?.status || 'Active'}
@@ -61,10 +56,32 @@ export const Navbar: React.FC = () => {
         )}
       </div>
 
-      {/* 2. Right Side: User Profile & Logout Action */}
+      {/* 2. Right Side: User Profile (Links to Profile & Security) & Logout Action */}
       <div className="flex items-center" style={{ gap: '1.25rem' }}>
-        <div className="flex items-center" style={{ gap: '0.5rem' }}>
-          <div style={{ width: '2rem', height: '2rem', borderRadius: 'var(--radius-full)', backgroundColor: 'var(--color-primary-100)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Link
+          to="/settings/profile"
+          className="flex items-center"
+          style={{
+            gap: '0.625rem',
+            textDecoration: 'none',
+            color: 'inherit',
+            padding: '0.25rem 0.5rem',
+            borderRadius: 'var(--radius-md)',
+            cursor: 'pointer',
+          }}
+          title="Profile & Security"
+        >
+          <div
+            style={{
+              width: '2rem',
+              height: '2rem',
+              borderRadius: 'var(--radius-full)',
+              backgroundColor: 'var(--color-primary-100)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
             <UserCheck size={16} color="var(--color-primary-600)" />
           </div>
           <div>
@@ -75,7 +92,7 @@ export const Navbar: React.FC = () => {
               Role: {user?.isSuperAdmin ? 'Platform Super-Admin' : role}
             </div>
           </div>
-        </div>
+        </Link>
 
         <button
           onClick={() => logout()}

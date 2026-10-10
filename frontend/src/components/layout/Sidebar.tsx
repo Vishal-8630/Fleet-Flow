@@ -67,6 +67,7 @@ export const Sidebar: React.FC = () => {
     { label: 'Custom Fields', path: '/settings/custom-fields', icon: Sliders, roles: ['admin'], feature: 'MOD_CUSTOM_FIELDS', tier: 'PRO' },
     { label: 'Billing & Plans', path: '/settings/billing', icon: CreditCard, roles: ['admin'] },
     { label: 'Company Settings', path: '/settings/company', icon: Settings, roles: ['admin'] },
+    { label: 'Profile & Security', path: '/settings/profile', icon: Lock },
   ];
 
   const filteredWorkspaceItems = workspaceNavItems.filter((item) => {

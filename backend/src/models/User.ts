@@ -35,6 +35,9 @@ export interface IUser extends Document {
   avatar_url?: string;
   is_verified: boolean;
   is_platform_super_admin: boolean;
+  reset_password_token?: string;
+  reset_password_expires?: Date;
+  token_version: number;
   created_at: Date;
   updated_at: Date;
 }
@@ -48,6 +51,9 @@ const UserSchema = new Schema<IUser>(
     avatar_url: { type: String },
     is_verified: { type: Boolean, default: true },
     is_platform_super_admin: { type: Boolean, default: false },
+    reset_password_token: { type: String, index: true },
+    reset_password_expires: { type: Date },
+    token_version: { type: Number, default: 0 },
   },
   { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } }
 );

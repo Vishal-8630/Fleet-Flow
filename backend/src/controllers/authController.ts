@@ -24,16 +24,35 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
+import mongoose from 'mongoose';
 import { User } from '../models/User.js';
 import { Company } from '../models/Company.js';
 import { CompanyMember } from '../models/CompanyMember.js';
+import { Plan } from '../models/Plan.js';
+import { Subscription } from '../models/Subscription.js';
 import { getTenantEntitlements } from '../utils/entitlementService.js';
+import {
+  sendPasswordResetEmail,
+  sendPasswordChangedAlert,
+  sendTeamInvitationEmail,
+} from '../utils/emailService.js';
+
+const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]).{8,}$/;
 
 /**
  * Returns the JWT signing secret dynamically from process.env to guarantee
  * consistent secret resolution across ES Module evaluation and runtime execution.
  */
-const getJwtSecret = (): string => process.env.JWT_SECRET || 'dev_secret_fallback_key';
+const getJwtSecret = (): string => {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('FATAL: JWT_SECRET must be configured in production environment.');
+    }
+    return 'dev_secret_fallback_key';
+  }
+  return secret;
+};
 
 /**
  * Returns the secure session cookie configuration dynamically.
@@ -41,7 +60,7 @@ const getJwtSecret = (): string => process.env.JWT_SECRET || 'dev_secret_fallbac
 const getCookieOptions = () => ({
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production',
-  sameSite: 'strict' as const,
+  sameSite: (process.env.NODE_ENV === 'production' ? 'strict' : 'lax') as 'strict' | 'lax',
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days session lifetime
 });
 
@@ -61,6 +80,7 @@ const getCookieOptions = () => ({
  * 8. Issues an HttpOnly JWT cookie and returns the user & company metadata.
  */
 export async function registerCompany(req: Request, res: Response): Promise<void> {
+  let session: mongoose.ClientSession | null = null;
   try {
     const { companyName, slug, name, email, password, phone, gstin } = req.body;
 
@@ -87,36 +107,94 @@ export async function registerCompany(req: Request, res: Response): Promise<void
     // 1. Hash password with bcrypt cost factor 12
     const password_hash = await bcrypt.hash(password, 12);
 
+    // Multi-document transaction attempt (gracefully falls back if standalone MongoDB)
+    let useSession = false;
+    try {
+      session = await mongoose.startSession();
+      session.startTransaction();
+      useSession = true;
+    } catch {
+      session = null;
+      useSession = false;
+    }
+
+    const sessionOption = useSession && session ? { session } : undefined;
+
     // 2. Create User account
-    const user = await User.create({
-      name: name.trim(),
-      email: email.toLowerCase().trim(),
-      password_hash,
-      phone: phone.trim(),
-    });
+    const users = await User.create(
+      [
+        {
+          name: name.trim(),
+          email: email.toLowerCase().trim(),
+          password_hash,
+          phone: phone.trim(),
+          token_version: 0,
+        },
+      ],
+      sessionOption
+    );
+    const user = users[0];
 
     // 3. Create Company Workspace with 14-day free trial
-    const company = await Company.create({
-      name: companyName.trim(),
-      slug: cleanSlug,
-      email: email.toLowerCase().trim(),
-      phone: phone.trim(),
-      gstin: gstin ? gstin.toUpperCase().trim() : undefined,
-      subscription_status: 'trialing',
-      trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
-    });
+    const companies = await Company.create(
+      [
+        {
+          name: companyName.trim(),
+          slug: cleanSlug,
+          email: email.toLowerCase().trim(),
+          phone: phone.trim(),
+          gstin: gstin ? gstin.toUpperCase().trim() : undefined,
+          subscription_status: 'trialing',
+          trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+        },
+      ],
+      sessionOption
+    );
+    const company = companies[0];
 
     // 4. Create Company Member (Admin Role)
-    await CompanyMember.create({
-      company_id: company._id,
-      user_id: user._id,
-      email: user.email,
-      role: 'admin',
-      status: 'active',
-    });
+    await CompanyMember.create(
+      [
+        {
+          company_id: company._id,
+          user_id: user._id,
+          email: user.email,
+          role: 'admin',
+          status: 'active',
+        },
+      ],
+      sessionOption
+    );
 
-    // 5. Issue JWT session cookie
-    const token = jwt.sign({ userId: user._id, companyId: company._id }, getJwtSecret(), { expiresIn: '7d' });
+    // 5. Initialize Trial Subscription if standard plan exists
+    const standardPlan = await Plan.findOne({ code: 'standard' });
+    if (standardPlan) {
+      await Subscription.create(
+        [
+          {
+            company_id: company._id,
+            plan_id: standardPlan._id,
+            billing_cycle: 'monthly',
+            status: 'trialing',
+            current_period_start: new Date(),
+            current_period_end: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+            trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+          },
+        ],
+        sessionOption
+      );
+    }
+
+    if (useSession && session) {
+      await session.commitTransaction();
+    }
+
+    // 6. Issue JWT session cookie with token_version
+    const token = jwt.sign(
+      { userId: user._id, companyId: company._id, token_version: user.token_version || 0 },
+      getJwtSecret(),
+      { expiresIn: '7d' }
+    );
 
     res.cookie('token', token, getCookieOptions());
 
@@ -126,7 +204,16 @@ export async function registerCompany(req: Request, res: Response): Promise<void
       company: { id: company._id, name: company.name, slug: company.slug, status: company.subscription_status },
     });
   } catch (error: any) {
+    if (session) {
+      try {
+        await session.abortTransaction();
+      } catch {}
+    }
     res.status(500).json({ error: error.message || 'Registration failed.' });
+  } finally {
+    if (session) {
+      session.endSession();
+    }
   }
 }
 
@@ -171,7 +258,11 @@ export async function login(req: Request, res: Response): Promise<void> {
     }
 
     const company = membership.company_id as any;
-    const token = jwt.sign({ userId: user._id, companyId: company._id }, getJwtSecret(), { expiresIn: '7d' });
+    const token = jwt.sign(
+      { userId: user._id, companyId: company._id, token_version: user.token_version || 0 },
+      getJwtSecret(),
+      { expiresIn: '7d' }
+    );
 
     res.cookie('token', token, getCookieOptions());
 
@@ -296,6 +387,16 @@ export async function inviteMember(req: Request, res: Response): Promise<void> {
       invited_by: req.user?._id,
     });
 
+    const clientUrl = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
+    const inviteUrl = `${clientUrl}/accept-invite?token=${token}`;
+    await sendTeamInvitationEmail(
+      member.email,
+      req.company?.name || 'FleetFlow Workspace',
+      inviteUrl,
+      req.user?.name || 'Team Administrator',
+      role
+    );
+
     res.status(201).json({
       message: 'Employee invitation created successfully.',
       member: { id: member._id, email: member.email, role: member.role, invitation_token: token },
@@ -304,3 +405,177 @@ export async function inviteMember(req: Request, res: Response): Promise<void> {
     res.status(500).json({ error: error.message || 'Invitation failed.' });
   }
 }
+
+/**
+ * 6. forgotPassword
+ * ----------------------------------------------------------------------------
+ * Initiates the password recovery flow:
+ * 1. Accepts email.
+ * 2. To prevent user enumeration, always returns 200 with standard success message.
+ * 3. If user exists, generates a 32-byte cryptographically secure random token.
+ * 4. Stores SHA-256 hash of token on user record, expiring in strictly 15 minutes.
+ * 5. Dispatches password reset email.
+ */
+export async function forgotPassword(req: Request, res: Response): Promise<void> {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      res.status(400).json({ error: 'Email address is required.' });
+      return;
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+    const user = await User.findOne({ email: normalizedEmail });
+
+    const hasSmtp = Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+    let devResetUrl: string | undefined;
+
+    if (user) {
+      const rawToken = crypto.randomBytes(32).toString('hex');
+      const hashedToken = crypto.createHash('sha256').update(rawToken).digest('hex');
+
+      user.reset_password_token = hashedToken;
+      user.reset_password_expires = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+      await user.save();
+
+      const clientUrl = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
+      const resetUrl = `${clientUrl}/reset-password?token=${rawToken}`;
+
+      await sendPasswordResetEmail(user.email, resetUrl, user.name);
+
+      if (process.env.NODE_ENV !== 'production' && !hasSmtp) {
+        devResetUrl = resetUrl;
+      }
+    }
+
+    // Zero-enumeration security response (with dev_reset_url in non-production if no SMTP configured)
+    res.status(200).json({
+      message:
+        'If an active workspace account exists with this email address, a password recovery link has been dispatched. Please check your inbox or spam folder.',
+      ...(devResetUrl ? { dev_reset_url: devResetUrl } : {}),
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Failed to process password reset request.' });
+  }
+}
+
+/**
+ * 7. resetPassword
+ * ----------------------------------------------------------------------------
+ * Resets a user's password using a verified single-use token:
+ * 1. Hashes candidate token with SHA-256 and matches against active unexpired tokens.
+ * 2. Validates password strength (8+ chars, upper, lower, number, special char).
+ * 3. Hashes new password with bcrypt (cost 12).
+ * 4. Clears reset token & expiration.
+ * 5. Increments token_version to immediately revoke all existing sessions across devices.
+ * 6. Dispatches password changed security alert email.
+ */
+export async function resetPassword(req: Request, res: Response): Promise<void> {
+  try {
+    const { token, newPassword } = req.body;
+
+    if (!token || !newPassword) {
+      res.status(400).json({ error: 'Token and new password are required.' });
+      return;
+    }
+
+    if (!PASSWORD_REGEX.test(newPassword)) {
+      res.status(400).json({
+        error:
+          'Password must contain at least 8 characters, including uppercase, lowercase, numbers, and symbols.',
+      });
+      return;
+    }
+
+    const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+
+    const user = await User.findOne({
+      reset_password_token: hashedToken,
+      reset_password_expires: { $gt: new Date() },
+    });
+
+    if (!user) {
+      res.status(400).json({
+        error: 'Invalid or expired password reset token. Please request a new recovery link.',
+      });
+      return;
+    }
+
+    user.password_hash = await bcrypt.hash(newPassword, 12);
+    user.reset_password_token = undefined;
+    user.reset_password_expires = undefined;
+    user.token_version = (user.token_version || 0) + 1;
+    await user.save();
+
+    await sendPasswordChangedAlert(user.email, user.name);
+
+    res.json({
+      message: 'Your password has been successfully reset! You can now log in with your new password.',
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Failed to reset password.' });
+  }
+}
+
+/**
+ * 8. changePassword
+ * ----------------------------------------------------------------------------
+ * Authenticated in-app password update:
+ * 1. Verifies current password against existing hash.
+ * 2. Validates password strength for new password.
+ * 3. Hashes new password and increments token_version to invalidate other devices.
+ * 4. Issues fresh JWT cookie for the current session so active user is not logged out.
+ * 5. Dispatches password changed security alert email.
+ */
+export async function changePassword(req: Request, res: Response): Promise<void> {
+  try {
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      res.status(400).json({ error: 'Current password and new password are required.' });
+      return;
+    }
+
+    const user = await User.findById(req.user?._id);
+    if (!user) {
+      res.status(404).json({ error: 'User account not found.' });
+      return;
+    }
+
+    const isMatch = await bcrypt.compare(currentPassword, user.password_hash);
+    if (!isMatch) {
+      res.status(400).json({ error: 'Incorrect current password.' });
+      return;
+    }
+
+    if (!PASSWORD_REGEX.test(newPassword)) {
+      res.status(400).json({
+        error:
+          'Password must contain at least 8 characters, including uppercase, lowercase, numbers, and symbols.',
+      });
+      return;
+    }
+
+    user.password_hash = await bcrypt.hash(newPassword, 12);
+    user.token_version = (user.token_version || 0) + 1;
+    await user.save();
+
+    // Re-issue cookie for current session with incremented token_version
+    const token = jwt.sign(
+      { userId: user._id, companyId: req.company?._id, token_version: user.token_version },
+      getJwtSecret(),
+      { expiresIn: '7d' }
+    );
+    res.cookie('token', token, getCookieOptions());
+
+    await sendPasswordChangedAlert(user.email, user.name);
+
+    res.json({
+      message: 'Password updated successfully. Other active device sessions have been revoked.',
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Failed to change password.' });
+  }
+}
+

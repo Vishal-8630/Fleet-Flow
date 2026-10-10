@@ -67,6 +67,7 @@ declare global {
 interface JWTPayload {
   userId: string;
   companyId?: string;
+  token_version?: number;
 }
 
 /**
@@ -78,6 +79,7 @@ interface JWTPayload {
  * - Checks HttpOnly cookie `token` (primary for web browsers) or `Bearer <token>` header.
  * - Decodes and verifies token signature using the server's `JWT_SECRET`.
  * - Looks up the User record in MongoDB.
+ * - Validates `token_version` to enforce instant revocation on password change.
  * - Attaches the populated user document to `req.user`.
  * - If invalid, expired, or missing, immediately halts with 401 Unauthorized.
  */
@@ -96,6 +98,14 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     const user = await User.findById(decoded.userId);
     if (!user) {
       res.status(401).json({ error: 'User account not found.' });
+      return;
+    }
+
+    // Token Version / Global Session Invalidation Check:
+    const userTokenVersion = user.token_version ?? 0;
+    const tokenVersion = decoded.token_version ?? 0;
+    if (tokenVersion !== userTokenVersion) {
+      res.status(401).json({ error: 'Session expired due to security updates. Please log in again.' });
       return;
     }
 

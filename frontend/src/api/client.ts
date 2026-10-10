@@ -17,6 +17,8 @@
  * 3. Unified Error Interceptor: Unpacks server error JSON envelopes (`res.data.error`
  *    or `res.data.message`) into a standard Error object so that TanStack Query
  *    `onError` handlers and UI toasts receive human-friendly error messages automatically.
+ * 4. Session Revocation Detection: Detects 401 session expiration due to token_version
+ *    invalidation and routes cleanly to `/login` with explanatory security advisory.
  * ============================================================================
  */
 
@@ -30,7 +32,7 @@ export const api = axios.create({
   },
 });
 
-// Intercept responses to unwrap error messages uniformly
+// Intercept responses to unwrap error messages uniformly & handle session revocation
 api.interceptors.response.use(
   (response) => response,
   (error) => {
@@ -39,6 +41,15 @@ api.interceptors.response.use(
       error.response?.data?.message ||
       error.message ||
       'An unexpected error occurred.';
+
+    // Check for global session invalidation (e.g. password changed on another device)
+    if (error.response?.status === 401 && message.includes('Session expired due to security updates')) {
+      sessionStorage.setItem('auth_expired_reason', message);
+      if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
+    }
+
     return Promise.reject(new Error(message));
   }
 );

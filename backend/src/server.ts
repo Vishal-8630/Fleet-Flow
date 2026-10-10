@@ -21,7 +21,7 @@
  * ============================================================================
  */
 
-import 'dotenv/config'; // MUST be first import so process.env is initialized before any ESM module evaluation
+import 'dotenv/config'; // Loads .env including Gmail SMTP transport configuration
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -61,7 +61,17 @@ app.use(helmet());
 // Cross-Origin Resource Sharing (CORS) configured for cookie exchange with frontend
 app.use(
   cors({
-    origin: process.env.CLIENT_ORIGIN || 'http://localhost:5173',
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      if (
+        origin.includes('localhost') ||
+        origin.includes('127.0.0.1') ||
+        /^http:\/\/(192\.168|10\.|172\.(1[6-9]|2\d|3[01]))\.\d+\.\d+(:[0-9]+)?$/.test(origin)
+      ) {
+        return callback(null, true);
+      }
+      return callback(null, process.env.CLIENT_ORIGIN || 'http://localhost:5173');
+    },
     credentials: true,
   })
 );
@@ -138,11 +148,32 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
   });
 });
 
+/**
+ * Strict Environment Verification Guard
+ * Enforces that critical production secrets are defined before accepting traffic.
+ */
+function assertProductionEnvironment(): void {
+  if (process.env.NODE_ENV === 'production') {
+    const requiredVars = ['JWT_SECRET', 'MONGODB_URI', 'RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET'];
+    const missing = requiredVars.filter((v) => !process.env[v]);
+    if (missing.length > 0) {
+      console.error(`❌ FATAL: Missing mandatory production environment variables: ${missing.join(', ')}`);
+      process.exit(1);
+    }
+    if (process.env.JWT_SECRET === 'dev_secret_fallback_key') {
+      console.error('❌ FATAL: JWT_SECRET cannot use insecure default fallback in production mode.');
+      process.exit(1);
+    }
+  }
+}
+
 // ----------------------------------------------------------------------------
 // 5. Database Connection & Server Initialization
 // ----------------------------------------------------------------------------
 export async function startServer() {
   try {
+    assertProductionEnvironment();
+
     if (MONGODB_URI && !MONGODB_URI.includes('<password>')) {
       await mongoose.connect(MONGODB_URI);
       console.log('✅ Connected to MongoDB Atlas / Database successfully.');

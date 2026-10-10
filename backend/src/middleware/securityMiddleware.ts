@@ -55,3 +55,63 @@ export function noSqlSanitizer(req: Request, _res: Response, next: NextFunction)
   }
   next();
 }
+
+import rateLimit from 'express-rate-limit';
+
+/**
+ * Brute-Force & Credential Stuffing Guard:
+ * Max 5 failed login attempts per 15 minutes per IP.
+ */
+export const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // Limit each IP to 5 failed attempts per window
+  skipSuccessfulRequests: true, // Do not count successful logins against limit
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: 'Too many failed login attempts. For security reasons, please wait 15 minutes before trying again or use Forgot Password.',
+  },
+});
+
+/**
+ * Anti-Spam Workspace Registration Guard:
+ * Max 5 new company registrations per hour per IP.
+ */
+export const registerLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: 'Too many workspace registration attempts from this IP address. Please try again after an hour.',
+  },
+});
+
+/**
+ * Account Recovery & Password Reset Guard:
+ * Max 3 password reset requests per 15 minutes per IP.
+ */
+export const passwordResetLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 3,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: 'Too many password reset requests. Please wait 15 minutes before trying again.',
+  },
+});
+
+/**
+ * Team Workspace Invitation Guard:
+ * Max 10 invites per minute per IP.
+ */
+export const invitationLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: 'Too many team invitation requests. Please wait a moment before sending more invitations.',
+  },
+});
+
