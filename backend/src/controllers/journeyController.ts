@@ -29,6 +29,7 @@ import { Driver } from '../models/Driver.js';
 import { Company } from '../models/Company.js';
 import { notifyTripDispatched, notifyDeliveryCompleted } from '../utils/notificationService.js';
 import { logAuditEvent } from '../utils/auditService.js';
+import { validateTenantOwnership, TenantOwnershipError } from '../utils/ownershipValidator.js';
 
 /**
  * ----------------------------------------------------------------------------
@@ -220,7 +221,14 @@ export const createJourney = async (req: Request, res: Response) => {
       });
     }
 
-    // 1. Fetch Truck & Driver
+    // 1. Validate Deep Tenant Foreign Key Ownership (Anti-IDOR)
+    await validateTenantOwnership(companyId!, {
+      truck_id,
+      driver_id,
+      billing_party_id: req.body.billing_party_id,
+    });
+
+    // 2. Fetch Truck & Driver
     const [truck, driver, company] = await Promise.all([
       Truck.findById(truck_id),
       Driver.findById(driver_id),
@@ -234,7 +242,7 @@ export const createJourney = async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Selected driver not found or inactive.' });
     }
 
-    // 2. RESOURCE CONFLICT CHECK: Verify Truck is not on an active journey
+    // 3. RESOURCE CONFLICT CHECK: Verify Truck is not on an active journey
     const activeTruckJourney = await TruckJourney.findOne({
       truck_id,
       status: { $in: ['active', 'delayed'] },
@@ -246,7 +254,7 @@ export const createJourney = async (req: Request, res: Response) => {
       });
     }
 
-    // 3. RESOURCE CONFLICT CHECK: Verify Driver is not on an active journey
+    // 4. RESOURCE CONFLICT CHECK: Verify Driver is not on an active journey
     const activeDriverJourney = await TruckJourney.findOne({
       driver_id,
       status: { $in: ['active', 'delayed'] },
@@ -258,7 +266,7 @@ export const createJourney = async (req: Request, res: Response) => {
       });
     }
 
-    // 4. Check compliance if immediately dispatching
+    // 5. Check compliance if immediately dispatching
     if (status === 'active') {
       const compliance = truck.calculateComplianceStatus();
       if (compliance === 'EXPIRED') {
@@ -268,12 +276,16 @@ export const createJourney = async (req: Request, res: Response) => {
       }
     }
 
-    // 5. Generate sequential journey number
-    const count = await TruckJourney.countDocuments({ company_id: companyId });
-    const prefix = company?.settings?.lr_prefix || 'JRN-';
-    const journey_number = `${prefix}${String(count + 1).padStart(4, '0')}`;
+    // 6. Concurrency-Safe Atomic Sequential Journey Number
+    const updatedCompany = await Company.findByIdAndUpdate(
+      companyId,
+      { $inc: { 'counters.journey_seq': 1 } },
+      { new: true, upsert: false }
+    );
+    const seq = updatedCompany?.counters?.journey_seq || (await TruckJourney.countDocuments({ company_id: companyId })) + 1;
+    const journey_number = `JRN-${String(seq).padStart(4, '0')}`;
 
-    // 6. Use current truck odometer if start_odometer_kms not supplied
+    // 7. Use current truck odometer if start_odometer_kms not supplied
     const initialOdometer =
       typeof start_odometer_kms === 'number' ? start_odometer_kms : truck.current_odometer_kms || 0;
 
@@ -338,6 +350,9 @@ export const createJourney = async (req: Request, res: Response) => {
       journey,
     });
   } catch (error: any) {
+    if (error instanceof TenantOwnershipError) {
+      return res.status(error.statusCode).json({ error: error.message, entityType: error.entityType });
+    }
     console.error('createJourney error:', error);
     return res.status(500).json({ error: error.message || 'Failed to create journey.' });
   }

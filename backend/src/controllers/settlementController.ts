@@ -17,6 +17,7 @@ import { Ledger } from '../models/Ledger.js';
 import { Company } from '../models/Company.js';
 import { notifyDriverSettlement } from '../utils/notificationService.js';
 import { logAuditEvent } from '../utils/auditService.js';
+import { validateTenantOwnership, TenantOwnershipError } from '../utils/ownershipValidator.js';
 
 export const getSettlements = async (req: Request, res: Response) => {
   try {
@@ -175,6 +176,9 @@ export const previewSettlement = async (req: Request, res: Response) => {
       other_deductions_notes,
     } = req.body;
 
+    // Validate driver ownership
+    await validateTenantOwnership(companyId!, { driver_id });
+
     const journeys = await TruckJourney.find({
       _id: { $in: journey_ids },
       company_id: companyId,
@@ -226,6 +230,9 @@ export const previewSettlement = async (req: Request, res: Response) => {
       },
     });
   } catch (err: any) {
+    if (err instanceof TenantOwnershipError) {
+      return res.status(err.statusCode).json({ error: err.message, entityType: err.entityType });
+    }
     res.status(400).json({ error: err.message || 'Failed to preview settlement.' });
   }
 };
@@ -248,7 +255,10 @@ export const confirmSettlement = async (req: Request, res: Response) => {
       notes,
     } = req.body;
 
-    // 1. Idempotency Check
+    // 1. Deep Foreign Key Ownership Validation (Anti-IDOR)
+    await validateTenantOwnership(companyId!, { driver_id });
+
+    // 2. Idempotency Check
     if (idempotency_key) {
       const existingSettlement = await Settlement.findOne({
         company_id: companyId,
@@ -265,7 +275,7 @@ export const confirmSettlement = async (req: Request, res: Response) => {
       }
     }
 
-    // 2. Fetch and Validate Driver
+    // 3. Fetch and Validate Driver
     const driver = await Driver.findOne({ _id: driver_id, company_id: companyId }).session(session);
     if (!driver) {
       await session.abortTransaction();
@@ -273,7 +283,7 @@ export const confirmSettlement = async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Driver not found.' });
     }
 
-    // 3. Fetch Journeys and Verify None are Already Settled
+    // 4. Fetch Journeys and Verify None are Already Settled
     const journeys = await TruckJourney.find({
       _id: { $in: journey_ids },
       company_id: companyId,
@@ -296,7 +306,7 @@ export const confirmSettlement = async (req: Request, res: Response) => {
       });
     }
 
-    // 4. Compute Calculations
+    // 5. Compute Calculations
     const total_kms = journeys.reduce((sum, j) => sum + (j.total_distance_kms || 0), 0);
     const total_advances = journeys.reduce((sum, j) => sum + (j.starting_cash_advance || 0), 0);
     const total_reimbursements = journeys.reduce((sum, j) => sum + (j.total_driver_expenses || 0), 0);
@@ -320,11 +330,16 @@ export const confirmSettlement = async (req: Request, res: Response) => {
     const settlement_type =
       net_amount > 0 ? 'payable_to_driver' : net_amount < 0 ? 'receivable_from_driver' : 'settled_even';
 
-    // Auto-generate Settlement Number
-    const count = await Settlement.countDocuments({ company_id: companyId }).session(session);
-    const settlement_number = `SET-${String(count + 1).padStart(4, '0')}`;
+    // 6. Concurrency-Safe Atomic Sequential Settlement Number
+    const updatedCompany = await Company.findByIdAndUpdate(
+      companyId,
+      { $inc: { 'counters.settlement_seq': 1 } },
+      { new: true, session }
+    );
+    const seq = updatedCompany?.counters?.settlement_seq || (await Settlement.countDocuments({ company_id: companyId }).session(session)) + 1;
+    const settlement_number = `SET-${String(seq).padStart(4, '0')}`;
 
-    // 5. Create Settlement Record
+    // 7. Create Settlement Record
     const newSettlement = new Settlement({
       company_id: companyId,
       settlement_number,
@@ -439,6 +454,9 @@ export const confirmSettlement = async (req: Request, res: Response) => {
   } catch (err: any) {
     await session.abortTransaction();
     session.endSession();
+    if (err instanceof TenantOwnershipError) {
+      return res.status(err.statusCode).json({ error: err.message, entityType: err.entityType });
+    }
     res.status(500).json({ error: err.message || 'Failed to confirm settlement.' });
   }
 };

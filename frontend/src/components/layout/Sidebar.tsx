@@ -43,9 +43,9 @@ import { useAuthStore } from '../../stores/authStore';
 import { useUiStore } from '../../stores/uiStore';
 
 export const Sidebar: React.FC = () => {
-  const { role, user, enabledFeatures = [] } = useAuthStore();
+  const { role, user, isImpersonation, enabledFeatures = [] } = useAuthStore();
   const { sidebarOpen, setSidebarOpen } = useUiStore();
-  const isSuperAdmin = Boolean(user?.isSuperAdmin);
+  const isSuperAdmin = Boolean(user?.isSuperAdmin) && !isImpersonation;
 
   // Platform Operator Super-Admin Exclusive Navigation Links
   const platformNavItems = [

@@ -87,16 +87,16 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
 };
 
 const DashboardRoute: React.FC = () => {
-  const { user } = useAuthStore();
-  if (user?.isSuperAdmin) {
+  const { user, isImpersonation } = useAuthStore();
+  if (user?.isSuperAdmin && !isImpersonation) {
     return <Navigate to="/super-admin" replace />;
   }
   return <DashboardPage />;
 };
 
 const IndexRedirect: React.FC = () => {
-  const { user } = useAuthStore();
-  if (user?.isSuperAdmin) {
+  const { user, isImpersonation } = useAuthStore();
+  if (user?.isSuperAdmin && !isImpersonation) {
     return <Navigate to="/super-admin" replace />;
   }
   return <Navigate to="/dashboard" replace />;

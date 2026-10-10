@@ -19,9 +19,9 @@
  * ============================================================================
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Truck, Building2, Mail, Lock, User, Phone, FileText, ArrowRight, AlertCircle } from 'lucide-react';
+import { Truck, Building2, Mail, Lock, User, Phone, FileText, ArrowRight, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 
 export const RegisterPage: React.FC = () => {
@@ -35,8 +35,19 @@ export const RegisterPage: React.FC = () => {
     gstin: '',
   });
   const [loading, setLoading] = useState(false);
-  const { register, error, clearError } = useAuthStore();
+  const { register, createWorkspace, user, isAuthenticated, error, clearError } = useAuthStore();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      setFormData((prev) => ({
+        ...prev,
+        name: prev.name || user.name || '',
+        email: prev.email || user.email || '',
+        phone: prev.phone || user.phone || '',
+      }));
+    }
+  }, [isAuthenticated, user]);
 
   /**
    * Automatically converts company name into a kebab-case slug
@@ -52,7 +63,16 @@ export const RegisterPage: React.FC = () => {
     clearError();
     setLoading(true);
     try {
-      await register(formData);
+      if (isAuthenticated) {
+        await createWorkspace({
+          companyName: formData.companyName,
+          slug: formData.slug,
+          phone: formData.phone,
+          gstin: formData.gstin,
+        });
+      } else {
+        await register(formData);
+      }
       navigate('/dashboard');
     } catch {
       // Error message is stored in authStore and displayed in the alert box
@@ -77,6 +97,16 @@ export const RegisterPage: React.FC = () => {
               Full operational access with a 14-day free trial. No credit card required.
             </p>
           </div>
+
+          {/* Active Logged-in User Notice */}
+          {isAuthenticated && user && (
+            <div style={{ backgroundColor: 'var(--color-primary-50, #eff6ff)', border: '1px solid var(--color-primary-200, #bfdbfe)', padding: '0.875rem 1rem', borderRadius: 'var(--radius-md)', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <CheckCircle2 size={18} color="var(--color-primary-600)" style={{ flexShrink: 0 }} />
+              <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-primary-900, #1e3a8a)', lineHeight: 1.4 }}>
+                Logged in as <strong>{user.name}</strong> ({user.email}). Creating this workspace will link it to your existing account so you can switch workspaces anytime.
+              </div>
+            </div>
+          )}
 
           {/* Error Alert Box */}
           {error && (
@@ -131,6 +161,7 @@ export const RegisterPage: React.FC = () => {
                     placeholder="e.g. Rajesh Sharma"
                     value={formData.name}
                     onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
+                    disabled={isAuthenticated}
                     required
                   />
                 </div>
@@ -161,25 +192,31 @@ export const RegisterPage: React.FC = () => {
                     placeholder="rajesh@apexlogistics.com"
                     value={formData.email}
                     onChange={(e) => setFormData((prev) => ({ ...prev, email: e.target.value }))}
+                    disabled={isAuthenticated}
                     required
                   />
                 </div>
               </div>
 
-              <div className="form-group" style={{ gridColumn: 'span 2' }}>
-                <label className="form-label">Password</label>
-                <div className="input-icon-wrapper">
-                  <Lock size={16} className="input-icon" />
-                  <input
-                    type="password"
-                    className="form-input"
-                    placeholder="••••••••••••"
-                    value={formData.password}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, password: e.target.value }))}
-                    required
-                  />
+              {!isAuthenticated && (
+                <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                  <label className="form-label">Password</label>
+                  <div className="input-icon-wrapper">
+                    <Lock size={16} className="input-icon" />
+                    <input
+                      type="password"
+                      className="form-input"
+                      placeholder="••••••••••••"
+                      value={formData.password}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, password: e.target.value }))}
+                      required
+                    />
+                  </div>
+                  <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)', marginTop: '0.25rem', display: 'block' }}>
+                    If you already have an account, enter your account password to securely link this workspace.
+                  </span>
                 </div>
-              </div>
+              )}
 
               <div className="form-group" style={{ gridColumn: 'span 2' }}>
                 <label className="form-label">GSTIN (Optional)</label>
@@ -207,14 +244,22 @@ export const RegisterPage: React.FC = () => {
             </button>
           </form>
 
-          {/* Login Navigation Link */}
+          {/* Login or Dashboard Navigation Link */}
           <div style={{ textAlign: 'center', marginTop: '1.75rem', borderTop: '1px solid var(--border-light)', paddingTop: '1.25rem' }}>
-            <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--text-muted)' }}>
-              Already have an account?{' '}
-            </span>
-            <Link to="/login" style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-primary-600)', fontWeight: 'var(--font-weight-semibold)', textDecoration: 'none' }}>
-              Sign In
-            </Link>
+            {isAuthenticated ? (
+              <Link to="/dashboard" style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-primary-600)', fontWeight: 'var(--font-weight-semibold)', textDecoration: 'none' }}>
+                ← Return to Active Workspace Dashboard
+              </Link>
+            ) : (
+              <>
+                <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--text-muted)' }}>
+                  Already have an account?{' '}
+                </span>
+                <Link to="/login" style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-primary-600)', fontWeight: 'var(--font-weight-semibold)', textDecoration: 'none' }}>
+                  Sign In
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </div>

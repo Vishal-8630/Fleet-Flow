@@ -2,7 +2,7 @@
 
 ## Metadata
 - **Severity**: P0 (Critical)
-- **Status**: Documented & Ready for Implementation
+- **Status**: Completed & Verified (100% Boundary Isolation Passing)
 - **Category**: Multi-Tenant Isolation, IDOR Prevention, Concurrency & Security
 - **Date**: October 10, 2026
 
@@ -80,7 +80,7 @@ export async function validateTenantOwnership(companyId: string, references: {
   - Clicking "Exit Impersonation" revokes token and restores the super-admin session.
 
 ### E. Automated Cross-Tenant Isolation Test Matrix
-Create `backend/src/scripts/verifyTenantIsolation.ts`:
+Create `backend/src/scripts/verifyIssue04.ts`:
 - Spawns Tenant Alpha and Tenant Beta.
 - Attempts cross-tenant operations:
   1. Alpha attempts to `GET`, `PUT`, `DELETE` Beta's trucks, drivers, journeys, and invoices.
@@ -104,7 +104,7 @@ Create `backend/src/scripts/verifyTenantIsolation.ts`:
 | `backend/src/controllers/authController.ts` | Workspace listing and verified switching handlers |
 | `backend/src/controllers/superAdminController.ts` | Enforce mandatory reason on support impersonation |
 | `frontend/src/components/layout/ImpersonationBanner.tsx` | Global persistent warning banner during support sessions |
-| `backend/src/scripts/verifyTenantIsolation.ts` | Automated end-to-end cross-tenant boundary verification test |
+| `backend/src/scripts/verifyIssue04.ts` | Automated end-to-end cross-tenant boundary verification test |
 
 ---
 

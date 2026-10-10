@@ -66,6 +66,15 @@ export interface ResourceLimits {
   max_users: number;
 }
 
+export interface WorkspaceItem {
+  company_id: string;
+  name: string;
+  slug: string;
+  role: string;
+  status: string;
+  is_current: boolean;
+}
+
 interface AuthState {
   user: User | null;
   company: Company | null;
@@ -73,11 +82,17 @@ interface AuthState {
   enabledFeatures: ModuleKey[];
   limits: ResourceLimits | null;
   isReadOnly: boolean;
+  isImpersonation: boolean;
+  impersonationActorEmail: string | null;
+  workspaces: WorkspaceItem[];
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
 
   checkAuth: () => Promise<void>;
+  loadWorkspaces: () => Promise<void>;
+  switchWorkspace: (companyId: string) => Promise<void>;
+  exitImpersonation: () => Promise<void>;
   login: (credentials: { email: string; password: string }) => Promise<void>;
   register: (data: {
     companyName: string;
@@ -88,18 +103,27 @@ interface AuthState {
     phone: string;
     gstin?: string;
   }) => Promise<void>;
+  createWorkspace: (data: {
+    companyName: string;
+    slug?: string;
+    phone?: string;
+    gstin?: string;
+  }) => Promise<void>;
   logout: () => Promise<void>;
   setAuth: (user: User, company: Company, role?: UserRole, enabledFeatures?: ModuleKey[], limits?: ResourceLimits | null) => void;
   clearError: () => void;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   company: null,
   role: null,
   enabledFeatures: [],
   limits: null,
   isReadOnly: false,
+  isImpersonation: false,
+  impersonationActorEmail: null,
+  workspaces: [],
   isAuthenticated: false,
   isLoading: true,
   error: null,
@@ -118,9 +142,15 @@ export const useAuthStore = create<AuthState>((set) => ({
         enabledFeatures: res.data.enabledFeatures || [],
         limits: res.data.limits || null,
         isReadOnly: Boolean(res.data.isReadOnly),
+        isImpersonation: Boolean(res.data.isImpersonation),
+        impersonationActorEmail: res.data.impersonationActorEmail || null,
         isAuthenticated: true,
         isLoading: false,
       });
+      if (res.data.company?.id) {
+        localStorage.setItem('active_company_id', res.data.company.id);
+      }
+      get().loadWorkspaces();
     } catch {
       set({
         user: null,
@@ -129,6 +159,9 @@ export const useAuthStore = create<AuthState>((set) => ({
         enabledFeatures: [],
         limits: null,
         isReadOnly: false,
+        isImpersonation: false,
+        impersonationActorEmail: null,
+        workspaces: [],
         isAuthenticated: false,
         isLoading: false,
       });
@@ -182,12 +215,87 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   /**
+   * Provisions a brand new company workspace for the authenticated user and switches to it
+   */
+  createWorkspace: async (data) => {
+    try {
+      set({ isLoading: true, error: null });
+      const res = await api.post('/auth/create-workspace', data);
+      if (res.data.company?.id) {
+        localStorage.setItem('active_company_id', res.data.company.id);
+      }
+      set({
+        company: res.data.company,
+        role: 'admin',
+        enabledFeatures: res.data.enabledFeatures || [],
+        limits: res.data.limits || null,
+        isReadOnly: false,
+        isLoading: false,
+      });
+      await get().loadWorkspaces();
+      window.location.reload();
+    } catch (err: any) {
+      set({ isLoading: false, error: err.message });
+      throw err;
+    }
+  },
+
+  /**
+   * Loads all workspaces belonging to the authenticated user
+   */
+  loadWorkspaces: async () => {
+    try {
+      const res = await api.get('/auth/workspaces');
+      set({ workspaces: res.data.workspaces || [] });
+    } catch (err: any) {
+      console.error('Failed to load workspaces:', err);
+    }
+  },
+
+  /**
+   * Switches active tenant workspace
+   */
+  switchWorkspace: async (companyId: string) => {
+    try {
+      set({ isLoading: true, error: null });
+      const res = await api.post('/auth/switch-company', { company_id: companyId });
+      localStorage.setItem('active_company_id', companyId);
+      set({
+        company: res.data.company,
+        role: res.data.role,
+        enabledFeatures: res.data.enabledFeatures || [],
+        limits: res.data.limits || null,
+        isLoading: false,
+      });
+      window.location.reload();
+    } catch (err: any) {
+      set({ isLoading: false, error: err.message });
+      throw err;
+    }
+  },
+
+  /**
+   * Exits support impersonation session and returns to super admin plane
+   */
+  exitImpersonation: async () => {
+    try {
+      set({ isLoading: true });
+      await api.post('/super-admin/exit-impersonation');
+      localStorage.removeItem('active_company_id');
+      window.location.href = '/super-admin';
+    } catch (err: any) {
+      set({ isLoading: false, error: err.message });
+    }
+  },
+
+  /**
    * Logs out the user and clears all credentials
    */
   logout: async () => {
     try {
       await api.post('/auth/logout');
     } finally {
+      localStorage.removeItem('active_company_id');
       set({
         user: null,
         company: null,
@@ -195,6 +303,9 @@ export const useAuthStore = create<AuthState>((set) => ({
         enabledFeatures: [],
         limits: null,
         isReadOnly: false,
+        isImpersonation: false,
+        impersonationActorEmail: null,
+        workspaces: [],
         isAuthenticated: false,
         isLoading: false,
         error: null,

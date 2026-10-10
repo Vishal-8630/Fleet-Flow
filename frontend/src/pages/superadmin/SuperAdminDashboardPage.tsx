@@ -76,6 +76,9 @@ export const SuperAdminDashboardPage: React.FC = () => {
   const [selectedTenant, setSelectedTenant] = useState<TenantProfile | null>(null);
   const [trialModalOpen, setTrialModalOpen] = useState<boolean>(false);
   const [quotaModalOpen, setQuotaModalOpen] = useState<boolean>(false);
+  const [impersonateModalOpen, setImpersonateModalOpen] = useState<boolean>(false);
+  const [impersonateReason, setImpersonateReason] = useState<string>('Customer support & troubleshooting session');
+  const [isSubmittingImpersonation, setIsSubmittingImpersonation] = useState<boolean>(false);
   const [additionalDays, setAdditionalDays] = useState<number>(14);
   const [quotaForm, setQuotaForm] = useState({
     max_trucks: 20,
@@ -166,16 +169,33 @@ export const SuperAdminDashboardPage: React.FC = () => {
     }
   };
 
-  const handleImpersonate = async (tenant: TenantProfile) => {
+  const handleOpenImpersonate = (tenant: TenantProfile) => {
+    setSelectedTenant(tenant);
+    setImpersonateReason('Customer support & troubleshooting session');
+    setImpersonateModalOpen(true);
+  };
+
+  const handleConfirmImpersonate = async () => {
+    if (!selectedTenant) return;
+    if (!impersonateReason.trim()) {
+      toast.warning('A support justification reason is strictly required.');
+      return;
+    }
+    setIsSubmittingImpersonation(true);
     try {
       const res = await axios.post(
-        `/api/super-admin/tenants/${tenant.id}/impersonate`,
-        {},
+        `/api/super-admin/tenants/${selectedTenant.id}/impersonate`,
+        { reason: impersonateReason.trim() },
         { withCredentials: true }
       );
-      toast.success(res.data.message);
+      toast.success(res.data.message || `Entering ${selectedTenant.name} workspace...`);
+      localStorage.setItem('active_company_id', selectedTenant.id);
+      setImpersonateModalOpen(false);
+      // Seamlessly redirect into tenant dashboard
+      window.location.href = '/dashboard';
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Failed to initiate impersonation session.');
+      setIsSubmittingImpersonation(false);
     }
   };
 
@@ -450,7 +470,7 @@ export const SuperAdminDashboardPage: React.FC = () => {
                             type="button"
                             className="tenant-action-btn impersonate"
                             title="1-Hour Support Impersonation"
-                            onClick={() => handleImpersonate(tenant)}
+                            onClick={() => handleOpenImpersonate(tenant)}
                           >
                             <LogIn size={13} />
                             <span>Access</span>
@@ -543,6 +563,94 @@ export const SuperAdminDashboardPage: React.FC = () => {
           </button>
           <button type="button" className="btn btn-primary" onClick={handleOverrideQuotas}>
             Save Quotas
+          </button>
+        </div>
+      </Modal>
+
+      {/* Audited Support Impersonation Modal */}
+      <Modal
+        isOpen={impersonateModalOpen}
+        onClose={() => !isSubmittingImpersonation && setImpersonateModalOpen(false)}
+        title="Audited Support Impersonation"
+        subtitle={`Access ${selectedTenant?.name} workspace with temporary operator privileges`}
+      >
+        <div style={{ marginBottom: '1.25rem' }}>
+          <div
+            style={{
+              padding: '0.875rem 1rem',
+              borderRadius: '8px',
+              backgroundColor: 'var(--color-primary-50, #eff6ff)',
+              border: '1px solid var(--color-primary-200, #bfdbfe)',
+              marginBottom: '1rem',
+              fontSize: '13px',
+              lineHeight: 1.5,
+              color: 'var(--color-primary-900, #1e3a8a)',
+            }}
+          >
+            <div><strong>Target Workspace:</strong> {selectedTenant?.name}</div>
+            <div style={{ fontSize: '12px', opacity: 0.85, marginTop: '2px' }}>
+              Slug: <code>{selectedTenant?.slug}</code> • Contact: {selectedTenant?.email}
+            </div>
+          </div>
+
+          <div className="form-group" style={{ marginBottom: '1rem' }}>
+            <label className="form-label" htmlFor="impersonateReason" style={{ marginBottom: '0.375rem', display: 'block', fontWeight: 600 }}>
+              Support Justification / Ticket ID <span style={{ color: 'var(--color-rose-500)' }}>*</span>
+            </label>
+            <textarea
+              id="impersonateReason"
+              className="form-control"
+              rows={3}
+              placeholder="e.g. TICKET-4482: Customer reported discrepancy in trip freight calculation"
+              value={impersonateReason}
+              onChange={(e) => setImpersonateReason(e.target.value)}
+              autoFocus
+              required
+              style={{ width: '100%', resize: 'vertical' }}
+            />
+            <span style={{ fontSize: '11px', color: 'var(--color-text-secondary, #64748b)', marginTop: '0.25rem', display: 'block' }}>
+              Required by platform compliance. Stored permanently in the Platform Security Audit Log.
+            </span>
+          </div>
+
+          <div
+            style={{
+              padding: '0.75rem 1rem',
+              borderRadius: '6px',
+              backgroundColor: '#fffbeb',
+              border: '1px solid #fde68a',
+              fontSize: '12px',
+              color: '#92400e',
+              lineHeight: 1.4,
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '0.5rem',
+            }}
+          >
+            <span style={{ fontSize: '14px' }}>⚠️</span>
+            <span>
+              <strong>Platform Notice:</strong> You will temporarily enter this tenant's workspace for up to 1 hour. An amber <strong>Impersonation Banner</strong> will be pinned to the top of all screens with an <em>[Exit Impersonation]</em> button to safely return here at any time.
+            </span>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', borderTop: '1px solid var(--color-border, #e2e8f0)', paddingTop: '1rem' }}>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => setImpersonateModalOpen(false)}
+            disabled={isSubmittingImpersonation}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={handleConfirmImpersonate}
+            disabled={isSubmittingImpersonation || !impersonateReason.trim()}
+            style={{ backgroundColor: '#1d4ed8', borderColor: '#1d4ed8' }}
+          >
+            {isSubmittingImpersonation ? 'Entering Workspace...' : 'Enter Workspace'}
           </button>
         </div>
       </Modal>

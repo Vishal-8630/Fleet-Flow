@@ -64,7 +64,7 @@ import rateLimit from 'express-rate-limit';
  */
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // Limit each IP to 5 failed attempts per window
+  max: process.env.NODE_ENV === 'production' ? 5 : 100, // Relaxed in development
   skipSuccessfulRequests: true, // Do not count successful logins against limit
   standardHeaders: true,
   legacyHeaders: false,
@@ -75,11 +75,11 @@ export const authLimiter = rateLimit({
 
 /**
  * Anti-Spam Workspace Registration Guard:
- * Max 5 new company registrations per hour per IP.
+ * Max 5 new company registrations per hour per IP (relaxed in dev).
  */
 export const registerLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
-  max: 5,
+  max: process.env.NODE_ENV === 'production' ? 5 : 100,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -89,11 +89,11 @@ export const registerLimiter = rateLimit({
 
 /**
  * Account Recovery & Password Reset Guard:
- * Max 3 password reset requests per 15 minutes per IP.
+ * Max 3 password reset requests per 15 minutes per IP (relaxed in dev).
  */
 export const passwordResetLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 3,
+  max: process.env.NODE_ENV === 'production' ? 3 : 100,
   standardHeaders: true,
   legacyHeaders: false,
   message: {

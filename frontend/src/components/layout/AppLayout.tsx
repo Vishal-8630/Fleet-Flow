@@ -26,6 +26,7 @@ import React, { useEffect } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { Navbar } from './Navbar';
+import { ImpersonationBanner } from './ImpersonationBanner';
 import { useAuthStore } from '../../stores/authStore';
 import { useUiStore } from '../../stores/uiStore';
 import { AlertTriangle } from 'lucide-react';
@@ -57,6 +58,7 @@ export const AppLayout: React.FC = () => {
 
       {/* 2. Main Viewport & Navbar */}
       <div className="main-content-wrapper">
+        <ImpersonationBanner />
         <Navbar />
 
         {/* 3. Subscription Status Alert Banner */}

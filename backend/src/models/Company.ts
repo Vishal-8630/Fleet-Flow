@@ -54,6 +54,12 @@ export interface ICompany extends Document {
       is_driver_reimbursable: boolean;
     }>;
   };
+  counters?: {
+    lr_seq: number;
+    invoice_seq: number;
+    journey_seq: number;
+    settlement_seq: number;
+  };
   subscription_status: 'trialing' | 'active' | 'past_due' | 'suspended' | 'cancelled' | 'expired';
   trial_ends_at: Date;
   is_deleted: boolean;
@@ -108,6 +114,12 @@ const CompanySchema = new Schema<ICompany>(
           { code: 'driver_bhatta', label: 'Driver Food Bhatta', is_driver_reimbursable: false },
         ],
       },
+    },
+    counters: {
+      lr_seq: { type: Number, default: 0 },
+      invoice_seq: { type: Number, default: 0 },
+      journey_seq: { type: Number, default: 0 },
+      settlement_seq: { type: Number, default: 0 },
     },
     subscription_status: {
       type: String,

@@ -20,6 +20,7 @@ import {
   toggleTenantStatus,
   assignTenantPlan,
   impersonateTenant,
+  exitImpersonation,
   getAuditLogs,
   getPlatformPlansCatalog,
   updatePlan,
@@ -44,6 +45,7 @@ router.patch('/tenants/:id/extend-trial', extendTenantTrial);
 router.patch('/tenants/:id/status', toggleTenantStatus);
 router.patch('/tenants/:id/plan', assignTenantPlan);
 router.post('/tenants/:id/impersonate', impersonateTenant);
+router.post('/exit-impersonation', exitImpersonation);
 router.get('/audit-logs', getAuditLogs);
 
 // Catalog, Tier Entitlements & Commercial Settings

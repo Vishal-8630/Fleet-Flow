@@ -11,7 +11,7 @@ This document tracks all logged platform and operational issues, their root caus
 | **01** | **Backend Subscription Status & Plan Permissions Enforcement** | **P0 (Critical)** | **✅ Resolved** | [`docs/issues/ISSUE-01.md`](./docs/issues/ISSUE-01.md) |
 | **02** | **Complete and Secure Real Subscription Payments** | **P0 (Critical)** | **✅ Resolved** | [`docs/issues/ISSUE-02.md`](./docs/issues/ISSUE-02.md) |
 | **03** | **Harden Authentication and Account Recovery** | **P0 (Critical)** | **✅ Resolved** | [`docs/issues/ISSUE-03.md`](./docs/issues/ISSUE-03.md) |
-| **04** | **Verify and Enforce Tenant Isolation Across the Entire API** | **P0 (Critical)** | **Documented** | [`docs/issues/ISSUE-04.md`](./docs/issues/ISSUE-04.md) |
+| **04** | **Verify and Enforce Tenant Isolation Across the Entire API** | **P0 (Critical)** | **✅ Resolved** | [`docs/issues/ISSUE-04.md`](./docs/issues/ISSUE-04.md) |
 | **05** | **Make Financial Records Dependable & Accounting Sound** | **P0 (Critical)** | **Documented** | [`docs/issues/ISSUE-05.md`](./docs/issues/ISSUE-05.md) |
 | **06** | **Real Notifications and Background Jobs** | **P1 (High)** | **Documented** | [`docs/issues/ISSUE-06.md`](./docs/issues/ISSUE-06.md) |
 | **07** | **Complete Fleet Maintenance Management** | **P1 (High)** | **Documented** | [`docs/issues/ISSUE-07.md`](./docs/issues/ISSUE-07.md) |

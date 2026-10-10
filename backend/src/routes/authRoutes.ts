@@ -31,6 +31,9 @@ import {
   forgotPassword,
   resetPassword,
   changePassword,
+  listWorkspaces,
+  switchCompany,
+  createWorkspace,
 } from '../controllers/authController.js';
 import { requireAuth, resolveTenantContext, requireRole } from '../middleware/authMiddleware.js';
 import {
@@ -56,6 +59,11 @@ router.post('/reset-password', passwordResetLimiter, resetPassword);
 // ----------------------------------------------------------------------------
 // In-app password update (invalidates all other sessions via token_version)
 router.post('/change-password', requireAuth, changePassword);
+
+// Multi-tenant workspace management & instant verified switching
+router.get('/workspaces', requireAuth, listWorkspaces);
+router.post('/switch-company', requireAuth, switchCompany);
+router.post('/create-workspace', requireAuth, createWorkspace);
 
 // Hydrates the frontend on app start with current user & company context
 router.get('/me', requireAuth, resolveTenantContext, getMe);

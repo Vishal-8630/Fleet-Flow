@@ -18,6 +18,7 @@ export interface IPlatformAuditLog extends Document {
   actor_email: string;
   action:
     | 'impersonate_tenant'
+    | 'exit_impersonation'
     | 'quota_override'
     | 'trial_extension'
     | 'subscription_status_override'
@@ -40,6 +41,7 @@ const PlatformAuditLogSchema = new Schema<IPlatformAuditLog>(
       required: true,
       enum: [
         'impersonate_tenant',
+        'exit_impersonation',
         'quota_override',
         'trial_extension',
         'subscription_status_override',

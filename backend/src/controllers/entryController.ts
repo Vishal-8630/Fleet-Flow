@@ -13,6 +13,7 @@ import { Entry } from '../models/Entry.js';
 import { Company } from '../models/Company.js';
 import { notifyLRGenerated } from '../utils/notificationService.js';
 import { logAuditEvent } from '../utils/auditService.js';
+import { validateTenantOwnership, TenantOwnershipError } from '../utils/ownershipValidator.js';
 
 export const getEntries = async (req: Request, res: Response) => {
   try {
@@ -135,25 +136,28 @@ export const createEntry = async (req: Request, res: Response) => {
   try {
     const companyId = req.tenant?.id;
 
+    // 1. Deep Foreign Key Ownership Validation (Anti-IDOR)
+    await validateTenantOwnership(companyId!, {
+      billing_party_id: req.body.billing_party_id,
+      truck_id: req.body.truck_id,
+      driver_id: req.body.driver_id,
+      journey_id: req.body.journey_id,
+    });
+
     // Fetch company defaults for prefix
     const company = await Company.findById(companyId);
     const lrPrefix = company?.settings?.lr_prefix || 'LR-';
 
-    // Auto-generate next LR number if not provided
+    // 2. Concurrency-Safe Atomic LR Numbering
     let lr_no = req.body.lr_no?.trim()?.toUpperCase();
     if (!lr_no) {
-      const lastEntry = await Entry.findOne({ company_id: companyId })
-        .sort({ created_at: -1 })
-        .select('lr_no');
-
-      let nextNum = 1;
-      if (lastEntry?.lr_no) {
-        const matches = lastEntry.lr_no.match(/\d+$/);
-        if (matches) {
-          nextNum = parseInt(matches[0], 10) + 1;
-        }
-      }
-      lr_no = `${lrPrefix}${String(nextNum).padStart(4, '0')}`;
+      const updatedCompany = await Company.findByIdAndUpdate(
+        companyId,
+        { $inc: { 'counters.lr_seq': 1 } },
+        { new: true, upsert: false }
+      );
+      const seq = updatedCompany?.counters?.lr_seq || 1;
+      lr_no = `${lrPrefix}${String(seq).padStart(4, '0')}`;
     }
 
     // Check uniqueness
@@ -201,6 +205,9 @@ export const createEntry = async (req: Request, res: Response) => {
       entry: newEntry,
     });
   } catch (err: any) {
+    if (err instanceof TenantOwnershipError) {
+      return res.status(err.statusCode).json({ error: err.message, entityType: err.entityType });
+    }
     res.status(400).json({ error: err.message || 'Failed to create Lorry Receipt.' });
   }
 };

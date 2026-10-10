@@ -15,6 +15,7 @@ import { BillingParty } from '../models/BillingParty.js';
 import { Company } from '../models/Company.js';
 import { Ledger } from '../models/Ledger.js';
 import { logAuditEvent } from '../utils/auditService.js';
+import { validateTenantOwnership, TenantOwnershipError } from '../utils/ownershipValidator.js';
 
 export const getInvoices = async (req: Request, res: Response) => {
   try {
@@ -153,6 +154,16 @@ export const createInvoice = async (req: Request, res: Response) => {
       terms_and_conditions,
     } = req.body;
 
+    // 1. Deep Foreign Key Ownership Validation (Anti-IDOR)
+    const allLrIds = [
+      ...(Array.isArray(lr_ids) ? lr_ids : []),
+      ...(Array.isArray(items) ? items.map((it: any) => it.entry_id || it.lr_id).filter(Boolean) : []),
+    ];
+    await validateTenantOwnership(companyId!, {
+      billing_party_id,
+      lr_ids: allLrIds.length > 0 ? allLrIds : undefined,
+    });
+
     const [company, party] = await Promise.all([
       Company.findById(companyId),
       BillingParty.findOne({ _id: billing_party_id, company_id: companyId }),
@@ -162,20 +173,15 @@ export const createInvoice = async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Billing Party not found.' });
     }
 
-    // Auto-sequence Invoice Number
+    // 2. Concurrency-Safe Atomic Sequential Invoice Number
     const invoicePrefix = company?.settings?.invoice_prefix || 'INV-';
-    const lastInvoice = await Invoice.findOne({ company_id: companyId })
-      .sort({ created_at: -1 })
-      .select('invoice_number');
-
-    let nextNum = 1;
-    if (lastInvoice?.invoice_number) {
-      const matches = lastInvoice.invoice_number.match(/\d+$/);
-      if (matches) {
-        nextNum = parseInt(matches[0], 10) + 1;
-      }
-    }
-    const invoice_number = `${invoicePrefix}${String(nextNum).padStart(4, '0')}`;
+    const updatedCompany = await Company.findByIdAndUpdate(
+      companyId,
+      { $inc: { 'counters.invoice_seq': 1 } },
+      { new: true, upsert: false }
+    );
+    const seq = updatedCompany?.counters?.invoice_seq || 1;
+    const invoice_number = `${invoicePrefix}${String(seq).padStart(4, '0')}`;
 
     // Resolve Line Items: If items are empty but lr_ids are provided, auto-populate from LRs
     let processedItems = items;
@@ -315,6 +321,9 @@ export const createInvoice = async (req: Request, res: Response) => {
       invoice: newInvoice,
     });
   } catch (err: any) {
+    if (err instanceof TenantOwnershipError) {
+      return res.status(err.statusCode).json({ error: err.message, entityType: err.entityType });
+    }
     res.status(400).json({ error: err.message || 'Failed to create invoice.' });
   }
 };

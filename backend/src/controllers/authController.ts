@@ -43,7 +43,7 @@ const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]
  * Returns the JWT signing secret dynamically from process.env to guarantee
  * consistent secret resolution across ES Module evaluation and runtime execution.
  */
-const getJwtSecret = (): string => {
+export const getJwtSecret = (): string => {
   const secret = process.env.JWT_SECRET;
   if (!secret) {
     if (process.env.NODE_ENV === 'production') {
@@ -57,7 +57,7 @@ const getJwtSecret = (): string => {
 /**
  * Returns the secure session cookie configuration dynamically.
  */
-const getCookieOptions = () => ({
+export const getCookieOptions = () => ({
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production',
   sameSite: (process.env.NODE_ENV === 'production' ? 'strict' : 'lax') as 'strict' | 'lax',
@@ -89,23 +89,45 @@ export async function registerCompany(req: Request, res: Response): Promise<void
       return;
     }
 
-    // Check if user email already exists
-    const existingUser = await User.findOne({ email: email.toLowerCase().trim() });
+    const userEmail = email.toLowerCase().trim();
+    const existingUser = await User.findOne({ email: userEmail });
+    let user: any;
+
     if (existingUser) {
-      res.status(400).json({ error: 'An account with this email already exists.' });
-      return;
+      // Check if this request is already authenticated as this user via cookies or authorization header
+      let isAuthenticatedAsUser = false;
+      const rawToken = req.cookies?.token || (req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.split(' ')[1] : null);
+      if (rawToken) {
+        try {
+          const decoded = jwt.verify(rawToken, getJwtSecret()) as any;
+          if (decoded && decoded.userId && decoded.userId.toString() === existingUser._id.toString()) {
+            isAuthenticatedAsUser = true;
+          }
+        } catch {}
+      }
+
+      if (!isAuthenticatedAsUser) {
+        // User account exists. Verify password to securely link this new workspace.
+        const isMatch = await bcrypt.compare(password, existingUser.password_hash);
+        if (!isMatch) {
+          res.status(401).json({
+            error: 'An account with this email already exists. Please enter your existing account password to create and link this new workspace.',
+          });
+          return;
+        }
+      }
+      user = existingUser;
     }
 
-    // Auto-generate slug if not provided
-    const cleanSlug = (slug || companyName).toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').trim();
+    // Auto-generate slug if not provided, resolve collision gracefully
+    let cleanSlug = (slug || companyName).toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').trim();
+    if (!cleanSlug) {
+      cleanSlug = `company-${Date.now().toString(36)}`;
+    }
     const existingCompany = await Company.findOne({ slug: cleanSlug });
     if (existingCompany) {
-      res.status(400).json({ error: 'This company workspace identifier (slug) is already taken. Please choose another.' });
-      return;
+      cleanSlug = `${cleanSlug}-${Math.random().toString(36).substring(2, 6)}`;
     }
-
-    // 1. Hash password with bcrypt cost factor 12
-    const password_hash = await bcrypt.hash(password, 12);
 
     // Multi-document transaction attempt (gracefully falls back if standalone MongoDB)
     let useSession = false;
@@ -120,20 +142,23 @@ export async function registerCompany(req: Request, res: Response): Promise<void
 
     const sessionOption = useSession && session ? { session } : undefined;
 
-    // 2. Create User account
-    const users = await User.create(
-      [
-        {
-          name: name.trim(),
-          email: email.toLowerCase().trim(),
-          password_hash,
-          phone: phone.trim(),
-          token_version: 0,
-        },
-      ],
-      sessionOption
-    );
-    const user = users[0];
+    // 2. Create User account if brand new
+    if (!user) {
+      const password_hash = await bcrypt.hash(password, 12);
+      const users = await User.create(
+        [
+          {
+            name: name.trim(),
+            email: userEmail,
+            password_hash,
+            phone: phone.trim(),
+            token_version: 0,
+          },
+        ],
+        sessionOption
+      );
+      user = users[0];
+    }
 
     // 3. Create Company Workspace with 14-day free trial
     const companies = await Company.create(
@@ -346,7 +371,268 @@ export async function getMe(req: Request, res: Response): Promise<void> {
     enabledFeatures,
     limits,
     isReadOnly,
+    isImpersonation: req.isImpersonation || false,
+    impersonationActorEmail: req.impersonationActorEmail || null,
   });
+}
+
+/**
+ * 4a. listWorkspaces
+ * ----------------------------------------------------------------------------
+ * Returns all active company memberships linked to the authenticated user.
+ */
+export async function listWorkspaces(req: Request, res: Response): Promise<void> {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: 'Authentication required.' });
+      return;
+    }
+
+    const memberships = await CompanyMember.find({
+      user_id: req.user._id,
+      status: 'active',
+    }).populate('company_id');
+
+    const currentCompanyId = (req.headers['x-company-id'] as string) || req.requestedCompanyId;
+
+    const workspaces = memberships
+      .filter((m) => m.company_id && !(m.company_id as any).is_deleted)
+      .map((m) => {
+        const c = m.company_id as any;
+        return {
+          company_id: c._id.toString(),
+          name: c.name,
+          slug: c.slug,
+          role: m.role,
+          status: c.subscription_status,
+          is_current: currentCompanyId ? c._id.toString() === currentCompanyId : false,
+        };
+      });
+
+    res.json({ workspaces });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Failed to list workspaces.' });
+  }
+}
+
+/**
+ * 4b. switchCompany
+ * ----------------------------------------------------------------------------
+ * Switches the authenticated user's active tenant context to a specified company.
+ * Verifies active membership before re-issuing a new JWT token containing the selected companyId.
+ */
+export async function switchCompany(req: Request, res: Response): Promise<void> {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: 'Authentication required.' });
+      return;
+    }
+
+    const { company_id } = req.body;
+    if (!company_id) {
+      res.status(400).json({ error: 'Target company_id is required.' });
+      return;
+    }
+
+    const membership = await CompanyMember.findOne({
+      user_id: req.user._id,
+      company_id,
+      status: 'active',
+    }).populate('company_id');
+
+    if (!membership) {
+      res.status(403).json({ error: 'You do not have active membership in this workspace.' });
+      return;
+    }
+
+    const company = membership.company_id as any;
+    if (!company || company.is_deleted) {
+      res.status(404).json({ error: 'Target workspace not found or decommissioned.' });
+      return;
+    }
+
+    const token = jwt.sign(
+      {
+        userId: req.user._id,
+        companyId: company._id,
+        token_version: req.user.token_version || 0,
+      },
+      getJwtSecret(),
+      { expiresIn: '7d' }
+    );
+
+    res.cookie('token', token, getCookieOptions());
+
+    const entitlements = await getTenantEntitlements(company);
+
+    res.json({
+      message: `Successfully switched workspace to ${company.name}.`,
+      token,
+      company: {
+        id: company._id,
+        name: company.name,
+        slug: company.slug,
+        status: company.subscription_status,
+        plan: entitlements.plan,
+        trialEndsAt: company.trial_ends_at,
+      },
+      role: membership.role,
+      enabledFeatures: entitlements.enabled_features,
+      limits: entitlements.limits,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Failed to switch workspace.' });
+  }
+}
+
+/**
+ * 4c. createWorkspace
+ * ----------------------------------------------------------------------------
+ * Enables an authenticated user to provision a brand-new company workspace
+ * without leaving their active session or re-authenticating.
+ * 
+ * Flow:
+ * 1. Validates that req.user is populated.
+ * 2. Validates companyName.
+ * 3. Generates a unique URL slug with random collision resolution.
+ * 4. Creates the Company record with 14-day free trial.
+ * 5. Creates CompanyMember with role: 'admin' linking req.user._id.
+ * 6. Creates default trial Subscription.
+ * 7. Issues updated JWT session cookie pointing to the new companyId.
+ * 8. Returns the new company metadata and entitlements.
+ */
+export async function createWorkspace(req: Request, res: Response): Promise<void> {
+  let session: mongoose.ClientSession | null = null;
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: 'Authentication required.' });
+      return;
+    }
+
+    const { companyName, slug, phone, gstin } = req.body;
+
+    if (!companyName || !companyName.trim()) {
+      res.status(400).json({ error: 'Company Name is required.' });
+      return;
+    }
+
+    // Auto-generate slug if not provided, resolve collision gracefully
+    let cleanSlug = (slug || companyName).toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').trim();
+    if (!cleanSlug) {
+      cleanSlug = `company-${Date.now().toString(36)}`;
+    }
+    const existingCompany = await Company.findOne({ slug: cleanSlug });
+    if (existingCompany) {
+      cleanSlug = `${cleanSlug}-${Math.random().toString(36).substring(2, 6)}`;
+    }
+
+    // Multi-document transaction attempt (gracefully falls back if standalone MongoDB)
+    let useSession = false;
+    try {
+      session = await mongoose.startSession();
+      session.startTransaction();
+      useSession = true;
+    } catch {
+      session = null;
+      useSession = false;
+    }
+
+    const sessionOption = useSession && session ? { session } : undefined;
+
+    // Create Company Workspace with 14-day free trial
+    const companies = await Company.create(
+      [
+        {
+          name: companyName.trim(),
+          slug: cleanSlug,
+          email: req.user.email,
+          phone: (phone || req.user.phone || '').trim(),
+          gstin: gstin ? gstin.toUpperCase().trim() : undefined,
+          subscription_status: 'trialing',
+          trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+        },
+      ],
+      sessionOption
+    );
+    const company = companies[0];
+
+    // Create Company Member (Admin Role)
+    await CompanyMember.create(
+      [
+        {
+          company_id: company._id,
+          user_id: req.user._id,
+          email: req.user.email,
+          role: 'admin',
+          status: 'active',
+        },
+      ],
+      sessionOption
+    );
+
+    // Initialize Trial Subscription if standard plan exists
+    const standardPlan = await Plan.findOne({ code: 'standard' });
+    if (standardPlan) {
+      await Subscription.create(
+        [
+          {
+            company_id: company._id,
+            plan_id: standardPlan._id,
+            billing_cycle: 'monthly',
+            status: 'trialing',
+            current_period_start: new Date(),
+            current_period_end: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+            trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+          },
+        ],
+        sessionOption
+      );
+    }
+
+    if (useSession && session) {
+      await session.commitTransaction();
+    }
+
+    // Issue updated JWT session cookie pointing to the new company
+    const token = jwt.sign(
+      {
+        userId: req.user._id,
+        companyId: company._id,
+        token_version: req.user.token_version || 0,
+      },
+      getJwtSecret(),
+      { expiresIn: '7d' }
+    );
+
+    res.cookie('token', token, getCookieOptions());
+
+    const entitlements = await getTenantEntitlements(company);
+
+    res.status(201).json({
+      message: `Workspace "${company.name}" created successfully!`,
+      token,
+      company: {
+        id: company._id,
+        name: company.name,
+        slug: company.slug,
+        status: company.subscription_status,
+        plan: entitlements.plan,
+        trialEndsAt: company.trial_ends_at,
+      },
+      role: 'admin',
+      enabledFeatures: entitlements.enabled_features,
+      limits: entitlements.limits,
+    });
+  } catch (error: any) {
+    if (session) {
+      try {
+        await session.abortTransaction();
+      } catch {}
+      await session.endSession();
+    }
+    console.error('Failed to create workspace:', error);
+    res.status(500).json({ error: error.message || 'Failed to create workspace.' });
+  }
 }
 
 /**

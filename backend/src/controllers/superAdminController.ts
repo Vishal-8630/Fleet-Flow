@@ -27,6 +27,7 @@ import { PlatformSetting } from '../models/PlatformSetting.js';
 import { PromoCode } from '../models/PromoCode.js';
 import { seedBillingCatalog } from '../utils/billingSeedService.js';
 import { validateModuleDependencies } from '../utils/featureCatalog.js';
+import { getCookieOptions } from './authController.js';
 
 /**
  * GET /api/super-admin/kpis
@@ -387,6 +388,13 @@ export async function assignTenantPlan(req: Request, res: Response): Promise<voi
 export async function impersonateTenant(req: Request, res: Response): Promise<void> {
   try {
     const { id } = req.params;
+    const { reason } = req.body;
+
+    if (!reason || !reason.trim()) {
+      res.status(400).json({ error: 'Support justification reason is strictly required to initiate an impersonation session.' });
+      return;
+    }
+
     const company = await Company.findById(id);
     if (!company) {
       res.status(404).json({ error: 'Company not found.' });
@@ -398,12 +406,17 @@ export async function impersonateTenant(req: Request, res: Response): Promise<vo
     const supportToken = jwt.sign(
       {
         userId: req.user!._id.toString(),
+        companyId: company._id.toString(),
         impersonatedCompanyId: company._id.toString(),
         isImpersonation: true,
+        actorEmail: req.user!.email,
       },
       secret,
       { expiresIn: '1h' }
     );
+
+    // Set HttpOnly session cookie
+    res.cookie('token', supportToken, getCookieOptions());
 
     // Audit log
     await PlatformAuditLog.create({
@@ -414,7 +427,7 @@ export async function impersonateTenant(req: Request, res: Response): Promise<vo
       target_company_name: company.name,
       ip_address: req.ip,
       user_agent: req.headers['user-agent'],
-      details: { token_expires_in: '1h' },
+      details: { reason: reason.trim(), token_expires_in: '1h' },
     });
 
     res.json({
@@ -429,6 +442,48 @@ export async function impersonateTenant(req: Request, res: Response): Promise<vo
     });
   } catch (error: any) {
     res.status(500).json({ error: error.message || 'Failed to initiate impersonation.' });
+  }
+}
+
+/**
+ * POST /api/super-admin/exit-impersonation
+ * Ends the support impersonation session and restores standard platform administrator JWT.
+ */
+export async function exitImpersonation(req: Request, res: Response): Promise<void> {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: 'Authentication required.' });
+      return;
+    }
+
+    const secret = process.env.JWT_SECRET || 'dev_secret_fallback_key';
+    const regularToken = jwt.sign(
+      {
+        userId: req.user._id.toString(),
+        token_version: req.user.token_version || 0,
+      },
+      secret,
+      { expiresIn: '7d' }
+    );
+
+    res.cookie('token', regularToken, getCookieOptions());
+
+    await PlatformAuditLog.create({
+      actor_user_id: req.user._id,
+      actor_email: req.user.email,
+      action: 'exit_impersonation',
+      ip_address: req.ip,
+      user_agent: req.headers['user-agent'],
+      details: { message: 'Support session cleanly closed by administrator' },
+    });
+
+    res.json({
+      success: true,
+      message: 'Successfully exited support impersonation session.',
+      token: regularToken,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Failed to exit impersonation.' });
   }
 }
 

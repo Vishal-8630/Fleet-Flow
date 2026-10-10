@@ -32,6 +32,17 @@ export const api = axios.create({
   },
 });
 
+// Attach explicit active company header if set in storage
+api.interceptors.request.use((config) => {
+  if (typeof window !== 'undefined') {
+    const activeCompanyId = localStorage.getItem('active_company_id');
+    if (activeCompanyId) {
+      config.headers['x-company-id'] = activeCompanyId;
+    }
+  }
+  return config;
+});
+
 // Intercept responses to unwrap error messages uniformly & handle session revocation
 api.interceptors.response.use(
   (response) => response,

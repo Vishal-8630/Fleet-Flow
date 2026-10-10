@@ -60,6 +60,9 @@ declare global {
         role: UserRole;
         status: string;
       };
+      isImpersonation?: boolean;
+      impersonationActorEmail?: string;
+      requestedCompanyId?: string;
     }
   }
 }
@@ -67,6 +70,9 @@ declare global {
 interface JWTPayload {
   userId: string;
   companyId?: string;
+  impersonatedCompanyId?: string;
+  isImpersonation?: boolean;
+  actorEmail?: string;
   token_version?: number;
 }
 
@@ -110,6 +116,12 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     }
 
     req.user = user;
+    req.requestedCompanyId = decoded.companyId || decoded.impersonatedCompanyId;
+    if (decoded.isImpersonation) {
+      req.isImpersonation = true;
+      req.impersonationActorEmail = decoded.actorEmail;
+    }
+
     next();
   } catch (error) {
     res.status(401).json({ error: 'Invalid or expired session. Please log in again.' });
@@ -123,6 +135,8 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
  * AsyncLocalStorage tenant context.
  * 
  * Flow:
+ * - Checks if request is an audited Platform Super Admin impersonation session.
+ * - Honors `x-company-id` header or token `companyId` for verified multi-workspace switching.
  * - Queries `CompanyMember` for an `active` membership belonging to `req.user._id`.
  * - Validates that the associated company exists and is not soft-deleted.
  * - Attaches `req.company`, `req.member`, and `req.tenant` to the Express Request.
@@ -136,11 +150,56 @@ export async function resolveTenantContext(req: Request, res: Response, next: Ne
       return;
     }
 
-    // Find the user's active membership
-    const membership = await CompanyMember.findOne({
-      user_id: req.user._id,
-      status: 'active',
-    }).populate('company_id');
+    // 1. Handle Platform Super-Admin Impersonation Mode
+    if (req.isImpersonation && req.requestedCompanyId) {
+      const company = await Company.findById(req.requestedCompanyId);
+      if (!company || company.is_deleted) {
+        res.status(404).json({ error: 'Impersonated workspace not found or decommissioned.' });
+        return;
+      }
+
+      req.company = company;
+      req.tenant = {
+        id: company._id.toString(),
+        role: 'admin',
+        status: company.subscription_status,
+      };
+
+      req.member = {
+        user_id: req.user._id,
+        company_id: company._id,
+        role: 'admin',
+        status: 'active',
+      } as any;
+
+      return tenantStorage.run({ companyId: company._id.toString() }, () => {
+        next();
+      });
+    }
+
+    // 2. Multi-Tenant Workspace Resolution
+    // Priority: Explicit header 'x-company-id' -> JWT token 'companyId' -> Default active membership
+    const headerCompanyId = req.headers['x-company-id'] as string;
+    const targetCompanyId = headerCompanyId || req.requestedCompanyId;
+
+    let membership: any;
+    if (targetCompanyId) {
+      membership = await CompanyMember.findOne({
+        user_id: req.user._id,
+        company_id: targetCompanyId,
+        status: 'active',
+      }).populate('company_id');
+
+      if (!membership) {
+        res.status(403).json({ error: 'Forbidden: You are not an active member of the requested workspace.' });
+        return;
+      }
+    } else {
+      membership = await CompanyMember.findOne({
+        user_id: req.user._id,
+        status: 'active',
+      }).populate('company_id');
+    }
 
     if (!membership) {
       res.status(403).json({ error: 'No active transport company workspace found for this user.' });
