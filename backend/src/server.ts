@@ -70,7 +70,15 @@ app.use(
 app.use(cookieParser());
 
 // Express body parsers support JSON and URL-encoded bodies up to 10MB
-app.use(express.json({ limit: '10mb' }));
+// Retains raw request body buffer for cryptographic HMAC webhook signature validation
+app.use(
+  express.json({
+    limit: '10mb',
+    verify: (req: any, _res, buf) => {
+      req.rawBody = buf;
+    },
+  })
+);
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Sanitize request data against NoSQL injection

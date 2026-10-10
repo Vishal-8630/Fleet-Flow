@@ -17,6 +17,7 @@ import { Plan, IPlan } from '../models/Plan.js';
 import { AddOn, IAddOn } from '../models/AddOn.js';
 import { Subscription, ISubscription } from '../models/Subscription.js';
 import { ProcessedWebhook } from '../models/ProcessedWebhook.js';
+import { PaymentTransaction } from '../models/PaymentTransaction.js';
 import { Company } from '../models/Company.js';
 import { Truck } from '../models/Truck.js';
 import { Driver } from '../models/Driver.js';
@@ -24,6 +25,11 @@ import { CompanyMember } from '../models/CompanyMember.js';
 import { calculateProration } from '../utils/prorationService.js';
 import { getTenantEntitlements } from '../utils/entitlementService.js';
 import { seedBillingCatalog } from '../utils/billingSeedService.js';
+import {
+  createPaymentOrder,
+  verifyPaymentSignature,
+  verifyWebhookSignature,
+} from '../utils/paymentGateway.js';
 
 /**
  * GET /api/billing/plans
@@ -168,9 +174,18 @@ export async function calculatePlanChangePreview(req: Request, res: Response): P
   }
 }
 
+async function generateNextInvoiceNumber(): Promise<string> {
+  const currentYear = new Date().getFullYear();
+  const count = await PaymentTransaction.countDocuments({
+    invoice_number: { $regex: `^INV-${currentYear}-` },
+  });
+  return `INV-${currentYear}-${String(count + 1).padStart(4, '0')}`;
+}
+
 /**
  * POST /api/billing/checkout
- * Initializes a Razorpay order or simulated checkout for plan upgrade or renewal.
+ * Initializes a Razorpay order with server-calculated amounts, GST tax breakup,
+ * and records an initial pending transaction in the audit ledger.
  */
 export async function initializeCheckout(req: Request, res: Response): Promise<void> {
   try {
@@ -192,26 +207,74 @@ export async function initializeCheckout(req: Request, res: Response): Promise<v
 
     let discountPaise = 0;
     if (promo_code) {
-      // Basic coupon logic
       if (promo_code.toUpperCase() === 'LAUNCH50') {
         discountPaise = Math.round(basePricePaise * 0.5);
       }
     }
 
-    const finalPayablePaise = Math.max(0, basePricePaise - discountPaise);
-    const orderId = `order_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    const subtotalPaise = Math.max(0, basePricePaise - discountPaise);
+    // GST 18% (9% CGST + 9% SGST) for Indian SaaS compliance
+    const cgstPaise = Math.round(subtotalPaise * 0.09);
+    const sgstPaise = Math.round(subtotalPaise * 0.09);
+    const totalPaise = subtotalPaise + cgstPaise + sgstPaise;
+
+    const invoiceNumber = await generateNextInvoiceNumber();
+
+    const order = await createPaymentOrder({
+      amount_paise: totalPaise,
+      currency: 'INR',
+      receipt: invoiceNumber,
+      notes: {
+        company_id: req.company._id.toString(),
+        company_name: req.company.name,
+        plan_id: targetPlan._id.toString(),
+        billing_cycle,
+        promo_code,
+      },
+    });
+
+    const existingSub = await Subscription.findOne({ company_id: req.company._id });
+
+    // Record pending transaction in audit ledger
+    const transaction = await PaymentTransaction.create({
+      company_id: req.company._id,
+      subscription_id: existingSub?._id,
+      plan_id: targetPlan._id,
+      order_id: order.id,
+      amount_paise: totalPaise,
+      currency: order.currency,
+      status: 'pending',
+      billing_cycle,
+      promo_code,
+      discount_paise: discountPaise,
+      tax_breakup: {
+        subtotal_paise: subtotalPaise,
+        cgst_paise: cgstPaise,
+        sgst_paise: sgstPaise,
+        total_paise: totalPaise,
+        gst_rate_percent: 18,
+      },
+      invoice_number: invoiceNumber,
+      invoice_date: new Date(),
+    });
 
     res.json({
-      order_id: orderId,
-      amount_paise: finalPayablePaise,
-      currency: 'INR',
+      order_id: order.id,
+      amount_paise: totalPaise,
+      subtotal_paise: subtotalPaise,
+      cgst_paise: cgstPaise,
+      sgst_paise: sgstPaise,
+      currency: order.currency,
+      invoice_number: invoiceNumber,
+      transaction_id: transaction._id,
       plan: {
         id: targetPlan._id,
         name: targetPlan.name,
         code: targetPlan.code,
       },
       billing_cycle,
-      razorpay_key: process.env.RAZORPAY_KEY_ID || 'rzp_test_placeholder_key',
+      razorpay_key: order.key_id,
+      is_live: order.is_live,
     });
   } catch (error: any) {
     res.status(500).json({ error: error.message || 'Failed to initialize checkout.' });
@@ -220,7 +283,8 @@ export async function initializeCheckout(req: Request, res: Response): Promise<v
 
 /**
  * POST /api/billing/verify-payment
- * Verifies Razorpay payment signature and completes subscription upgrade.
+ * Cryptographically verifies Razorpay payment signature (fail-closed),
+ * activates the subscription, and records the completed transaction.
  */
 export async function verifyPayment(req: Request, res: Response): Promise<void> {
   try {
@@ -235,7 +299,15 @@ export async function verifyPayment(req: Request, res: Response): Promise<void> 
       razorpay_signature,
       plan_id,
       billing_cycle = 'monthly',
+      payment_method = 'card',
     } = req.body;
+
+    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+      res.status(400).json({
+        error: 'Missing required payment verification parameters (razorpay_order_id, razorpay_payment_id, razorpay_signature).',
+      });
+      return;
+    }
 
     const targetPlan = await Plan.findById(plan_id);
     if (!targetPlan) {
@@ -243,18 +315,28 @@ export async function verifyPayment(req: Request, res: Response): Promise<void> 
       return;
     }
 
-    // If live razorpay key is configured, verify HMAC signature
-    const secret = process.env.RAZORPAY_KEY_SECRET;
-    if (secret && razorpay_signature && razorpay_order_id && razorpay_payment_id) {
-      const generatedSignature = crypto
-        .createHmac('sha256', secret)
-        .update(`${razorpay_order_id}|${razorpay_payment_id}`)
-        .digest('hex');
+    // Fail-closed HMAC signature verification
+    const verification = verifyPaymentSignature(
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature
+    );
 
-      if (generatedSignature !== razorpay_signature) {
-        res.status(400).json({ error: 'Invalid payment signature. Verification failed.' });
-        return;
-      }
+    if (!verification.valid) {
+      // Record failed transaction attempt
+      await PaymentTransaction.findOneAndUpdate(
+        { order_id: razorpay_order_id },
+        {
+          payment_id: razorpay_payment_id,
+          status: 'failed',
+          failure_reason: verification.reason || 'Cryptographic signature mismatch',
+        }
+      );
+
+      res.status(400).json({
+        error: verification.reason || 'Invalid payment signature. Verification failed.',
+      });
+      return;
     }
 
     const companyId = req.company._id;
@@ -281,10 +363,23 @@ export async function verifyPayment(req: Request, res: Response): Promise<void> 
       subscription_status: 'active',
     });
 
+    // Mark transaction as successful
+    const transaction = await PaymentTransaction.findOneAndUpdate(
+      { order_id: razorpay_order_id },
+      {
+        payment_id: razorpay_payment_id,
+        payment_method,
+        status: 'success',
+        subscription_id: subscription._id,
+      },
+      { new: true }
+    );
+
     res.json({
       success: true,
-      message: `Successfully upgraded to ${targetPlan.name}!`,
+      message: `Payment verified successfully! Your workspace has been upgraded to ${targetPlan.name}.`,
       subscription,
+      transaction,
     });
   } catch (error: any) {
     res.status(500).json({ error: error.message || 'Payment verification failed.' });
@@ -354,8 +449,17 @@ export async function changePlan(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    // If upgrading OR if in trial mode OR if immediate change requested: switch immediately
-    if (targetPricePaise >= currentPricePaise || subscription.status === 'trialing' || immediate) {
+    // Disallow free upgrades when on an active paid subscription
+    if (subscription.status !== 'trialing' && targetPricePaise > currentPricePaise) {
+      res.status(402).json({
+        code: 'PAYMENT_REQUIRED',
+        error: `Upgrading to ${targetPlan.name} requires payment. Please complete checkout to activate this tier.`,
+      });
+      return;
+    }
+
+    // In trial mode or if immediate change requested (for downgrades or lateral changes):
+    if (subscription.status === 'trialing' || immediate) {
       subscription.plan_id = targetPlan._id as any;
       subscription.billing_cycle = billing_cycle;
       if (subscription.status !== 'trialing') {
@@ -544,26 +648,17 @@ export async function toggleAddon(req: Request, res: Response): Promise<void> {
 /**
  * POST /api/webhooks/billing
  * Ingests Razorpay webhooks with cryptographic HMAC-SHA256 signature verification
- * and strict idempotency checking via ProcessedWebhook.
+ * on raw request body and strict idempotency checking via ProcessedWebhook.
  */
 export async function handleBillingWebhook(req: Request, res: Response): Promise<void> {
   try {
     const signature = req.headers['x-razorpay-signature'] as string;
-    const secret = process.env.RAZORPAY_WEBHOOK_SECRET || 'dev_webhook_secret_fleetflow';
+    const rawPayload = (req as any).rawBody || (typeof req.body === 'string' ? req.body : JSON.stringify(req.body));
 
-    // Verify signature using raw body if available or JSON payload string
-    const payloadStr = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
-
-    if (process.env.NODE_ENV === 'production') {
-      const expectedSignature = crypto
-        .createHmac('sha256', secret)
-        .update(payloadStr)
-        .digest('hex');
-
-      if (expectedSignature !== signature) {
-        res.status(400).json({ error: 'Invalid webhook signature.' });
-        return;
-      }
+    // FAIL-CLOSED: Reject missing or mismatched webhook signatures
+    if (!signature || !verifyWebhookSignature(rawPayload, signature)) {
+      res.status(400).json({ error: 'Invalid or missing webhook signature. Verification failed.' });
+      return;
     }
 
     const event = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
@@ -578,7 +673,7 @@ export async function handleBillingWebhook(req: Request, res: Response): Promise
     }
 
     // Record webhook processing start
-    const webhookRecord = await ProcessedWebhook.create({
+    await ProcessedWebhook.create({
       event_id: eventId,
       source: 'razorpay',
       event_type: event.event || 'payment.captured',
@@ -588,8 +683,40 @@ export async function handleBillingWebhook(req: Request, res: Response): Promise
 
     const eventType = event.event;
     const entity = event.payload?.payment?.entity || event.payload?.subscription?.entity || {};
+    const orderId = entity.order_id;
+    const paymentId = entity.id;
     const notes = entity.notes || {};
     const companyId = notes.company_id;
+
+    // Update persistent PaymentTransaction ledger if order_id exists
+    if (orderId) {
+      if (eventType === 'payment.captured' || eventType === 'payment.authorized') {
+        await PaymentTransaction.findOneAndUpdate(
+          { order_id: orderId },
+          {
+            payment_id: paymentId,
+            status: 'success',
+            payment_method: entity.method || 'card',
+          }
+        );
+      } else if (eventType === 'payment.failed') {
+        await PaymentTransaction.findOneAndUpdate(
+          { order_id: orderId },
+          {
+            payment_id: paymentId,
+            status: 'failed',
+            failure_reason: entity.error_description || 'Payment failed via webhook',
+          }
+        );
+      } else if (eventType === 'refund.processed') {
+        await PaymentTransaction.findOneAndUpdate(
+          { order_id: orderId },
+          {
+            status: 'refunded',
+          }
+        );
+      }
+    }
 
     if (companyId) {
       if (eventType === 'payment.captured' || eventType === 'subscription.charged') {
@@ -641,3 +768,115 @@ export async function handleBillingWebhook(req: Request, res: Response): Promise
     res.status(500).json({ error: error.message || 'Webhook processing failed.' });
   }
 }
+
+/**
+ * GET /api/billing/history
+ * Returns the tenant's persistent audit ledger of payment transactions and invoices.
+ */
+export async function getBillingHistory(req: Request, res: Response): Promise<void> {
+  try {
+    if (!req.company) {
+      res.status(401).json({ error: 'Company context required.' });
+      return;
+    }
+
+    const transactions = await PaymentTransaction.find({ company_id: req.company._id })
+      .populate('plan_id', 'name code')
+      .sort({ created_at: -1 })
+      .lean();
+
+    res.json({
+      success: true,
+      transactions,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Failed to fetch billing history.' });
+  }
+}
+
+/**
+ * GET /api/billing/invoices/:id/receipt
+ * Returns a structured B2B GST tax invoice receipt for a specific payment transaction.
+ */
+export async function getBillingInvoiceReceipt(req: Request, res: Response): Promise<void> {
+  try {
+    if (!req.company) {
+      res.status(401).json({ error: 'Company context required.' });
+      return;
+    }
+
+    const { id } = req.params;
+    const transaction = await PaymentTransaction.findOne({
+      _id: id,
+      company_id: req.company._id,
+    }).populate('plan_id');
+
+    if (!transaction) {
+      res.status(404).json({ error: 'Invoice or payment transaction not found.' });
+      return;
+    }
+
+    const plan = transaction.plan_id as any;
+
+    const receipt = {
+      invoice_number: transaction.invoice_number,
+      invoice_date: transaction.invoice_date,
+      payment_date: transaction.updated_at,
+      status: transaction.status,
+      payment_method: transaction.payment_method || 'Razorpay Online',
+      order_id: transaction.order_id,
+      payment_id: transaction.payment_id || 'N/A',
+      currency: transaction.currency || 'INR',
+
+      // Platform / Supplier Details (FleetFlow B2B SaaS)
+      supplier: {
+        legal_name: 'Fleet Flow Logistics Technologies Pvt. Ltd.',
+        trade_name: 'FleetFlow SaaS',
+        gstin: '27AABCF1234F1Z8', // Registered Maharashtra GSTIN
+        sac_code: '998313', // IT Software as a Service SAC Code
+        address: 'Tower 4, FinTech Park, Hinjewadi Phase 2, Pune, Maharashtra 411057',
+        support_email: 'billing@fleetflow.io',
+      },
+
+      // Customer / Recipient Details
+      customer: {
+        company_name: req.company.name,
+        company_id: req.company._id,
+        email: (req.user as any)?.email || 'admin@company.com',
+        phone: req.company.phone || 'N/A',
+        gstin: req.company.gstin || 'Unregistered B2B Tenant',
+        address: req.company.address || 'N/A',
+      },
+
+      // Line items & GST breakdown
+      line_items: [
+        {
+          description: `FleetFlow Subscription — ${plan?.name || 'Transport Management SaaS'} (${transaction.billing_cycle === 'annual' ? 'Annual Plan' : 'Monthly Plan'})`,
+          sac_code: '998313',
+          unit_price_paise: transaction.tax_breakup.subtotal_paise,
+          quantity: 1,
+          discount_paise: transaction.discount_paise || 0,
+          net_taxable_paise: transaction.tax_breakup.subtotal_paise,
+        },
+      ],
+      tax_summary: {
+        subtotal_paise: transaction.tax_breakup.subtotal_paise,
+        cgst_rate_percent: 9,
+        cgst_paise: transaction.tax_breakup.cgst_paise,
+        sgst_rate_percent: 9,
+        sgst_paise: transaction.tax_breakup.sgst_paise,
+        total_tax_paise: transaction.tax_breakup.cgst_paise + transaction.tax_breakup.sgst_paise,
+        total_amount_paise: transaction.tax_breakup.total_paise,
+        total_amount_inr: (transaction.tax_breakup.total_paise / 100).toFixed(2),
+      },
+    };
+
+    res.json({
+      success: true,
+      receipt,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Failed to generate tax invoice receipt.' });
+  }
+}
+

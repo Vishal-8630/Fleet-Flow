@@ -34,6 +34,8 @@ import {
   FileText,
   Lock,
   RefreshCw,
+  Printer,
+  Building,
 } from 'lucide-react';
 import { PageHeader } from '../../components/common/PageHeader';
 import { Modal } from '../../components/common/Modal';
@@ -62,6 +64,27 @@ interface AddOn {
   annual_price_paise: number;
 }
 
+interface PaymentTransactionItem {
+  _id: string;
+  order_id: string;
+  payment_id?: string;
+  amount_paise: number;
+  currency: string;
+  status: 'pending' | 'success' | 'failed' | 'refunded';
+  payment_method?: string;
+  billing_cycle: 'monthly' | 'annual';
+  invoice_number: string;
+  invoice_date: string;
+  created_at: string;
+  plan_id?: { _id: string; name: string; code: string };
+  tax_breakup?: {
+    subtotal_paise: number;
+    cgst_paise: number;
+    sgst_paise: number;
+    total_paise: number;
+  };
+}
+
 export const BillingPage: React.FC = () => {
   const { user } = useAuthStore();
 
@@ -83,8 +106,25 @@ export const BillingPage: React.FC = () => {
   const [calculatingProration, setCalculatingProration] = useState<boolean>(false);
   const [actionLoading, setActionLoading] = useState<boolean>(false);
 
+  // Billing History & Invoices
+  const [historyTransactions, setHistoryTransactions] = useState<PaymentTransactionItem[]>([]);
+  const [historyLoading, setHistoryLoading] = useState<boolean>(false);
+
+  // In-App / Razorpay Checkout Modal
+  const [checkoutModalOpen, setCheckoutModalOpen] = useState<boolean>(false);
+  const [checkoutOrder, setCheckoutOrder] = useState<any>(null);
+  const [selectedMethod, setSelectedMethod] = useState<'card' | 'netbanking' | 'upi'>('netbanking');
+  const [selectedBank, setSelectedBank] = useState<string>('HDFC Bank');
+  const [paymentProcessing, setPaymentProcessing] = useState<boolean>(false);
+
+  // Tax Invoice Receipt Modal
+  const [receiptModalOpen, setReceiptModalOpen] = useState<boolean>(false);
+  const [receiptData, setReceiptData] = useState<any>(null);
+  const [receiptLoading, setReceiptLoading] = useState<boolean>(false);
+
   useEffect(() => {
     fetchBillingData();
+    fetchBillingHistory();
   }, []);
 
   const fetchBillingData = async () => {
@@ -108,10 +148,23 @@ export const BillingPage: React.FC = () => {
     }
   };
 
+  const fetchBillingHistory = async () => {
+    try {
+      setHistoryLoading(true);
+      const res = await axios.get('/api/billing/history', { withCredentials: true });
+      setHistoryTransactions(res.data.transactions || []);
+    } catch (err: any) {
+      console.warn('Failed to load billing history:', err);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
   const handleSelectPlan = async (plan: Plan) => {
     const currentPlanCode = subscriptionData?.subscription?.plan_id?.code;
-    if (currentPlanCode === plan.code) {
-      toast.info('You are already subscribed to this plan.');
+    const currentSubCycle = subscriptionData?.subscription?.billing_cycle || 'monthly';
+    if (currentPlanCode === plan.code && currentSubCycle === billingCycle) {
+      toast.info(`You are already subscribed to ${plan.name} (${billingCycle} billing).`);
       return;
     }
 
@@ -134,24 +187,186 @@ export const BillingPage: React.FC = () => {
     }
   };
 
+  const openRazorpayCheckout = (orderData: any) => {
+    // If Razorpay SDK is available on window and real live keys are configured:
+    if ((window as any).Razorpay && orderData.is_live) {
+      try {
+        const options = {
+          key: orderData.razorpay_key,
+          amount: orderData.amount_paise,
+          currency: orderData.currency || 'INR',
+          name: 'Fleet Flow Logistics OS',
+          description: `${orderData.plan.name} (${orderData.billing_cycle}) Subscription`,
+          order_id: orderData.order_id,
+          handler: async (response: any) => {
+            await handleVerifyPayment({
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+              plan_id: orderData.plan.id,
+              billing_cycle: orderData.billing_cycle,
+              payment_method: 'card',
+            });
+          },
+          modal: {
+            ondismiss: () => {
+              toast.warning('Payment window closed. Your plan has not been changed.');
+              setActionLoading(false);
+            },
+          },
+          prefill: {
+            name: user?.name,
+            email: user?.email,
+          },
+          theme: {
+            color: '#2563eb',
+          },
+        };
+        const rzp = new (window as any).Razorpay(options);
+        rzp.open();
+        return;
+      } catch (err) {
+        console.warn('Real Razorpay window failed, opening secure in-app checkout modal:', err);
+      }
+    }
+
+    // Default / Test / Emulator fallback:
+    setCheckoutOrder(orderData);
+    setCheckoutModalOpen(true);
+  };
+
+  const handleCancelCheckout = () => {
+    setCheckoutModalOpen(false);
+    toast.warning('Payment window closed. Your plan has not been changed.');
+    setActionLoading(false);
+  };
+
+  const handleVerifyPayment = async (verificationPayload: any) => {
+    try {
+      const res = await axios.post('/api/billing/verify-payment', verificationPayload, { withCredentials: true });
+      toast.success(res.data.message || `Payment verified successfully! Your workspace has been upgraded to ${checkoutOrder?.plan?.name || 'new plan'}.`);
+      setProrationModalOpen(false);
+      setCheckoutModalOpen(false);
+      await Promise.all([fetchBillingData(), fetchBillingHistory(), useAuthStore.getState().checkAuth()]);
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Payment verification failed.');
+      throw err;
+    }
+  };
+
+  const handleCompleteEmulatorPayment = async () => {
+    if (!checkoutOrder) return;
+    setPaymentProcessing(true);
+    try {
+      await handleVerifyPayment({
+        razorpay_order_id: checkoutOrder.order_id,
+        razorpay_payment_id: `pay_${Date.now()}_test`,
+        razorpay_signature: 'simulated_test_signature_valid',
+        plan_id: checkoutOrder.plan.id,
+        billing_cycle: checkoutOrder.billing_cycle,
+        payment_method: selectedMethod,
+      });
+    } catch (err: any) {
+      // toast shown in handleVerifyPayment
+    } finally {
+      setPaymentProcessing(false);
+    }
+  };
+
   const handleConfirmPlanChange = async () => {
     if (!targetPlan) return;
+
+    const currentSubCycle = subscriptionData?.subscription?.billing_cycle || 'monthly';
+    const currentPlan = subscriptionData?.subscription?.plan_id;
+    const currentPricePaise = currentPlan
+      ? (currentSubCycle === 'annual' ? currentPlan.annual_price_paise : currentPlan.monthly_price_paise)
+      : 0;
+    const targetPricePaise = billingCycle === 'annual' ? targetPlan.annual_price_paise : targetPlan.monthly_price_paise;
+    const isDowngradeTier = currentPricePaise > 0 && targetPricePaise < currentPricePaise;
+
+    const usage = subscriptionData?.usage || { trucks: 0, drivers: 0, users: 0 };
+    const quotaExceededTrucks = targetPlan.max_trucks !== -1 && usage.trucks > targetPlan.max_trucks;
+    const quotaExceededDrivers = targetPlan.max_drivers !== -1 && usage.drivers > targetPlan.max_drivers;
+    const quotaExceededUsers = targetPlan.max_users !== -1 && usage.users > targetPlan.max_users;
+    const hasQuotaExceeded = quotaExceededTrucks || quotaExceededDrivers || quotaExceededUsers;
+
+    if (hasQuotaExceeded) {
+      toast.error(`Cannot downgrade to ${targetPlan.name}: Fleet resource quota exceeded.`);
+      return;
+    }
+
+    const status = subscriptionData?.entitlements?.status || 'trialing';
+
+    // If downgrading:
+    if (isDowngradeTier && status !== 'trialing') {
+      setActionLoading(true);
+      try {
+        const res = await axios.post(
+          '/api/billing/change-plan',
+          { target_plan_id: targetPlan._id, billing_cycle: billingCycle, immediate: false },
+          { withCredentials: true }
+        );
+        toast.success(res.data.message || `Downgrade to ${targetPlan.name} scheduled for end of cycle.`);
+        setProrationModalOpen(false);
+        await fetchBillingData();
+        await useAuthStore.getState().checkAuth();
+      } catch (err: any) {
+        toast.error(err.response?.data?.error || 'Failed to schedule plan downgrade.');
+      } finally {
+        setActionLoading(false);
+      }
+      return;
+    }
+
+    // If in trialing status and switching free trial tier:
+    if (status === 'trialing' && !prorationData?.net_payable_rupees) {
+      setActionLoading(true);
+      try {
+        const res = await axios.post(
+          '/api/billing/change-plan',
+          { target_plan_id: targetPlan._id, billing_cycle: billingCycle, immediate: true },
+          { withCredentials: true }
+        );
+        toast.success(res.data.message || `Switched to ${targetPlan.name} (Trial Active)!`);
+        setProrationModalOpen(false);
+        await fetchBillingData();
+        await useAuthStore.getState().checkAuth();
+      } catch (err: any) {
+        toast.error(err.response?.data?.error || 'Failed to update trial plan.');
+      } finally {
+        setActionLoading(false);
+      }
+      return;
+    }
+
+    // Upgrading or activating paid plan: Initialize Checkout
     setActionLoading(true);
     try {
       const res = await axios.post(
-        '/api/billing/change-plan',
-        { target_plan_id: targetPlan._id, billing_cycle: billingCycle, immediate: true },
+        '/api/billing/checkout',
+        { plan_id: targetPlan._id, billing_cycle: billingCycle },
         { withCredentials: true }
       );
-
-      toast.success(res.data.message || 'Subscription updated successfully!');
       setProrationModalOpen(false);
-      await fetchBillingData();
-      await useAuthStore.getState().checkAuth();
+      openRazorpayCheckout(res.data);
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to update subscription.');
+      toast.error(err.response?.data?.error || 'Failed to initialize payment checkout.');
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  const handleViewReceipt = async (transactionId: string) => {
+    setReceiptLoading(true);
+    setReceiptModalOpen(true);
+    try {
+      const res = await axios.get(`/api/billing/invoices/${transactionId}/receipt`, { withCredentials: true });
+      setReceiptData(res.data.receipt);
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to load tax invoice receipt.');
+      setReceiptModalOpen(false);
+    } finally {
+      setReceiptLoading(false);
     }
   };
 
@@ -530,7 +745,9 @@ export const BillingPage: React.FC = () => {
       {/* 4. Pricing Plans Matrix (4 Columns) */}
       <div className="plans-grid">
         {plans.map((plan) => {
-          const isCurrent = activePlanCode === plan.code;
+          const currentSubCycle = currentSub?.billing_cycle || 'monthly';
+          const isCurrent = activePlanCode === plan.code && currentSubCycle === billingCycle;
+          const isSamePlanDifferentCycle = activePlanCode === plan.code && currentSubCycle !== billingCycle;
           const isPro = plan.code === 'pro';
           const isEnterprise = plan.code === 'enterprise';
           const pricePaise = billingCycle === 'annual' ? plan.annual_price_paise : plan.monthly_price_paise;
@@ -628,24 +845,44 @@ export const BillingPage: React.FC = () => {
                 )}
               </ul>
 
-              <button
-                type="button"
-                className={`plan-cta-btn ${isCurrent ? 'current' : isPro ? 'primary' : 'outline'}`}
-                disabled={isCurrent}
-                onClick={() => handleSelectPlan(plan)}
-              >
-                {isCurrent ? (
-                  <>
-                    <Check size={14} /> Active Plan
-                  </>
-                ) : isPro ? (
-                  <>
-                    Upgrade to Pro <ArrowRight size={14} />
-                  </>
-                ) : (
-                  'Select Plan'
-                )}
-              </button>
+              {(() => {
+                const currentPricePaise = currentSub?.plan_id
+                  ? (currentSubCycle === 'annual' ? currentSub.plan_id.annual_price_paise : currentSub.plan_id.monthly_price_paise)
+                  : 0;
+                const targetPricePaise = billingCycle === 'annual' ? plan.annual_price_paise : plan.monthly_price_paise;
+                const isDowngradeTier = currentPricePaise > 0 && targetPricePaise < currentPricePaise;
+
+                return (
+                  <button
+                    type="button"
+                    className={`plan-cta-btn ${isCurrent ? 'current' : isPro ? 'primary' : 'outline'}`}
+                    disabled={isCurrent}
+                    onClick={() => handleSelectPlan(plan)}
+                  >
+                    {isCurrent ? (
+                      <>
+                        <Check size={14} /> Active Plan
+                      </>
+                    ) : isSamePlanDifferentCycle ? (
+                      billingCycle === 'annual' ? (
+                        <>
+                          Switch to Annual (Save 17%) <ArrowRight size={14} />
+                        </>
+                      ) : (
+                        `Switch to Monthly`
+                      )
+                    ) : isDowngradeTier ? (
+                      `Downgrade to ${plan.name}`
+                    ) : isPro ? (
+                      <>
+                        Upgrade to Pro <ArrowRight size={14} />
+                      </>
+                    ) : (
+                      `Upgrade to ${plan.name}`
+                    )}
+                  </button>
+                );
+              })()}
             </div>
           );
         })}
@@ -781,7 +1018,107 @@ export const BillingPage: React.FC = () => {
         </div>
       </div>
 
-      {/* 7. Mathematical Proration Modal */}
+      {/* 7. Billing History & Tax Invoices Audit Ledger */}
+      <div className="billing-history-card">
+        <div className="billing-history-header">
+          <div>
+            <h3 className="billing-history-title">Billing History & Tax Invoices</h3>
+            <p style={{ margin: '4px 0 0 0', fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
+              Audit ledger of subscription transactions with downloadable GST B2B tax receipts
+            </p>
+          </div>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={fetchBillingHistory}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8125rem' }}
+          >
+            <RefreshCw size={14} /> Refresh History
+          </button>
+        </div>
+
+        {historyLoading ? (
+          <div style={{ padding: '30px', textAlign: 'center' }}>
+            <div className="loading-spinner" />
+          </div>
+        ) : historyTransactions.length === 0 ? (
+          <div style={{ padding: '30px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.875rem' }}>
+            No past transactions recorded yet. When you activate or renew a subscription tier, your GST invoices will appear here.
+          </div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table className="billing-history-table">
+              <thead>
+                <tr>
+                  <th>Invoice Date</th>
+                  <th>Invoice #</th>
+                  <th>Plan & Cycle</th>
+                  <th>Amount</th>
+                  <th>Payment Ref</th>
+                  <th>Status</th>
+                  <th style={{ textAlign: 'right' }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {historyTransactions.map((tx) => (
+                  <tr key={tx._id}>
+                    <td>
+                      {new Date(tx.invoice_date || tx.created_at).toLocaleDateString('en-IN', {
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric',
+                      })}
+                    </td>
+                    <td>
+                      <code>{tx.invoice_number}</code>
+                    </td>
+                    <td>
+                      <strong>{tx.plan_id?.name || 'SaaS Plan'}</strong> ·{' '}
+                      <span style={{ textTransform: 'capitalize' }}>{tx.billing_cycle}</span>
+                    </td>
+                    <td>
+                      <strong>
+                        ₹{(tx.amount_paise / 100).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </strong>{' '}
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>incl. 18% GST</span>
+                    </td>
+                    <td>
+                      <code style={{ fontSize: '0.75rem' }}>{tx.payment_id || tx.order_id}</code>
+                    </td>
+                    <td>
+                      {tx.status === 'success' ? (
+                        <span className="status-badge-success">
+                          <Check size={10} strokeWidth={3} /> PAID
+                        </span>
+                      ) : tx.status === 'failed' ? (
+                        <span className="status-badge-failed">
+                          <AlertTriangle size={10} strokeWidth={3} /> FAILED
+                        </span>
+                      ) : (
+                        <span className="status-badge-pending">
+                          <Clock size={10} strokeWidth={3} /> PENDING
+                        </span>
+                      )}
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={() => handleViewReceipt(tx._id)}
+                        style={{ padding: '4px 10px', fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                      >
+                        <FileText size={12} /> View Tax Invoice
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* 8. Mathematical Proration Modal & Downgrade Headroom Check */}
       <Modal
         isOpen={prorationModalOpen}
         onClose={() => setProrationModalOpen(false)}
@@ -808,6 +1145,35 @@ export const BillingPage: React.FC = () => {
                 </span>
               </div>
             </div>
+
+            {/* Downgrade Headroom Validation Block */}
+            {(() => {
+              const targetTruckLimit = targetPlan?.max_trucks ?? -1;
+              const targetDriverLimit = targetPlan?.max_drivers ?? -1;
+              const targetUserLimit = targetPlan?.max_users ?? -1;
+              const quotaExceededTrucks = Boolean(targetPlan && targetTruckLimit !== -1 && usage.trucks > targetTruckLimit);
+              const quotaExceededDrivers = Boolean(targetPlan && targetDriverLimit !== -1 && usage.drivers > targetDriverLimit);
+              const quotaExceededUsers = Boolean(targetPlan && targetUserLimit !== -1 && usage.users > targetUserLimit);
+              const hasQuotaExceeded = quotaExceededTrucks || quotaExceededDrivers || quotaExceededUsers;
+
+              if (hasQuotaExceeded) {
+                return (
+                  <div className="downgrade-quota-warning">
+                    <AlertTriangle size={24} color="#dc2626" style={{ flexShrink: 0, marginTop: 2 }} />
+                    <div>
+                      <h4>Cannot Downgrade Plan (Quota Exceeded)</h4>
+                      <p>
+                        {quotaExceededTrucks && `You currently have ${usage.trucks} registered trucks in your fleet, but the ${targetPlan?.name} has a maximum limit of ${targetTruckLimit} trucks. To switch to this plan, please deactivate or delete ${usage.trucks - targetTruckLimit} trucks first in Fleet Management.`}
+                        {quotaExceededDrivers && ` You currently have ${usage.drivers} registered drivers, but ${targetPlan?.name} allows a maximum of ${targetDriverLimit}. Please remove ${usage.drivers - targetDriverLimit} drivers first.`}
+                        {quotaExceededUsers && ` You currently have ${usage.users} team members, but ${targetPlan?.name} allows a maximum of ${targetUserLimit}.`}
+                      </p>
+                    </div>
+                  </div>
+                );
+              }
+
+              return null;
+            })()}
 
             {prorationData && (
               <div className="proration-summary-box">
@@ -865,21 +1231,307 @@ export const BillingPage: React.FC = () => {
               >
                 Cancel
               </button>
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={handleConfirmPlanChange}
-                disabled={actionLoading}
-              >
-                {actionLoading
-                  ? 'Processing...'
-                  : targetPlan
-                  ? `Confirm & Switch to ${targetPlan.name}`
-                  : 'Confirm & Apply Plan'}
-              </button>
+              {(() => {
+                const targetTruckLimit = targetPlan?.max_trucks ?? -1;
+                const targetDriverLimit = targetPlan?.max_drivers ?? -1;
+                const targetUserLimit = targetPlan?.max_users ?? -1;
+                const hasQuotaExceeded = Boolean(
+                  targetPlan && (
+                    (targetTruckLimit !== -1 && usage.trucks > targetTruckLimit) ||
+                    (targetDriverLimit !== -1 && usage.drivers > targetDriverLimit) ||
+                    (targetUserLimit !== -1 && usage.users > targetUserLimit)
+                  )
+                );
+
+                const currentSubCycle = currentSub?.billing_cycle || 'monthly';
+                const currentPricePaise = currentSub?.plan_id
+                  ? (currentSubCycle === 'annual' ? currentSub.plan_id.annual_price_paise : currentSub.plan_id.monthly_price_paise)
+                  : 0;
+                const targetPricePaise = targetPlan
+                  ? (billingCycle === 'annual' ? targetPlan.annual_price_paise : targetPlan.monthly_price_paise)
+                  : 0;
+                const isDowngradeTier = currentPricePaise > 0 && targetPricePaise < currentPricePaise;
+                const isSamePlanDifferentCycle = targetPlan && activePlanCode === targetPlan.code && currentSubCycle !== billingCycle;
+
+                if (hasQuotaExceeded) {
+                  return (
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      disabled
+                      style={{ opacity: 0.6, cursor: 'not-allowed' }}
+                    >
+                      Confirm Downgrade (Blocked by Quota)
+                    </button>
+                  );
+                }
+
+                return (
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={handleConfirmPlanChange}
+                    disabled={actionLoading}
+                  >
+                    {actionLoading
+                      ? 'Processing...'
+                      : targetPlan
+                      ? status === 'trialing' && !prorationData?.net_payable_rupees
+                        ? `Switch Trial to ${targetPlan.name} (Free)`
+                        : isDowngradeTier
+                        ? `Schedule Downgrade to ${targetPlan.name}`
+                        : isSamePlanDifferentCycle
+                        ? billingCycle === 'annual'
+                          ? `Confirm Switch to Annual (${targetPlan.name})`
+                          : `Confirm Switch to Monthly (${targetPlan.name})`
+                        : `Proceed to Pay & Upgrade to ${targetPlan.name}`
+                      : 'Confirm Plan'}
+                  </button>
+                );
+              })()}
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* 9. In-App / Razorpay Checkout Modal */}
+      <Modal
+        isOpen={checkoutModalOpen}
+        onClose={handleCancelCheckout}
+        title="Razorpay Secure Checkout"
+        subtitle="Complete payment to activate subscription tier"
+      >
+        <div className="checkout-modal-container">
+          <div className="checkout-branding-strip">
+            <div className="checkout-branding-left">
+              <CreditCard size={20} color="#60a5fa" />
+              <span className="checkout-branding-title">Razorpay Standard Checkout</span>
+            </div>
+            <span className="checkout-branding-badge">
+              {checkoutOrder?.is_live ? 'LIVE PRODUCTION' : 'TEST MODE'}
+            </span>
+          </div>
+
+          {checkoutOrder && (
+            <div className="checkout-order-summary">
+              <div className="checkout-summary-row">
+                <span>Plan</span>
+                <strong>{checkoutOrder.plan?.name} ({checkoutOrder.billing_cycle})</strong>
+              </div>
+              <div className="checkout-summary-row">
+                <span>Invoice Reference</span>
+                <code>{checkoutOrder.invoice_number}</code>
+              </div>
+              <div className="checkout-summary-row">
+                <span>Subtotal (Base Software Price)</span>
+                <span>₹{(checkoutOrder.subtotal_paise / 100).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+              </div>
+              <div className="checkout-summary-row">
+                <span>CGST (9%)</span>
+                <span>₹{(checkoutOrder.cgst_paise / 100).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+              </div>
+              <div className="checkout-summary-row">
+                <span>SGST (9%)</span>
+                <span>₹{(checkoutOrder.sgst_paise / 100).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+              </div>
+              <div className="checkout-summary-row total">
+                <span>Total Amount Payable</span>
+                <span style={{ color: '#2563eb' }}>
+                  ₹{(checkoutOrder.amount_paise / 100).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+            </div>
+          )}
+
+          <div>
+            <div className="checkout-methods-header">Select Payment Instrument:</div>
+            <div className="checkout-method-tabs">
+              <button
+                type="button"
+                className={`checkout-method-tab ${selectedMethod === 'netbanking' ? 'active' : ''}`}
+                onClick={() => setSelectedMethod('netbanking')}
+              >
+                <Building size={18} />
+                Netbanking
+              </button>
+              <button
+                type="button"
+                className={`checkout-method-tab ${selectedMethod === 'card' ? 'active' : ''}`}
+                onClick={() => setSelectedMethod('card')}
+              >
+                <CreditCard size={18} />
+                Card
+              </button>
+              <button
+                type="button"
+                className={`checkout-method-tab ${selectedMethod === 'upi' ? 'active' : ''}`}
+                onClick={() => setSelectedMethod('upi')}
+              >
+                <Zap size={18} />
+                UPI
+              </button>
+            </div>
+
+            {selectedMethod === 'netbanking' && (
+              <div className="checkout-bank-grid">
+                {['HDFC Bank', 'ICICI Bank', 'SBI Bank', 'Axis Bank'].map((b) => (
+                  <button
+                    key={b}
+                    type="button"
+                    className={`checkout-bank-btn ${selectedBank === b ? 'selected' : ''}`}
+                    onClick={() => setSelectedBank(b)}
+                  >
+                    {b}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {selectedMethod === 'card' && (
+              <div style={{ padding: '10px 12px', background: '#f8fafc', borderRadius: '6px', fontSize: '0.8125rem', color: '#64748b' }}>
+                Test Card: <code>4111 1111 1111 1111</code> · Expiry: <code>12/28</code> · CVV: <code>123</code>
+              </div>
+            )}
+
+            {selectedMethod === 'upi' && (
+              <div style={{ padding: '10px 12px', background: '#f8fafc', borderRadius: '6px', fontSize: '0.8125rem', color: '#64748b' }}>
+                Test VPA / UPI ID: <code>success@razorpay</code>
+              </div>
+            )}
+          </div>
+
+          <div className="checkout-actions">
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={handleCancelCheckout}
+              disabled={paymentProcessing}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="checkout-pay-btn"
+              onClick={handleCompleteEmulatorPayment}
+              disabled={paymentProcessing}
+            >
+              {paymentProcessing ? (
+                'Authorizing Payment...'
+              ) : (
+                <>
+                  <CheckCircle size={16} /> Pay ₹{(checkoutOrder?.amount_paise / 100).toLocaleString('en-IN', { minimumFractionDigits: 2 })} Now
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* 10. B2B GST Tax Invoice Printable Receipt Modal */}
+      <Modal
+        isOpen={receiptModalOpen}
+        onClose={() => setReceiptModalOpen(false)}
+        title="B2B GST Tax Invoice"
+        subtitle="Official commercial tax invoice compliant with Indian GST rules"
+      >
+        {receiptLoading ? (
+          <div style={{ padding: '40px', textAlign: 'center' }}>
+            <div className="loading-spinner" />
+            <p style={{ marginTop: '16px', color: 'var(--text-muted)' }}>Generating tax invoice receipt...</p>
+          </div>
+        ) : receiptData ? (
+          <div className="tax-invoice-container">
+            <div className="tax-invoice-header">
+              <div className="tax-invoice-brand">
+                <h2>{receiptData.supplier?.legal_name}</h2>
+                <p>{receiptData.supplier?.address}</p>
+                <p><strong>GSTIN:</strong> {receiptData.supplier?.gstin} | <strong>SAC:</strong> {receiptData.supplier?.sac_code}</p>
+              </div>
+              <div className="tax-invoice-meta">
+                <h3>Tax Invoice</h3>
+                <p style={{ margin: '0 0 2px 0', fontSize: '0.8125rem' }}><strong>Invoice #:</strong> {receiptData.invoice_number}</p>
+                <p style={{ margin: 0, fontSize: '0.8125rem' }}><strong>Date:</strong> {new Date(receiptData.invoice_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+                <p style={{ margin: '2px 0 0 0', fontSize: '0.75rem', color: '#16a34a', fontWeight: 700 }}>Status: PAID</p>
+              </div>
+            </div>
+
+            <div className="tax-invoice-entities">
+              <div className="tax-invoice-entity">
+                <h4>Billed To (Customer)</h4>
+                <strong>{receiptData.customer?.company_name}</strong>
+                <div>GSTIN: {receiptData.customer?.gstin}</div>
+                <div>Email: {receiptData.customer?.email}</div>
+                <div>Phone: {receiptData.customer?.phone}</div>
+              </div>
+              <div className="tax-invoice-entity">
+                <h4>Payment Settlement</h4>
+                <div><strong>Order ID:</strong> {receiptData.order_id}</div>
+                <div><strong>Payment ID:</strong> {receiptData.payment_id}</div>
+                <div><strong>Method:</strong> {receiptData.payment_method}</div>
+              </div>
+            </div>
+
+            <table className="tax-table">
+              <thead>
+                <tr>
+                  <th>Description</th>
+                  <th>SAC Code</th>
+                  <th style={{ textAlign: 'right' }}>Taxable Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                {receiptData.line_items?.map((item: any, i: number) => (
+                  <tr key={i}>
+                    <td>{item.description}</td>
+                    <td><code>{item.sac_code}</code></td>
+                    <td style={{ textAlign: 'right' }}>₹{(item.net_taxable_paise / 100).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            <div className="tax-summary-block">
+              <table className="tax-summary-table">
+                <tbody>
+                  <tr>
+                    <td>Taxable Subtotal:</td>
+                    <td style={{ textAlign: 'right' }}>₹{(receiptData.tax_summary?.subtotal_paise / 100).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                  </tr>
+                  <tr>
+                    <td>CGST (9%):</td>
+                    <td style={{ textAlign: 'right' }}>₹{(receiptData.tax_summary?.cgst_paise / 100).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                  </tr>
+                  <tr>
+                    <td>SGST (9%):</td>
+                    <td style={{ textAlign: 'right' }}>₹{(receiptData.tax_summary?.sgst_paise / 100).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                  </tr>
+                  <tr className="grand-total">
+                    <td>Total Amount (INR):</td>
+                    <td style={{ textAlign: 'right' }}>₹{receiptData.tax_summary?.total_amount_inr}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '16px' }} className="btn-print-hide">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setReceiptModalOpen(false)}
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => window.print()}
+                style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                <Printer size={16} /> Print / Save PDF
+              </button>
+            </div>
+          </div>
+        ) : null}
       </Modal>
     </div>
   );

@@ -23,6 +23,8 @@ import {
   cancelScheduledChange,
   toggleAddon,
   handleBillingWebhook,
+  getBillingHistory,
+  getBillingInvoiceReceipt,
 } from '../controllers/billingController.js';
 
 const router = Router();
@@ -38,6 +40,8 @@ router.use(requireAuth);
 router.use(resolveTenantContext);
 
 router.get('/subscription', getCompanySubscription);
+router.get('/history', getBillingHistory);
+router.get('/invoices/:id/receipt', getBillingInvoiceReceipt);
 router.post('/calculate-change', calculatePlanChangePreview);
 router.post('/checkout', initializeCheckout);
 router.post('/verify-payment', requireRole(['admin']), verifyPayment);
