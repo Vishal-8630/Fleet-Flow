@@ -48,6 +48,13 @@ import dashboardRoutes from './routes/dashboardRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
 import webhookRoutes from './routes/webhookRoutes.js';
 import maintenanceRoutes from './routes/maintenanceRoutes.js';
+import commercialReportRoutes from './routes/commercialReportRoutes.js';
+import portalRoutes from './routes/portalRoutes.js';
+import branchRoutes from './routes/branchRoutes.js';
+import approvalRoutes from './routes/approvalRoutes.js';
+import supportRoutes from './routes/supportRoutes.js';
+import healthRoutes from './routes/healthRoutes.js';
+import publicMarketingRoutes from './routes/publicRoutes.js';
 import { startNotificationWorker } from './workers/notificationWorker.js';
 import { noSqlSanitizer } from './middleware/securityMiddleware.js';
 
@@ -120,6 +127,9 @@ app.get('/health', (_req, res) => {
   });
 });
 
+// Detailed health probes (liveness + readiness)
+app.use('/health', healthRoutes);
+
 // ----------------------------------------------------------------------------
 // 3. API Route Mounts
 // ----------------------------------------------------------------------------
@@ -143,6 +153,25 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/webhooks', webhookRoutes);
 app.use('/api/fleet/maintenance', maintenanceRoutes);
+
+// Issue 08: Advanced Tracking & Telematics
+app.use('/api/telematics', trackingRoutes);
+
+// Issue 09: Commercial Reports, Aging, Tally Export, Credit Notes
+app.use('/api/commercial', commercialReportRoutes);
+
+// Issue 10: External Stakeholder Portals (Customer / Driver / Vendor)
+app.use('/api/portal', portalRoutes);
+
+// Issue 11: Multi-Branch Management & Approval Workflows
+app.use('/api/company/branches', branchRoutes);
+app.use('/api/approvals', approvalRoutes);
+
+// Issue 12: Support Desk
+app.use('/api/support/tickets', supportRoutes);
+
+// Issue 14: Public Marketing Endpoints (demo requests, system status)
+app.use('/api/public', publicMarketingRoutes);
 
 // ----------------------------------------------------------------------------
 // 4. Centralized Global Error Handler

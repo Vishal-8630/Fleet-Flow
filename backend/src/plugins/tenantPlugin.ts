@@ -50,6 +50,10 @@ export function getCurrentTenantId(): string | undefined {
   return tenantStorage.getStore()?.companyId;
 }
 
+export function getTenantId(req?: any): string | undefined {
+  return getCurrentTenantId() || req?.companyId || req?.tenant?.id || req?.company?._id?.toString();
+}
+
 /**
  * Mongoose Plugin applied to all tenant-scoped database models.
  * 

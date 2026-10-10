@@ -41,6 +41,14 @@ import {
   Wrench,
   Disc,
   X,
+  Map,
+  TrendingUp,
+  FileDown,
+  FileX,
+  GitBranch,
+  CheckSquare,
+  LifeBuoy,
+  HelpCircle,
 } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { useUiStore } from '../../stores/uiStore';
@@ -66,16 +74,22 @@ export const Sidebar: React.FC = () => {
     { label: 'Billing Parties', path: '/parties/billing', icon: Building2 },
     { label: 'Balance Parties', path: '/parties/balance', icon: Briefcase },
     { label: 'Trip Dispatch', path: '/operations/journeys', icon: Navigation },
+    { label: 'Live Fleet Map', path: '/operations/live-map', icon: Map },
     { label: 'Market Movements', path: '/operations/market-entries', icon: Layers },
     { label: 'Bill Entries & LR', path: '/bill-entry/all', icon: Receipt, feature: 'MOD_LR_ENGINE', tier: 'STD' },
     { label: 'Freight Invoices', path: '/invoices', icon: FileSpreadsheet, feature: 'MOD_BILLING_INVOICE', tier: 'STD' },
+    { label: 'Credit Notes', path: '/commercial/credit-notes', icon: FileX, roles: ['admin', 'accountant'] },
+    { label: 'AR Aging Report', path: '/commercial/aging', icon: TrendingUp, roles: ['admin', 'accountant'] },
     { label: 'Driver Settlements', path: '/settlements', icon: BadgeCent, roles: ['admin', 'accountant'], feature: 'MOD_SETTLEMENTS', tier: 'STD' },
     { label: 'General Ledger', path: '/ledger', icon: BookOpen, roles: ['admin', 'accountant'], feature: 'MOD_LEDGERS', tier: 'STD' },
+    { label: 'Pending Approvals', path: '/settings/approvals', icon: CheckSquare, roles: ['admin'] },
     { label: 'Team & Access', path: '/team', icon: Users, roles: ['admin'] },
+    { label: 'Branches & Hubs', path: '/settings/branches', icon: GitBranch, roles: ['admin'] },
     { label: 'Custom Fields', path: '/settings/custom-fields', icon: Sliders, roles: ['admin'], feature: 'MOD_CUSTOM_FIELDS', tier: 'PRO' },
     { label: 'Notification Logs', path: '/settings/notifications', icon: MessageSquare, feature: 'MOD_WHATSAPP', tier: 'PRO' },
     { label: 'Billing & Plans', path: '/settings/billing', icon: CreditCard, roles: ['admin'] },
     { label: 'Company Settings', path: '/settings/company', icon: Settings, roles: ['admin'] },
+    { label: 'Support Tickets', path: '/support/tickets', icon: LifeBuoy },
     { label: 'Profile & Security', path: '/settings/profile', icon: Lock },
   ];
 

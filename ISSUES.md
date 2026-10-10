@@ -15,13 +15,13 @@ This document tracks all logged platform and operational issues, their root caus
 | **05** | **Make Financial Records Dependable & Accounting Sound** | **P0 (Critical)** | **✅ Resolved** | [`docs/issues/ISSUE-05.md`](./docs/issues/ISSUE-05.md) |
 | **06** | **Real Notifications and Background Jobs** | **P1 (High)** | **✅ Resolved** | [`docs/issues/ISSUE-06.md`](./docs/issues/ISSUE-06.md) |
 | **07** | **Complete Fleet Maintenance Management** | **P1 (High)** | **✅ Resolved** | [`docs/issues/ISSUE-07.md`](./docs/issues/ISSUE-07.md) |
-| **08** | **Advanced Trip Tracking and Driver Workflows** | **P1 (High)** | **Documented** | [`docs/issues/ISSUE-08.md`](./docs/issues/ISSUE-08.md) |
-| **09** | **Complete Commercial and Accounting Operations** | **P1 (High)** | **Documented** | [`docs/issues/ISSUE-09.md`](./docs/issues/ISSUE-09.md) |
-| **10** | **Customer, Driver, and Vendor Self-Service Portals** | **P1 (High)** | **Documented** | [`docs/issues/ISSUE-10.md`](./docs/issues/ISSUE-10.md) |
-| **11** | **Finish Configurable Company Features** | **P1 (High)** | **Documented** | [`docs/issues/ISSUE-11.md`](./docs/issues/ISSUE-11.md) |
-| **12** | **Support and Customer Onboarding & Offboarding Lifecycle** | **P1 (High)** | **Documented** | [`docs/issues/ISSUE-12.md`](./docs/issues/ISSUE-12.md) |
-| **13** | **Security, Privacy, and Production Operations** | **P1 (Launch)** | **Documented** | [`docs/issues/ISSUE-13.md`](./docs/issues/ISSUE-13.md) |
-| **14** | **Public-Facing Marketing Website, Documentation & Legal Compliance** | **P1 (Launch)** | **Documented** | [`docs/issues/ISSUE-14.md`](./docs/issues/ISSUE-14.md) |
+| **08** | **Advanced Trip Tracking and Driver Workflows** | **P1 (High)** | **✅ Resolved** | [`docs/issues/ISSUE-08.md`](./docs/issues/ISSUE-08.md) |
+| **09** | **Complete Commercial and Accounting Operations** | **P1 (High)** | **✅ Resolved** | [`docs/issues/ISSUE-09.md`](./docs/issues/ISSUE-09.md) |
+| **10** | **Customer, Driver, and Vendor Self-Service Portals** | **P1 (High)** | **✅ Resolved** | [`docs/issues/ISSUE-10.md`](./docs/issues/ISSUE-10.md) |
+| **11** | **Finish Configurable Company Features** | **P1 (High)** | **✅ Resolved** | [`docs/issues/ISSUE-11.md`](./docs/issues/ISSUE-11.md) |
+| **12** | **Support and Customer Onboarding & Offboarding Lifecycle** | **P1 (High)** | **✅ Resolved** | [`docs/issues/ISSUE-12.md`](./docs/issues/ISSUE-12.md) |
+| **13** | **Security, Privacy, and Production Operations** | **P1 (Launch)** | **✅ Resolved** | [`docs/issues/ISSUE-13.md`](./docs/issues/ISSUE-13.md) |
+| **14** | **Public-Facing Marketing Website, Documentation & Legal Compliance** | **P1 (Launch)** | **✅ Resolved** | [`docs/issues/ISSUE-14.md`](./docs/issues/ISSUE-14.md) |
 
 ---
 

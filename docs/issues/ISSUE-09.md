@@ -2,7 +2,7 @@
 
 ## Metadata
 - **Severity**: P1 (High)
-- **Status**: Documented & Ready for Implementation
+- **Status**: ✅ Resolved & Verified
 - **Category**: Commercial Operations, Indian GST, E-Way Bill, E-Invoicing (IRN), Tally Sync & AR/AP Aging
 - **Date**: October 10, 2026
 

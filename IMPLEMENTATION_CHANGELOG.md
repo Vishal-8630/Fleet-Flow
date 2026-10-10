@@ -658,6 +658,123 @@
     * ✅ Test 8: Strict Multi-Tenant Isolation Invariant (Tenant Beta saw 0 records).
   * **100% of Issue 07 verification criteria passed without errors.**
 
+---
+
+### Issue 08: Advanced Trip Tracking and Driver Workflows (P1 High)
+* **[Time-Series GPS Telemetry & Incident Models] (`backend/src/models/VehicleLocationLog.ts`, `backend/src/models/TripIncident.ts`):**
+  * Created `VehicleLocationLog` schema with compound index `{ truck_id: 1, recorded_at: -1 }` for high-throughput AIS-140/OBD-II/smartphone GPS pings (lat, lon, speed, heading, odometer, ignition, landmark).
+  * Created `TripIncident` schema tracking enroute delays, breakdowns, punctures, challans, and accidents with severity levels, geo-tagged coordinates, and resolution workflows.
+* **[Geofencing & Segment Cross-Track Deviation Engine] (`backend/src/utils/geofenceService.ts`):**
+  * Implemented dual-mode `haversineDistance` supporting meters and kilometers calculation.
+  * Implemented segment-based cross-track corridor deviation algorithm (`isCorridorDeviation`) projecting real-world vehicle coordinates onto travel corridors with configurable tolerance (default 15km).
+  * Implemented dynamic ETA estimation (`calculateETA`, `formatETA`) factoring remaining distance and rolling average speed.
+* **[Telematics Ingestion & Strict PII-Sanitized Public Tracking] (`backend/src/controllers/trackingController.ts`):**
+  * `POST /api/telematics/ping`: High-frequency endpoint for telematics devices and mobile apps.
+  * `GET /api/telematics/live/:truckId` & `GET /api/telematics/fleet-live`: Real-time fleet positions for dispatcher birds-eye map.
+  * `GET /api/public/track/:lrNumber`: Public consignment tracking with strict PII sanitization — strips freight rates, billing party commercial terms, and driver phone numbers; returns masked vehicle registration (`MH12****34`) and milestone progress.
+* **[Frontend Live Fleet Map & Driver Experience]:**
+  * Built `LiveFleetMapPage.tsx` with Leaflet live interactive map, custom truck markers, heading indicators, speed readouts, and last-seen telemetry badges.
+  * Built `DriverPortalPage.tsx` with touch-first mobile cards, active journey milestone tracker, incident logger, and digital e-POD HTML5 signature canvas.
+  * Mounted routes `/fleet/live-map` and `/portal/driver`.
+
+---
+
+### Issue 09: Complete Commercial and Accounting Operations (P1 High)
+* **[Credit Notes & AR Aging Buckets Engine] (`backend/src/models/CreditNote.ts`, `backend/src/controllers/commercialReportController.ts`):**
+  * Created `CreditNote` model supporting rate revisions, weight shortages, damaged goods allowances, and transit claims with double-entry ledger impact.
+  * Implemented Accounts Receivable aging analysis (`GET /api/commercial/ar-aging`): buckets unpaid and partially paid balances into `0-30`, `31-60`, `61-90`, and `90+` days with weighted days sales outstanding (DSO).
+  * Implemented GSTR-1 outward supply summary (`GET /api/commercial/gst-summary`) with forward charge vs. RCM separation and CGST/SGST/IGST tax breakdowns.
+* **[Tally Prime XML Export Service] (`backend/src/utils/tallyExportService.ts`):**
+  * Generates compliant Tally Prime XML markup for sales vouchers and debit/credit notes.
+  * Features multi-leg accounting vouchers: party debit leg, freight sales income credit leg, and separate CGST/SGST/IGST tax ledger splits.
+  * Enclosed within standard Tally `<ENVELOPE>` headers with date format `YYYYMMDD` and automatic download trigger (`GET /api/commercial/tally-export/sales`).
+* **[Frontend AR Aging Command Center] (`AgingReportPage.tsx`):**
+  * Built aging overview dashboard with KPI cards for each aging bucket, overdue debtor distribution, party search/filter, and instant Tally Prime XML export button.
+  * Mounted at `/billing/aging-report`.
+
+---
+
+### Issue 10: Customer, Driver, and Vendor Self-Service Portals (P1 High)
+* **[Passwordless OTP & Scoped Portal JWT Auth] (`backend/src/models/PortalSession.ts`, `backend/src/middleware/externalPortalAuth.ts`):**
+  * Created `PortalSession` model managing 6-digit OTP delivery, cryptographic hashing, and expiry lifecycles.
+  * Implemented `externalPortalAuth` middleware enforcing entity-scoped JWT tokens (`portalType`, `entityId`, `companyId`) so external stakeholders are strictly confined to their own records.
+* **[Dedicated External Stakeholder Controllers] (`backend/src/controllers/portalController.ts`):**
+  * Customer Portal (`/api/portal/customer/*`): Active consignments, live public tracking links, invoice payment status, and outstanding balances.
+  * Driver Portal (`/api/portal/driver/*`): Active dispatches, loading/delivery instructions, trip incident reporting, and e-POD signature uploads.
+  * Vendor Portal (`/api/portal/vendor/*`): Attached fleet vehicle ledgers, pending trip settlements, and fuel advances.
+* **[Frontend Stakeholder Portals]:**
+  * Built `PortalLoginPage.tsx`: Passwordless role selector (Shipper/Customer, Fleet Driver, Market Vendor/Supplier) with SMS/WhatsApp OTP verification flow.
+  * Built `CustomerPortalPage.tsx`, `DriverPortalPage.tsx` (with mobile HTML5 signature canvas), and `VendorPortalPage.tsx`.
+  * Mounted at `/portal/login`, `/portal/customer`, `/portal/driver`, and `/portal/vendor`.
+
+---
+
+### Issue 11: Finish Configurable Company Features (P1 High)
+* **[Multi-Branch Hub Architecture] (`backend/src/models/Branch.ts`, `backend/src/controllers/branchController.ts`):**
+  * Created `Branch` schema supporting regional hubs, hub codes, address details, GSTIN overrides, and custom prefix sequences (`lr_prefix`, `invoice_prefix`, `journey_prefix`).
+  * Branch CRUD APIs mounted at `/api/company/branches` with head office designation and multi-branch scoping.
+* **[Financial Threshold Approval Workflows] (`backend/src/models/ApprovalRule.ts`, `backend/src/controllers/approvalController.ts`):**
+  * Created `ApprovalRule` and `ApprovalRequest` schemas for high-value financial transactions (driver settlements, credit notes, advances, invoice cancellations).
+  * Intercepts actions exceeding configurable thresholds (`threshold_amount_paise`), routing them to designated approver roles (`admin`, `manager`) with escalation timeouts.
+* **[Frontend Branch & Approval Workflows]:**
+  * Built `BranchManagementPage.tsx` for regional hub directory, prefix configurations, and active status toggles.
+  * Built `ApprovalWorkflowPage.tsx` with approval rule configuration cards, pending authorization inbox, and approval/rejection dialogs.
+  * Mounted at `/settings/branches` and `/settings/approvals`.
+
+---
+
+### Issue 12: Support, Customer Onboarding & Offboarding Lifecycle (P1 High)
+* **[Support Desk Ticketing Engine] (`backend/src/models/SupportTicket.ts`, `backend/src/controllers/supportController.ts`):**
+  * Created `SupportTicket` model supporting threaded conversation replies, severity priorities (`low`, `medium`, `high`, `critical`), categories (`billing`, `dispatch`, `compliance`, `bug`), and status lifecycles (`open`, `in_review`, `waiting_customer`, `resolved`, `closed`).
+  * Support APIs mounted at `/api/support/tickets` with reply posting and status management.
+* **[Interactive Onboarding Wizard & Demo Fleet Seeder] (`OnboardingWizardPage.tsx`, `SupportTicketsPage.tsx`):**
+  * Built 4-step progressive onboarding wizard (`/onboarding`): Company Identity $\rightarrow$ Fleet Profile $\rightarrow$ First Vehicle $\rightarrow$ Sample Fleet Seeder.
+  * Built `SupportTicketsPage.tsx` (`/support/tickets`) with ticket submission modal and real-time threaded chat conversation view.
+
+---
+
+### Issue 13: Security, Privacy, and Production Operations (P1 Launch)
+* **[DPDP Act Aadhaar Masking & AES-256-GCM Encryption] (`backend/src/utils/cryptoService.ts`):**
+  * Implemented statutory Aadhaar masking enforcing Indian DPDP Act 2023 compliance (`XXXX-XXXX-1234`), stripping white space and protecting unmasked numbers from being stored or rendered.
+  * Implemented authenticated AES-256-GCM field-level encryption and decryption (`encryptField`, `decryptField`) with random 12-byte initialization vectors and auth tags for sensitive keys and credentials.
+* **[Magic-Byte File Security Guard] (`backend/src/middleware/fileSecurityMiddleware.ts`):**
+  * Implemented MIME header and magic byte validation inspecting binary signatures (`%PDF`, PNG, JPEG) to block file spoofing and reject executable binaries with HTTP 415.
+* **[Health & Liveness Probes] (`backend/src/routes/healthRoutes.ts`):**
+  * Implemented `/health` and `/health/ready` endpoints with database connection status, memory consumption, uptime, and timestamp for container orchestrators and status monitoring.
+
+---
+
+### Issue 14: Public-Facing Marketing Website, Documentation & Legal Compliance (P1 Launch)
+* **[Marketing Lead Capture Engine] (`backend/src/models/LeadInquiry.ts`, `backend/src/routes/publicRoutes.ts`):**
+  * Created `LeadInquiry` model capturing full name, company name, email, phone, fleet size (`1-5`, `6-20`, `21-50`, `50+`), and primary pain points.
+  * Mounted public endpoints `POST /api/public/demo-request` and `GET /api/public/status`.
+* **[Modern Marketing Website & Statutory Legal Pages]:**
+  * Built `PublicLayout.tsx` with sticky navigation, dynamic authenticated session detection, and comprehensive sitemap footer.
+  * Built `HomePage.tsx`: Hero section, interactive Fleet ROI Savings Slider, core value pillars, and social proof.
+  * Built `FeaturesPage.tsx`: Deep-dive into all 6 platform pillars (Dispatch, Live GPS, Billing & GST, Maintenance, Portals, Analytics).
+  * Built `PricingPage.tsx`: 4-tier pricing matrix (Starter, Growth, Fleet Pro, Enterprise) with monthly/annual billing toggle (-17% discount) and interactive FAQs.
+  * Built `ContactPage.tsx`: Interactive demo walkthrough request form posting directly to `/api/public/demo-request`.
+  * Built `StatusPage.tsx`: Live system uptime monitor polling `/api/public/status` with 99.98% SLA and RPO/RTO metrics.
+  * Built statutory legal compliance pages: `PrivacyPage.tsx` (DPDP Act 2023 compliant), `TermsPage.tsx` (Carriage by Road Act 2007 aligned), and `RefundPage.tsx`.
+  * Mounted routes `/`, `/features`, `/pricing`, `/contact`, `/status`, `/privacy`, `/terms`, `/refund-policy` with responsive layout and 0 Tailwind CSS.
+
+---
+
+### Automated Verification & Quality Assurance (Issues 08 – 14)
+* **[Comprehensive Automated Test Suite] (`backend/src/scripts/verifyIssues08to14.ts`):**
+  * Ran end-to-end integration test suite against live MongoDB Atlas:
+    * ✅ **Test 1 (Issue 08):** Ingested GPS ping; validated Haversine distance (~120km Mumbai–Pune); validated cross-track corridor deviation invariant (on-route: passed, 200km detour: flagged).
+    * ✅ **Test 2 (Issue 09):** Ingested 45-day overdue invoice placed in `31-60 days` aging bucket; generated Tally Prime XML sales voucher with freight & CGST/SGST legs.
+    * ✅ **Test 3 (Issue 10):** Generated 6-digit OTP; validated scoped portal JWT token for driver entity.
+    * ✅ **Test 4 (Issue 11):** Created regional branch (`Pune Regional Hub [PUN]`); created financial approval threshold rule (₹25,000).
+    * ✅ **Test 5 (Issue 12):** Created support ticket; posted threaded reply; verified state transition to `in_review`.
+    * ✅ **Test 6 (Issue 13):** Verified DPDP Act Aadhaar masking (`XXXX-XXXX-1098`); verified AES-256-GCM authenticated encryption roundtrip; verified file security magic-byte inspection (legitimate PDF accepted, executable rejected).
+    * ✅ **Test 7 (Issue 14):** Ingested public demo request lead inquiry; verified live MongoDB connection health probe.
+  * **100% of test cases passed cleanly with 0 failures.**
+* **[TypeScript Strict Compilation]:**
+  * `backend`: `npx tsc --noEmit` exited with code 0 (zero errors).
+  * `frontend`: `npx tsc --noEmit` exited with code 0 (zero errors).
+
 
 
 
