@@ -56,6 +56,8 @@ import { NotificationLogsPage } from './pages/settings/NotificationLogsPage';
 import { SuperAdminDashboardPage } from './pages/superadmin/SuperAdminDashboardPage';
 import { SuperAdminPlansPage } from './pages/superadmin/SuperAdminPlansPage';
 import { PublicTrackingPage } from './pages/public/PublicTrackingPage';
+import { MaintenanceDashboardPage } from './pages/fleet/MaintenanceDashboardPage';
+import { TyreManagementPage } from './pages/fleet/TyreManagementPage';
 import { ToastContainer } from './components/common/ToastContainer';
 
 /**
@@ -138,9 +140,11 @@ export const App: React.FC = () => {
           <Route path="settings/company" element={<CompanySettingsPage />} />
           <Route path="settings/profile" element={<ProfileSecurityPage />} />
 
-          {/* Phase 2: Master Data Registries */}
+          {/* Phase 2: Master Data Registries & Fleet Engineering */}
           <Route path="fleet/trucks" element={<TruckListPage />} />
           <Route path="fleet/trucks/:id" element={<TruckDetailPage />} />
+          <Route path="fleet/maintenance" element={<MaintenanceDashboardPage />} />
+          <Route path="fleet/tyres" element={<TyreManagementPage />} />
           <Route path="fleet/drivers" element={<DriverListPage />} />
           <Route path="fleet/drivers/:id" element={<DriverDetailPage />} />
           <Route path="parties/billing" element={<BillingPartyListPage />} />

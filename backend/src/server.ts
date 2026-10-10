@@ -47,6 +47,7 @@ import trackingRoutes from './routes/trackingRoutes.js';
 import dashboardRoutes from './routes/dashboardRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
 import webhookRoutes from './routes/webhookRoutes.js';
+import maintenanceRoutes from './routes/maintenanceRoutes.js';
 import { startNotificationWorker } from './workers/notificationWorker.js';
 import { noSqlSanitizer } from './middleware/securityMiddleware.js';
 
@@ -141,6 +142,7 @@ app.use('/api/public/track', trackingRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/webhooks', webhookRoutes);
+app.use('/api/fleet/maintenance', maintenanceRoutes);
 
 // ----------------------------------------------------------------------------
 // 4. Centralized Global Error Handler

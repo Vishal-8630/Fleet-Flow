@@ -38,6 +38,8 @@ import {
   CreditCard,
   Lock,
   MessageSquare,
+  Wrench,
+  Disc,
   X,
 } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
@@ -58,6 +60,8 @@ export const Sidebar: React.FC = () => {
   const workspaceNavItems = [
     { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard, end: true },
     { label: 'Fleet & Trucks', path: '/fleet/trucks', icon: Truck },
+    { label: 'Maintenance & Repairs', path: '/fleet/maintenance', icon: Wrench, feature: 'MOD_MAINTENANCE', tier: 'PRO' },
+    { label: 'Tyre Management', path: '/fleet/tyres', icon: Disc, feature: 'MOD_MAINTENANCE', tier: 'PRO' },
     { label: 'Driver Master', path: '/fleet/drivers', icon: UserSquare2 },
     { label: 'Billing Parties', path: '/parties/billing', icon: Building2 },
     { label: 'Balance Parties', path: '/parties/balance', icon: Briefcase },

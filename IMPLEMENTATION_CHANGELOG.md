@@ -612,6 +612,53 @@
     * ✅ Test 8: Consignment Lifecycle Automated Trigger (dynamic tracking links verified).
   * **100% of Issue 06 verification criteria passed without errors.**
 
+---
+
+### Issue 07: Complete Fleet Maintenance Management (P1 High)
+* **[Maintenance Work Order & Job Card Engine] (`backend/src/models/MaintenanceOrder.ts`):**
+  * Created persistent work order model with compound indexes `{ company_id: 1, work_order_no: 1 }`, `{ company_id: 1, truck_id: 1, status: 1 }`.
+  * Itemized line cost engine tracking parts, labor charges, GST tax, and total amounts.
+  * State transitions: `scheduled` $\rightarrow$ `in_progress` $\rightarrow$ `completed` $\rightarrow$ `cancelled`.
+  * Tracks workshop vendor, vendor invoice numbers, odometer at service, downtime hours, and priority.
+* **[Automatic Vehicle Status Protection & Odometer Recalibration]:**
+  * Setting a work order to `in_progress` automatically updates `Truck.status = 'in_maintenance'`, protecting the vehicle from accidental trip dispatch.
+  * Completing a work order restores `Truck.status = 'available'`, updates `last_service_kms`, and automatically recalibrates `next_service_due_kms` by adding the service interval.
+* **[Automatic Balanced Double-Entry General Ledger Posting]:**
+  * Completing a work order automatically generates and posts a balanced double-entry journal voucher via `postDoubleEntryJournal`:
+    * Debit leg: `category: 'vehicle_maintenance'` (repair expense linked to truck).
+    * Credit leg: `category: 'bank_transfer'` (payment to workshop vendor).
+  * Strict accounting invariant enforced: $\sum \text{Debits} == \sum \text{Credits}$ with transaction ID linked in `MaintenanceOrder.ledger_entry_id`.
+* **[Tyre Lifecycle Master & Axle Placement Engine] (`backend/src/models/TyreRecord.ts`):**
+  * Created serial-tracked tyre asset registry with brand, model, size, purchase cost, and retread counters.
+  * Standardized axle positions for 10-wheeler and multi-axle configurations: `FL1`, `FR1`, `RL1_OUTER`, `RL1_INNER`, `RR1_OUTER`, `RR1_INNER`, `RL2_OUTER`, `RL2_INNER`, `RR2_OUTER`, `RR2_INNER`, `SPARE`.
+  * Millimeter-precise tread depth history logging (`wear_history`) with critical threshold alerts ($\le 4\text{mm}$).
+  * Automatic replacement logic: mounting a new tyre onto an occupied slot automatically unmounts the previous tyre back to warehouse store.
+* **[Fleet CPK, Service Interval & Asset P&L Analytics] (`backend/src/controllers/maintenanceController.ts`):**
+  * `GET /api/fleet/maintenance/analytics`:
+    * Computes Fleet Cost Per Km: $\text{CPK} = \frac{\sum \text{Maintenance Spend}}{\Delta \text{Odometer Kms}}$.
+    * Computes service schedule alerts: trucks classified as `DUE_NOW`, `DUE_SOON`, or `HEALTHY`.
+    * Computes critical tyre wear alerts.
+  * `GET /api/fleet/maintenance/profitability`:
+    * Computes individual vehicle P&L: $\text{Net Asset Profit} = \text{Freight Revenue} - (\text{Diesel Spend} + \text{Tolls} + \text{Driver Costs} + \text{Maintenance Costs})$.
+    * Computes real-world fuel economy ($\text{km/L}$): $\frac{\text{Total Trip Kms}}{\text{Total Diesel Litres}}$.
+* **[Frontend Maintenance Command Center & Tyre Studio]:**
+  * Built `MaintenanceDashboardPage.tsx` with KPI ribbon (Active Work Orders, Downed Vehicles, Fleet CPK, Maintenance Spend), filterable work orders table, preventative service schedules tab with progress tracks, and commercial asset P&L table.
+  * Built `TyreManagementPage.tsx` with interactive 10-wheeler visual chassis blueprint, color-coded wear slots (Good, Moderate, Critical), tyre registration modal, axle mounting modal, and tread depth inspection modal.
+  * Created custom styling tokens in `maintenance.css` with generic CSS variables (0 Tailwind).
+  * Mounted routes `/fleet/maintenance` and `/fleet/tyres` in `App.tsx` and registered navigation links in `Sidebar.tsx` gated by `MOD_MAINTENANCE`.
+* **[Automated Test Verification Suite] (`backend/src/scripts/verifyIssue07.ts`):**
+  * Executed comprehensive 8-step test suite against live MongoDB Atlas:
+    * ✅ Test 1: Work Order Creation & Status Flagging (truck protected with `in_maintenance`).
+    * ✅ Test 2: Work Order Completion & Odometer Recalibration (reverted to `available`, interval advanced).
+    * ✅ Test 3: Balanced Double-Entry General Ledger Posting ($\sum \text{Debits} == \sum \text{Credits} == \text{₹9,200}$).
+    * ✅ Test 4: Fleet Maintenance Cost Per KM Analytics ($\text{CPK} = \text{₹0.92 / km}$ verified).
+    * ✅ Test 5: Commercial Asset P&L & Fuel Economy ($\text{Net Profit} = \text{₹16,050}$, $4.0\text{ km/L}$ verified).
+    * ✅ Test 6: Tyre Master Registration & Warehouse Inventory State (`in_store` verified).
+    * ✅ Test 7: Chassis Axle Mounting & Tread Wear Inspection (`FL1` mounted, $11.5\text{mm}$ logged).
+    * ✅ Test 8: Strict Multi-Tenant Isolation Invariant (Tenant Beta saw 0 records).
+  * **100% of Issue 07 verification criteria passed without errors.**
+
+
 
 
 

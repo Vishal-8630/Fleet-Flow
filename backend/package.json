@@ -18,7 +18,8 @@
     "test:issue03": "tsx src/scripts/verifyIssue03.ts",
     "test:issue04": "tsx src/scripts/verifyIssue04.ts",
     "test:issue05": "tsx src/scripts/verifyIssue05.ts",
-    "test:issue06": "tsx src/scripts/verifyIssue06.ts"
+    "test:issue06": "tsx src/scripts/verifyIssue06.ts",
+    "test:issue07": "tsx src/scripts/verifyIssue07.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.750.0",
