@@ -303,42 +303,46 @@ export const BalancePartyListPage: React.FC = () => {
 
       {/* Search & Filters */}
       <div className="card" style={{ padding: '1rem 1.25rem', marginBottom: '1.5rem' }}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ position: 'relative', width: '100%', maxWidth: '360px' }}>
-            <Search
-              size={16}
-              style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }}
-            />
-            <input
-              type="text"
-              placeholder="Search by vendor name, contact..."
-              className="form-control"
-              style={{ paddingLeft: '2.25rem' }}
-              value={searchTerm}
-              onChange={(e) => {
-                setSearchTerm(e.target.value);
-                setPage(1);
-              }}
-            />
+        <div className="filter-toolbar">
+          <div className="filter-toolbar-left">
+            <div style={{ position: 'relative', width: '100%', maxWidth: '360px' }}>
+              <Search
+                size={16}
+                style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }}
+              />
+              <input
+                type="text"
+                placeholder="Search by vendor name, contact..."
+                className="form-control"
+                style={{ paddingLeft: '2.25rem' }}
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  setPage(1);
+                }}
+              />
+            </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <Filter size={16} color="var(--text-muted)" />
-            <select
-              className="form-control"
-              style={{ minWidth: '160px' }}
-              value={typeFilter}
-              onChange={(e) => {
-                setTypeFilter(e.target.value);
-                setPage(1);
-              }}
-            >
-              <option value="">All Partner Types</option>
-              <option value="supplier">Truck Supplier</option>
-              <option value="broker">Vehicle Broker</option>
-              <option value="transporter">Sub-Contractor</option>
-              <option value="petrol_pump">Diesel Pump</option>
-            </select>
+          <div className="filter-toolbar-right">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', width: '100%' }}>
+              <Filter size={16} color="var(--text-muted)" />
+              <select
+                className="form-control"
+                style={{ minWidth: '160px' }}
+                value={typeFilter}
+                onChange={(e) => {
+                  setTypeFilter(e.target.value);
+                  setPage(1);
+                }}
+              >
+                <option value="">All Partner Types</option>
+                <option value="supplier">Truck Supplier</option>
+                <option value="broker">Vehicle Broker</option>
+                <option value="transporter">Sub-Contractor</option>
+                <option value="petrol_pump">Diesel Pump</option>
+              </select>
+            </div>
           </div>
         </div>
       </div>

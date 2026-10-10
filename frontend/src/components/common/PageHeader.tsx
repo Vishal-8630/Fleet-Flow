@@ -92,29 +92,14 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
         }}
       >
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <h1
-              style={{
-                fontSize: 'var(--font-size-2xl)',
-                fontWeight: 'var(--font-weight-bold)',
-                color: 'var(--text-main)',
-                letterSpacing: '-0.025em',
-                margin: 0,
-              }}
-            >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <h1 className="page-header-title" style={{ margin: 0, letterSpacing: '-0.025em' }}>
               {title}
             </h1>
             {badge}
           </div>
           {subtitle && (
-            <p
-              style={{
-                fontSize: 'var(--font-size-sm)',
-                color: 'var(--text-muted)',
-                marginTop: '0.25rem',
-                marginBottom: 0,
-              }}
-            >
+            <p className="page-header-subtitle" style={{ margin: '0.25rem 0 0 0' }}>
               {subtitle}
             </p>
           )}

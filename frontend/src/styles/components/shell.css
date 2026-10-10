@@ -1,9 +1,20 @@
+/* ============================================================================
+ * FLEET FLOW — RESPONSIVE APPLICATION SHELL (components/shell.css)
+ * Fully responsive across Mobile (< 640px), Tablet (640-1024px),
+ * Laptop (1024-1440px), and Ultra-wide Displays (> 1440px).
+ * ============================================================================ */
+
 .app-layout {
   display: flex;
   min-height: 100vh;
   background-color: var(--bg-app);
+  position: relative;
+  overflow-x: hidden;
 }
 
+/* ----------------------------------------------------------------------------
+ * 1. Sidebar Styles (Desktop & Responsive Mobile Drawer)
+ * ---------------------------------------------------------------------------- */
 .sidebar {
   width: 17rem;
   background-color: var(--bg-sidebar);
@@ -11,16 +22,25 @@
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  transition: width var(--transition-normal);
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), width var(--transition-normal);
   z-index: 100;
 }
 
 .sidebar-header {
-  padding: 1.5rem 1.25rem;
+  padding: 1.25rem 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  flex-shrink: 0;
+}
+
+.sidebar-brand-group {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  min-width: 0;
 }
 
 .sidebar-brand-name {
@@ -28,6 +48,24 @@
   font-weight: var(--font-weight-extrabold);
   letter-spacing: -0.025em;
   color: #ffffff;
+  line-height: 1.1;
+}
+
+.sidebar-close-btn {
+  display: none;
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  color: #ffffff;
+  cursor: pointer;
+  padding: 0.4rem;
+  border-radius: var(--radius-md);
+  align-items: center;
+  justify-content: center;
+  transition: background-color var(--transition-fast);
+}
+
+.sidebar-close-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
 }
 
 .sidebar-nav {
@@ -37,6 +75,7 @@
   flex-direction: column;
   gap: 0.375rem;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .nav-section-title {
@@ -58,6 +97,7 @@
   font-weight: var(--font-weight-medium);
   color: var(--color-slate-300);
   transition: all var(--transition-fast);
+  text-decoration: none;
 }
 
 .nav-link:hover {
@@ -72,11 +112,50 @@
   box-shadow: 0 4px 12px 0 rgba(37, 99, 235, 0.35);
 }
 
+.sidebar-lock-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.65rem;
+  font-weight: var(--font-weight-bold);
+  background-color: rgba(255, 255, 255, 0.12);
+  color: var(--color-amber-300);
+  padding: 0.15rem 0.4rem;
+  border-radius: var(--radius-sm);
+  margin-left: auto;
+}
+
+.sidebar-footer {
+  padding: 1rem 1.25rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: var(--font-size-xs);
+  color: var(--color-slate-400);
+  flex-shrink: 0;
+}
+
+/* Mobile Dim Backdrop Overlay */
+.sidebar-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background-color: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 1040;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+/* ----------------------------------------------------------------------------
+ * 2. Main Content Wrapper & Top Navbar
+ * ---------------------------------------------------------------------------- */
 .main-content-wrapper {
   flex: 1;
   display: flex;
   flex-direction: column;
   min-width: 0;
+  width: 100%;
 }
 
 .top-navbar {
@@ -88,12 +167,127 @@
   justify-content: space-between;
   padding: 0 2rem;
   flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  gap: 0.75rem;
 }
 
+.navbar-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.navbar-menu-btn {
+  display: none;
+  background: transparent;
+  border: 1px solid var(--border-light);
+  color: var(--text-primary);
+  cursor: pointer;
+  padding: 0.5rem;
+  border-radius: var(--radius-md);
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.navbar-menu-btn:hover {
+  background-color: var(--color-slate-100);
+  border-color: var(--border-subtle);
+}
+
+.navbar-brand-pill {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background-color: var(--color-slate-100);
+  padding: 0.375rem 0.75rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-light);
+  min-width: 0;
+}
+
+.navbar-brand-title {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+
+.navbar-right {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
+
+.navbar-user-link {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  text-decoration: none;
+  color: inherit;
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--radius-md);
+  transition: background-color var(--transition-fast);
+}
+
+.navbar-user-link:hover {
+  background-color: var(--color-slate-50);
+}
+
+.navbar-user-avatar {
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--radius-full);
+  background-color: var(--color-primary-100);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.navbar-user-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.navbar-user-name {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.navbar-user-role {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+
+.navbar-logout-btn span {
+  display: inline;
+}
+
+/* ----------------------------------------------------------------------------
+ * 3. Page Container & Typography
+ * ---------------------------------------------------------------------------- */
 .page-container {
   flex: 1;
   padding: 2rem;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  max-width: 1600px;
+  width: 100%;
+  margin: 0 auto;
+  box-sizing: border-box;
 }
 
 .page-header-title {
@@ -107,4 +301,122 @@
   font-size: var(--font-size-sm);
   color: var(--text-muted);
   margin-top: 0.25rem;
+}
+
+/* ----------------------------------------------------------------------------
+ * 4. Responsive Breakpoints: Tablet & Mobile (<= 1024px)
+ * ---------------------------------------------------------------------------- */
+@media (max-width: 1024px) {
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 18rem;
+    max-width: 85vw;
+    z-index: 1050;
+    transform: translateX(-100%);
+    box-shadow: none;
+  }
+
+  .sidebar.mobile-open {
+    transform: translateX(0);
+    box-shadow: 0 0 35px rgba(0, 0, 0, 0.45);
+  }
+
+  .sidebar-close-btn {
+    display: inline-flex;
+  }
+
+  .sidebar-backdrop {
+    display: block;
+  }
+
+  .sidebar-backdrop.active {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .navbar-menu-btn {
+    display: inline-flex;
+  }
+
+  .top-navbar {
+    padding: 0 1.25rem;
+    height: 4rem;
+  }
+
+  .page-container {
+    padding: 1.5rem 1.25rem;
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ * 5. Responsive Breakpoints: Mobile Phones (<= 640px)
+ * ---------------------------------------------------------------------------- */
+@media (max-width: 640px) {
+  .top-navbar {
+    padding: 0 0.75rem;
+    height: 3.5rem;
+    gap: 0.5rem;
+  }
+
+  .navbar-brand-title {
+    max-width: 110px;
+    font-size: var(--font-size-xs);
+  }
+
+  .navbar-brand-pill {
+    padding: 0.25rem 0.5rem;
+    gap: 0.35rem;
+  }
+
+  .navbar-user-info {
+    display: none; /* Hide user name and role text on smartphones to keep navbar clean */
+  }
+
+  .navbar-user-link {
+    padding: 0.25rem;
+  }
+
+  .navbar-logout-btn {
+    padding: 0.4rem 0.6rem !important;
+  }
+
+  .navbar-logout-btn span {
+    display: none; /* Icon-only logout on mobile */
+  }
+
+  .trial-pill-text-long {
+    display: none;
+  }
+
+  .trial-pill-text-short {
+    display: inline !important;
+  }
+
+  .page-container {
+    padding: 1rem 0.75rem;
+  }
+
+  .page-header-title {
+    font-size: 1.375rem;
+  }
+
+  .page-header-subtitle {
+    font-size: var(--font-size-xs);
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ * 6. Responsive Breakpoints: Ultra-Wide Displays (>= 1600px)
+ * ---------------------------------------------------------------------------- */
+@media (min-width: 1600px) {
+  .sidebar {
+    width: 18.5rem;
+  }
+
+  .page-container {
+    padding: 2.5rem 3rem;
+  }
 }

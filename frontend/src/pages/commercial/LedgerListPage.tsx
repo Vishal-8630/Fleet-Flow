@@ -303,7 +303,7 @@ export const LedgerListPage: React.FC = () => {
       </div>
 
       {/* 3. Navigation Tabs */}
-      <div style={{ display: 'flex', gap: '0.5rem', borderBottom: '1px solid var(--border-color)', marginBottom: '1.5rem' }}>
+      <div className="tab-bar-scroll" style={{ borderBottom: '1px solid var(--border-color)', marginBottom: '1.5rem', width: '100%' }}>
         <button
           onClick={() => setActiveTab('ledger')}
           style={{
@@ -317,6 +317,7 @@ export const LedgerListPage: React.FC = () => {
             display: 'flex',
             alignItems: 'center',
             gap: '0.5rem',
+            whiteSpace: 'nowrap',
           }}
         >
           <BookOpen size={16} />
@@ -336,6 +337,7 @@ export const LedgerListPage: React.FC = () => {
             display: 'flex',
             alignItems: 'center',
             gap: '0.5rem',
+            whiteSpace: 'nowrap',
           }}
         >
           <Briefcase size={16} />
@@ -348,22 +350,24 @@ export const LedgerListPage: React.FC = () => {
         <>
           {/* Search & Filter Bar */}
           <div className="card" style={{ padding: '1rem', marginBottom: '1.5rem' }}>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', flex: '1 1 300px', alignItems: 'center', gap: '0.5rem', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', padding: '0.5rem 0.75rem' }}>
-                <Search size={16} color="var(--text-muted)" />
-                <input
-                  type="text"
-                  placeholder="Search TXN #, Description, Party name, Reference..."
-                  value={searchQuery}
-                  onChange={(e) => {
-                    setSearchQuery(e.target.value);
-                    setPage(1);
-                  }}
-                  style={{ border: 'none', outline: 'none', background: 'transparent', width: '100%', fontSize: 'var(--font-size-sm)', color: 'var(--text-primary)' }}
-                />
+            <div className="filter-toolbar">
+              <div className="filter-toolbar-left">
+                <div style={{ display: 'flex', width: '100%', alignItems: 'center', gap: '0.5rem', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', padding: '0.5rem 0.75rem' }}>
+                  <Search size={16} color="var(--text-muted)" style={{ flexShrink: 0 }} />
+                  <input
+                    type="text"
+                    placeholder="Search TXN #, Description, Party name, Reference..."
+                    value={searchQuery}
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value);
+                      setPage(1);
+                    }}
+                    style={{ border: 'none', outline: 'none', background: 'transparent', width: '100%', fontSize: 'var(--font-size-sm)', color: 'var(--text-primary)' }}
+                  />
+                </div>
               </div>
 
-              <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+              <div className="filter-toolbar-right">
                 <select
                   className="form-control"
                   value={categoryFilter}

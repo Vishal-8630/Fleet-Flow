@@ -267,8 +267,8 @@ export const DriverListPage: React.FC = () => {
 
       {/* 3. Search & Filter Bar */}
       <div className="card" style={{ padding: '1rem 1.25rem', marginBottom: '1.5rem' }}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1, minWidth: '240px' }}>
+        <div className="filter-toolbar">
+          <div className="filter-toolbar-left">
             <div style={{ position: 'relative', width: '100%', maxWidth: '360px' }}>
               <Search
                 size={16}
@@ -288,22 +288,24 @@ export const DriverListPage: React.FC = () => {
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <Filter size={16} color="var(--text-muted)" />
-            <select
-              className="form-control"
-              style={{ minWidth: '150px' }}
-              value={statusFilter}
-              onChange={(e) => {
-                setStatusFilter(e.target.value);
-                setPage(1);
-              }}
-            >
-              <option value="">All Statuses</option>
-              <option value="active">Active Duty</option>
-              <option value="on_leave">On Leave</option>
-              <option value="terminated">Terminated</option>
-            </select>
+          <div className="filter-toolbar-right">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', width: '100%' }}>
+              <Filter size={16} color="var(--text-muted)" />
+              <select
+                className="form-control"
+                style={{ minWidth: '150px' }}
+                value={statusFilter}
+                onChange={(e) => {
+                  setStatusFilter(e.target.value);
+                  setPage(1);
+                }}
+              >
+                <option value="">All Statuses</option>
+                <option value="active">Active Duty</option>
+                <option value="on_leave">On Leave</option>
+                <option value="terminated">Terminated</option>
+              </select>
+            </div>
           </div>
         </div>
       </div>

@@ -183,3 +183,94 @@ input[type="date"].form-input {
   padding-left: 2.375rem;
   width: 100%;
 }
+
+/* ----------------------------------------------------------------------------
+ * Standard Filter & Search Toolbars
+ * ---------------------------------------------------------------------------- */
+.filter-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.filter-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 1;
+  min-width: 240px;
+}
+
+.filter-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+/* ----------------------------------------------------------------------------
+ * Responsive Form Controls (<= 640px)
+ * ---------------------------------------------------------------------------- */
+@media (max-width: 640px) {
+  /* Prevent iOS Safari from auto-zooming on input focus (requires 16px font-size) */
+  .form-control,
+  .form-input,
+  .form-select,
+  .form-textarea {
+    font-size: 16px !important;
+  }
+
+  .form-group {
+    margin-bottom: 0.875rem;
+  }
+
+  .filter-toolbar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 0.75rem !important;
+  }
+
+  .filter-toolbar-left {
+    min-width: 0 !important;
+    width: 100% !important;
+  }
+
+  .filter-toolbar-left > div {
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+
+  .filter-toolbar-right {
+    width: 100% !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 0.5rem !important;
+  }
+
+  .filter-toolbar-right > * {
+    width: 100% !important;
+  }
+
+  .filter-toolbar-right select,
+  .filter-toolbar-right input {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .search-filter-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 0.75rem !important;
+  }
+
+  .search-filter-row > * {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+  }
+}
+
+

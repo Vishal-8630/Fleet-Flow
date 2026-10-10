@@ -213,7 +213,7 @@ export const DashboardPage: React.FC = () => {
       <div className="card" style={{ marginBottom: '2rem' }}>
         {/* Watchlist Tab Navigation Header */}
         <div className="card-header flex items-center justify-between" style={{ flexWrap: 'wrap', gap: '0.75rem' }}>
-          <div className="flex items-center" style={{ gap: '0.5rem' }}>
+          <div className="tab-bar-scroll" style={{ flex: 1, minWidth: 0 }}>
             <button
               onClick={() => setActiveTab('journeys')}
               className={`btn btn-sm ${activeTab === 'journeys' ? 'btn-primary' : 'btn-ghost'}`}

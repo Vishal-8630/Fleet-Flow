@@ -171,3 +171,38 @@
   color: #ffffff;
 }
 
+/* ----------------------------------------------------------------------------
+ * Horizontally Scrollable Tab Bar for Mobile & Tablets
+ * ---------------------------------------------------------------------------- */
+.nav-tab-scroll,
+.tab-bar-scroll {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  overflow-x: auto;
+  flex-wrap: nowrap;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none; /* Firefox */
+  padding-bottom: 2px;
+}
+
+.nav-tab-scroll::-webkit-scrollbar,
+.tab-bar-scroll::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Edge */
+}
+
+@media (max-width: 640px) {
+  .btn {
+    min-height: 2.375rem; /* Friendly touch target for fingers */
+  }
+
+  .btn-sm {
+    min-height: 2rem;
+  }
+
+  .btn-mobile-full {
+    width: 100% !important;
+  }
+}
+
+

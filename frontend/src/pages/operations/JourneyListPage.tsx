@@ -250,10 +250,10 @@ export const JourneyListPage: React.FC = () => {
       </div>
 
       {/* 3. Filter Controls & Tab Bar */}
-      <div className="card" style={{ marginBottom: '1.5rem', padding: '1.25rem' }}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+      <div className="card" style={{ marginBottom: '1.5rem', padding: '1rem 1.25rem' }}>
+        <div className="filter-toolbar">
           {/* Status Tabs */}
-          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <div className="tab-bar-scroll" style={{ flex: 1, minWidth: 0 }}>
             {[
               { id: 'all', label: 'All Journeys' },
               { id: 'active', label: 'In Transit' },
@@ -270,7 +270,7 @@ export const JourneyListPage: React.FC = () => {
                   setPage(1);
                 }}
                 className={`btn ${statusFilter === tab.id ? 'btn-primary' : 'btn-secondary'}`}
-                style={{ fontSize: 'var(--font-size-xs)', padding: '0.375rem 0.75rem' }}
+                style={{ fontSize: 'var(--font-size-xs)', padding: '0.375rem 0.75rem', whiteSpace: 'nowrap' }}
               >
                 {tab.label}
               </button>
@@ -278,22 +278,24 @@ export const JourneyListPage: React.FC = () => {
           </div>
 
           {/* Search Box */}
-          <div style={{ position: 'relative', minWidth: '280px' }}>
-            <Search
-              size={16}
-              style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }}
-            />
-            <input
-              type="text"
-              placeholder="Search by Journey #, Route, Cargo..."
-              className="form-control"
-              style={{ paddingLeft: '2.25rem' }}
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                setPage(1);
-              }}
-            />
+          <div className="filter-toolbar-right" style={{ minWidth: '240px' }}>
+            <div style={{ position: 'relative', width: '100%' }}>
+              <Search
+                size={16}
+                style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }}
+              />
+              <input
+                type="text"
+                placeholder="Search by Journey #, Route, Cargo..."
+                className="form-control"
+                style={{ paddingLeft: '2.25rem', width: '100%' }}
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setPage(1);
+                }}
+              />
+            </div>
           </div>
         </div>
       </div>

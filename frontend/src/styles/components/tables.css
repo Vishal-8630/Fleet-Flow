@@ -1,23 +1,49 @@
+/* ============================================================================
+ * FLEET FLOW — RESPONSIVE DATA TABLE SYSTEM (components/tables.css)
+ * Ensures smooth swipeable horizontal scrolling on Mobile (< 640px)
+ * and rich full-bleed tables on Tablets and Large Displays.
+ * ============================================================================ */
+
 /* Table Responsive Wrappers */
 .table-responsive,
 .table-wrapper {
   width: 100%;
+  max-width: 100%;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   background-color: var(--bg-surface);
-}
-
-.table-wrapper {
   border: 1px solid var(--border-light);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
-  overflow: hidden;
+  position: relative;
+  box-sizing: border-box;
+}
+
+/* Custom subtle scrollbar for tables */
+.table-responsive::-webkit-scrollbar,
+.table-wrapper::-webkit-scrollbar {
+  height: 6px;
+}
+.table-responsive::-webkit-scrollbar-track,
+.table-wrapper::-webkit-scrollbar-track {
+  background: var(--color-slate-100);
+  border-radius: var(--radius-full);
+}
+.table-responsive::-webkit-scrollbar-thumb,
+.table-wrapper::-webkit-scrollbar-thumb {
+  background: var(--color-slate-300);
+  border-radius: var(--radius-full);
+}
+.table-responsive::-webkit-scrollbar-thumb:hover,
+.table-wrapper::-webkit-scrollbar-thumb:hover {
+  background: var(--color-slate-400);
 }
 
 /* Master Table Styles */
 .table,
 .data-table {
   width: 100%;
+  min-width: 680px; /* Guarantees data columns don't crush on small mobile viewports */
   border-collapse: collapse;
   text-align: left;
   font-size: var(--font-size-sm);
@@ -80,3 +106,25 @@
   color: var(--text-muted);
 }
 
+/* ----------------------------------------------------------------------------
+ * Mobile & Tablet Table Adaptations (<= 640px)
+ * ---------------------------------------------------------------------------- */
+@media (max-width: 640px) {
+  .table thead th,
+  .data-table thead th,
+  .table-header th {
+    padding: 0.625rem 0.75rem;
+    font-size: 0.7rem;
+  }
+
+  .table tbody td,
+  .data-table tbody td,
+  .table-cell {
+    padding: 0.625rem 0.75rem;
+    font-size: 0.8125rem;
+  }
+
+  .table-empty {
+    padding: 2.5rem 1rem;
+  }
+}

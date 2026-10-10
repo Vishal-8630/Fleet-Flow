@@ -144,3 +144,19 @@
   border-radius: var(--radius-sm);
   overflow-x: auto;
 }
+
+@media (max-width: 640px) {
+  .drawer-panel {
+    max-width: 100%;
+    width: 100%;
+  }
+
+  .drawer-header {
+    padding: 1rem 1.25rem;
+  }
+
+  .drawer-body {
+    padding: 1rem 1.25rem;
+  }
+}
+

@@ -22,19 +22,36 @@
  * ============================================================================
  */
 
-import React from 'react';
-import { Outlet } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { Outlet, useLocation } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { Navbar } from './Navbar';
 import { useAuthStore } from '../../stores/authStore';
+import { useUiStore } from '../../stores/uiStore';
 import { AlertTriangle } from 'lucide-react';
 
 export const AppLayout: React.FC = () => {
   const { company } = useAuthStore();
+  const { sidebarOpen, setSidebarOpen } = useUiStore();
+  const location = useLocation();
   const isSuspended = ['suspended', 'cancelled', 'expired'].includes(company?.status || '');
+
+  // Automatically close mobile sidebar upon navigating to a new route
+  useEffect(() => {
+    if (window.innerWidth <= 1024) {
+      setSidebarOpen(false);
+    }
+  }, [location.pathname, setSidebarOpen]);
 
   return (
     <div className="app-layout">
+      {/* Mobile Drawer Dim Backdrop */}
+      <div
+        className={`sidebar-backdrop ${sidebarOpen ? 'active' : ''}`}
+        onClick={() => setSidebarOpen(false)}
+        aria-hidden="true"
+      />
+
       {/* 1. Left Sidebar Navigation */}
       <Sidebar />
 

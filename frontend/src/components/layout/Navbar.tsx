@@ -16,11 +16,13 @@
 
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Building2, LogOut, Clock, UserCheck } from 'lucide-react';
+import { Building2, LogOut, Clock, UserCheck, Menu } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
+import { useUiStore } from '../../stores/uiStore';
 
 export const Navbar: React.FC = () => {
   const { user, company, role, logout } = useAuthStore();
+  const { toggleSidebar } = useUiStore();
 
   /**
    * Calculates remaining days of the 14-day free trial from trialEndsAt timestamp
@@ -35,68 +37,61 @@ export const Navbar: React.FC = () => {
 
   return (
     <header className="top-navbar">
-      {/* 1. Left Side: Active Workspace Badge & Trial Indicator */}
-      <div className="flex items-center" style={{ gap: '1rem' }}>
-        <div className="flex items-center" style={{ gap: '0.5rem', backgroundColor: 'var(--color-slate-100)', padding: '0.375rem 0.75rem', borderRadius: 'var(--radius-md)' }}>
-          <Building2 size={16} color="var(--color-primary-600)" />
-          <span style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-semibold)' }}>
+      {/* 1. Left Side: Hamburger Toggle + Active Workspace Badge & Trial Indicator */}
+      <div className="navbar-left">
+        <button
+          type="button"
+          className="navbar-menu-btn"
+          onClick={toggleSidebar}
+          aria-label="Toggle navigation drawer"
+          title="Toggle Navigation Menu"
+        >
+          <Menu size={20} />
+        </button>
+
+        <div className="navbar-brand-pill">
+          <Building2 size={16} color="var(--color-primary-600)" style={{ flexShrink: 0 }} />
+          <span className="navbar-brand-title">
             {user?.isSuperAdmin ? 'FleetFlow Global Operator' : company?.name || 'My Transport Co.'}
           </span>
-          <span className={`badge ${user?.isSuperAdmin ? 'badge-warning' : 'badge-info'}`} style={{ textTransform: 'uppercase', fontSize: '10px' }}>
-            {user?.isSuperAdmin ? 'Super-Admin' : company?.status || 'Active'}
+          <span className={`badge ${user?.isSuperAdmin ? 'badge-warning' : 'badge-info'}`} style={{ textTransform: 'uppercase', fontSize: '10px', flexShrink: 0 }}>
+            {user?.isSuperAdmin ? 'Admin' : company?.status || 'Active'}
           </span>
         </div>
 
         {/* Dynamic Free Trial Countdown Pill */}
         {!user?.isSuperAdmin && company?.status === 'trialing' && (
-          <div className="badge badge-warning" style={{ gap: '0.375rem' }}>
+          <div className="badge badge-warning" style={{ gap: '0.375rem', flexShrink: 0 }}>
             <Clock size={12} />
-            <span>{daysLeft} Days Free Trial Left</span>
+            <span className="trial-pill-text-long">{daysLeft} Days Free Trial Left</span>
+            <span className="trial-pill-text-short" style={{ display: 'none' }}>{daysLeft}d Trial</span>
           </div>
         )}
       </div>
 
       {/* 2. Right Side: User Profile (Links to Profile & Security) & Logout Action */}
-      <div className="flex items-center" style={{ gap: '1.25rem' }}>
+      <div className="navbar-right">
         <Link
           to="/settings/profile"
-          className="flex items-center"
-          style={{
-            gap: '0.625rem',
-            textDecoration: 'none',
-            color: 'inherit',
-            padding: '0.25rem 0.5rem',
-            borderRadius: 'var(--radius-md)',
-            cursor: 'pointer',
-          }}
+          className="navbar-user-link"
           title="Profile & Security"
         >
-          <div
-            style={{
-              width: '2rem',
-              height: '2rem',
-              borderRadius: 'var(--radius-full)',
-              backgroundColor: 'var(--color-primary-100)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
+          <div className="navbar-user-avatar">
             <UserCheck size={16} color="var(--color-primary-600)" />
           </div>
-          <div>
-            <div style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-semibold)', lineHeight: 1.1 }}>
+          <div className="navbar-user-info">
+            <div className="navbar-user-name">
               {user?.name}
             </div>
-            <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)', textTransform: 'capitalize' }}>
-              Role: {user?.isSuperAdmin ? 'Platform Super-Admin' : role}
+            <div className="navbar-user-role">
+              {user?.isSuperAdmin ? 'Super-Admin' : role}
             </div>
           </div>
         </Link>
 
         <button
           onClick={() => logout()}
-          className="btn btn-ghost btn-sm"
+          className="btn btn-ghost btn-sm navbar-logout-btn"
           title="Sign out of workspace"
         >
           <LogOut size={16} />

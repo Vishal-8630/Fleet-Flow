@@ -37,11 +37,14 @@ import {
   Sliders,
   CreditCard,
   Lock,
+  X,
 } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
+import { useUiStore } from '../../stores/uiStore';
 
 export const Sidebar: React.FC = () => {
   const { role, user, enabledFeatures = [] } = useAuthStore();
+  const { sidebarOpen, setSidebarOpen } = useUiStore();
   const isSuperAdmin = Boolean(user?.isSuperAdmin);
 
   // Platform Operator Super-Admin Exclusive Navigation Links
@@ -75,19 +78,37 @@ export const Sidebar: React.FC = () => {
     return role ? item.roles.includes(role) : false;
   });
 
+  const handleLinkClick = () => {
+    if (window.innerWidth <= 1024) {
+      setSidebarOpen(false);
+    }
+  };
+
   return (
-    <aside className="sidebar">
-      {/* 1. Brand Logo & Name */}
+    <aside className={`sidebar ${sidebarOpen ? 'mobile-open' : ''}`}>
+      {/* 1. Brand Logo & Name + Mobile Close Button */}
       <div className="sidebar-header">
-        <div style={{ backgroundColor: 'var(--color-primary-600)', borderRadius: 'var(--radius-md)', padding: '0.5rem', display: 'flex' }}>
-          {isSuperAdmin ? <ShieldCheck size={22} color="#ffffff" /> : <Truck size={22} color="#ffffff" />}
-        </div>
-        <div>
-          <div className="sidebar-brand-name">Fleet Flow</div>
-          <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-slate-400)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            {isSuperAdmin ? 'Platform Control Plane' : 'SaaS Transport OS'}
+        <div className="sidebar-brand-group">
+          <div style={{ backgroundColor: 'var(--color-primary-600)', borderRadius: 'var(--radius-md)', padding: '0.5rem', display: 'flex' }}>
+            {isSuperAdmin ? <ShieldCheck size={22} color="#ffffff" /> : <Truck size={22} color="#ffffff" />}
+          </div>
+          <div>
+            <div className="sidebar-brand-name">Fleet Flow</div>
+            <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-slate-400)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              {isSuperAdmin ? 'Platform Control Plane' : 'SaaS Transport OS'}
+            </div>
           </div>
         </div>
+
+        {/* Mobile Drawer Close Button */}
+        <button
+          type="button"
+          className="sidebar-close-btn"
+          onClick={() => setSidebarOpen(false)}
+          aria-label="Close navigation drawer"
+        >
+          <X size={18} />
+        </button>
       </div>
 
       {/* 2. Navigation Links */}
@@ -104,6 +125,7 @@ export const Sidebar: React.FC = () => {
                   key={item.path}
                   to={item.path}
                   end={item.end}
+                  onClick={handleLinkClick}
                   className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
                 >
                   <Icon size={18} />
@@ -125,6 +147,7 @@ export const Sidebar: React.FC = () => {
                   key={item.path}
                   to={item.path}
                   end={item.end}
+                  onClick={handleLinkClick}
                   className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
                 >
                   <Icon size={18} />
@@ -143,7 +166,7 @@ export const Sidebar: React.FC = () => {
       </nav>
 
       {/* 3. Footer Version Tag */}
-      <div style={{ padding: '1rem', borderTop: '1px solid rgba(255, 255, 255, 0.1)', fontSize: 'var(--font-size-xs)', color: 'var(--color-slate-400)' }}>
+      <div className="sidebar-footer">
         <div>v1.0.0 Enterprise</div>
         <div style={{ marginTop: '0.25rem', color: 'var(--color-slate-500)' }}>
           {isSuperAdmin ? 'Platform Operator Root' : 'Zero-Data Leakage Verified'}
