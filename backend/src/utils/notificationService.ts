@@ -12,18 +12,23 @@
  * ---------
  * - Checks tenant entitlements (`MOD_WHATSAPP`) before attempting delivery.
  * - Formats official Meta WhatsApp Business Cloud API compliant payloads.
+ * - Resolves dynamic public tracking URLs from `APP_BASE_URL` (no localhost hardcoding).
+ * - Enforces recipient DND opt-out preferences (`OptOutRegistry`).
+ * - Enqueues persistent asynchronous jobs (`NotificationJob`) with exponential retry backoff.
  * - Records persistent delivery audit logs in `NotificationLog`.
- * - Provides non-blocking asynchronous execution with error logging.
  * ============================================================================
  */
 
 import crypto from 'crypto';
 import { Types } from 'mongoose';
 import { NotificationLog, NotificationChannel, NotificationEvent } from '../models/NotificationLog.js';
+import { NotificationJob } from '../models/NotificationJob.js';
 import { Company, ICompany } from '../models/Company.js';
 import { getTenantEntitlements } from './entitlementService.js';
+import { OptOutRegistry, isRecipientOptedOut } from '../models/OptOutRegistry.js';
+import { processPendingNotificationJobs } from '../workers/notificationWorker.js';
 
-interface NotificationParams {
+export interface NotificationParams {
   company: ICompany;
   channel: NotificationChannel;
   event_type: NotificationEvent;
@@ -36,7 +41,16 @@ interface NotificationParams {
 }
 
 /**
+ * Returns dynamic public application domain
+ */
+export function getAppBaseUrl(): string {
+  const url = process.env.APP_BASE_URL || process.env.FRONTEND_URL || process.env.PUBLIC_URL || 'https://fleetflow.io';
+  return url.replace(/\/+$/, '');
+}
+
+/**
  * Core asynchronous notification dispatcher
+ * Persists log and enqueues job for background delivery with retries
  */
 export async function dispatchNotification(params: NotificationParams): Promise<void> {
   const {
@@ -62,11 +76,31 @@ export async function dispatchNotification(params: NotificationParams): Promise<
       }
     }
 
-    // 2. Mock provider dispatch & message ID generation
-    const providerMessageId = `wamid.${crypto.randomBytes(12).toString('hex')}`;
+    // 2. Recipient Opt-Out (DND) check
+    const recipientKey = recipient_phone || recipient_email;
+    const isOptedOut = await isRecipientOptedOut(recipientKey, channel);
 
-    // 3. Persist log
-    await NotificationLog.create({
+    if (isOptedOut) {
+      console.log(`[Notification Engine]: Recipient ${recipientKey} is opted out (DND). Skipping ${event_type}.`);
+      await NotificationLog.create({
+        company_id: company._id,
+        channel,
+        event_type,
+        recipient_phone,
+        recipient_email,
+        recipient_name,
+        message_preview,
+        template_name,
+        template_variables,
+        status: 'skipped',
+        error_message: 'Recipient has opted out of automated notifications (DND)',
+        retry_count: 0,
+      });
+      return;
+    }
+
+    // 3. Persist audit log entry
+    const log = await NotificationLog.create({
       company_id: company._id,
       channel,
       event_type,
@@ -76,13 +110,38 @@ export async function dispatchNotification(params: NotificationParams): Promise<
       message_preview,
       template_name,
       template_variables,
-      provider_message_id: providerMessageId,
-      status: 'sent',
+      status: 'queued',
       retry_count: 0,
-      delivered_at: new Date(),
     });
 
-    console.log(`[Notification Engine]: ${channel.toUpperCase()} sent to ${recipient_name} (${recipient_phone || recipient_email}) for ${event_type}. Message ID: ${providerMessageId}`);
+    // 4. Create persistent background job in queue
+    const jobId = `job_${Date.now()}_${crypto.randomBytes(6).toString('hex')}`;
+    await NotificationJob.create({
+      company_id: company._id,
+      job_id: jobId,
+      channel,
+      event_type,
+      recipient_name,
+      recipient_phone,
+      recipient_email,
+      message_preview,
+      template_name,
+      template_variables,
+      attempts: 0,
+      max_attempts: 5,
+      next_run_at: new Date(),
+      status: 'pending',
+      notification_log_id: log._id,
+    });
+
+    console.log(`[Notification Engine]: Enqueued ${channel.toUpperCase()} job ${jobId} for ${recipient_name} (${recipientKey}) [${event_type}]`);
+
+    // 5. Trigger queue processing asynchronously (non-blocking)
+    setImmediate(() => {
+      processPendingNotificationJobs(5).catch((err) => {
+        console.error('[Notification Engine Async Worker Trigger Error]:', err.message);
+      });
+    });
   } catch (err: any) {
     console.error('[Notification Engine Error]:', err.message);
   }
@@ -90,10 +149,11 @@ export async function dispatchNotification(params: NotificationParams): Promise<
 
 /**
  * Event Trigger 1: LR Generated
- * Sends public tracking link to consignor and consignee
+ * Sends public tracking link to consignor and consignee using dynamic domain
  */
 export async function notifyLRGenerated(entry: any, company: ICompany): Promise<void> {
-  const trackingUrl = `http://localhost:5173/track/${entry.lr_no}`;
+  const baseUrl = getAppBaseUrl();
+  const trackingUrl = `${baseUrl}/track/${entry.lr_no}`;
 
   // Notify Consignor (Shipper)
   if (entry.consignor?.phone) {

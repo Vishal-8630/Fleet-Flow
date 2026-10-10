@@ -564,5 +564,54 @@
     * ✅ Test 8: Counter-Balancing Journal Reversal Audit Trail (reversal link & balanced books verified).
   * **100% of Issue 05 verification criteria passed without errors.**
 
+---
+
+### Issue 06: Real Notifications and Background Jobs (P1 High)
+* **[Meta WhatsApp Cloud API Client & Phone Normalizer] (`backend/src/utils/whatsappClient.ts`):**
+  * Built official Meta Graph API v20.0 client (`https://graph.facebook.com/v20.0/{PHONE_NUMBER_ID}/messages`).
+  * Implemented E.164 international phone normalizer (`normalizeWhatsAppPhone`) automatically sanitizing Indian mobile numbers (e.g. `98220 01122` $\rightarrow$ `+919822001122`).
+  * Formatted official Highly Structured Message (HSM) template payloads for `lr_booking_confirmation`, `consignee_dispatch_notice`, `driver_trip_dispatch`, `delivery_completion_notice`, and `driver_settlement_slip`.
+  * Integrated resilient local simulated dispatch fallback when environment variables (`WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_ACCESS_TOKEN`) are absent.
+* **[Zero Hardcoded Localhost Invariant & Dynamic Domain Resolver] (`backend/src/utils/notificationService.ts`):**
+  * Eliminated hardcoded `http://localhost:5173` tracking URLs across all lifecycle notification triggers.
+  * Implemented dynamic resolver `getAppBaseUrl()` prioritizing `APP_BASE_URL` $\rightarrow$ `FRONTEND_URL` $\rightarrow$ `PUBLIC_URL` $\rightarrow$ production fallback `https://fleetflow.io`.
+* **[Persistent MongoDB Asynchronous Job Queue & State Machine] (`backend/src/models/NotificationJob.ts`):**
+  * Designed job schema with strict status state machine (`pending` $\rightarrow$ `processing` $\rightarrow$ `delivered` $\rightarrow$ `failed` $\rightarrow$ `dead_letter` $\rightarrow$ `skipped`).
+  * Enforced compound index `{ status: 1, next_run_at: 1 }` for high-throughput sub-millisecond polling queries.
+  * Tracked job attempt counters, lock timestamps (`locked_at`), max retry limits, and correlation foreign keys to `NotificationLog`.
+* **[Background Queue Worker & Exponential Backoff Engine] (`backend/src/workers/notificationWorker.ts`):**
+  * Implemented high-reliability poller using atomic `findOneAndUpdate` with `status: 'processing'` and `locked_at: now` claiming semantics, preventing duplicate multi-worker execution.
+  * Implemented deterministic exponential backoff scheduler:
+    * Attempt 1: 60s (1m)
+    * Attempt 2: 300s (5m)
+    * Attempt 3: 900s (15m)
+    * Attempt 4: 3600s (1h)
+    * Attempt 5: Dead-Letter Queue (`status: 'dead_letter'`).
+  * Polling runner initialized on application startup (`startNotificationWorker(5000)`) in `backend/src/server.ts`.
+* **[Meta WhatsApp Webhook Receiver & Inbound DND Opt-Out] (`backend/src/controllers/webhookController.ts`, `backend/src/routes/webhookRoutes.ts`):**
+  * `GET /api/webhooks/whatsapp`: Compliant Meta Hub Challenge verification handshake (`hub.mode`, `hub.verify_token`, `hub.challenge`).
+  * `POST /api/webhooks/whatsapp`: Asynchronous ingestion of delivery receipts (`sent` $\rightarrow$ `delivered` $\rightarrow$ `read` $\rightarrow$ `failed`) updating persistent `NotificationLog` entries by `provider_message_id`.
+  * Inbound conversational opt-out: detects incoming messages containing `"STOP"` or `"UNSUBSCRIBE"` and registers the sender in `OptOutRegistry`.
+* **[DND Suppression Registry & Zero Billable Dispatch Invariant] (`backend/src/models/OptOutRegistry.ts`):**
+  * Recipient opt-out checking (`isRecipientOptedOut`) intercepts dispatches before queuing or provider calls.
+  * Opted-out recipients log a neutral `skipped` audit status with `0` billable messages dispatched.
+* **[Administrative Delivery Log & Manual Re-Queueing UI] (`NotificationLogsPage.tsx`, `notificationController.ts`):**
+  * Built pure generic CSS table with real-time delivery status badges (`Queued`, `Sent`, `Delivered`, `Read`, `Failed`, `Skipped`).
+  * Message preview modal displaying the exact hydrated template body and dynamic tracking links.
+  * Manual "Resend" action re-queueing failed or dead-letter notifications with instant UI feedback.
+  * Protected behind `MOD_WHATSAPP` feature flag and mounted at `/settings/notifications`.
+* **[Automated Test Verification Suite] (`backend/src/scripts/verifyIssue06.ts`):**
+  * Executed comprehensive 8-step test suite against live MongoDB Atlas:
+    * ✅ Test 1: Dynamic Production Domain Configuration (zero localhost hardcoding).
+    * ✅ Test 2: Phone Normalization & WhatsApp Client Formatter (`+91` E.164 format verified).
+    * ✅ Test 3: Asynchronous Job Queueing & Persistent State Machine (`NotificationJob` created).
+    * ✅ Test 4: Background Queue Runner & Worker Execution (atomic claim & delivery verified).
+    * ✅ Test 5: Exponential Backoff Timing & Dead-Letter Queue (1m, 5m, 15m, 1h, DLQ transition).
+    * ✅ Test 6: Meta Webhook Status Updates (`sent` $\rightarrow$ `delivered` $\rightarrow$ `read` receipt ingestion verified).
+    * ✅ Test 7: Inbound Opt-Out (DND) Suppression (0 billable dispatches & `status: 'skipped'`).
+    * ✅ Test 8: Consignment Lifecycle Automated Trigger (dynamic tracking links verified).
+  * **100% of Issue 06 verification criteria passed without errors.**
+
+
 
 

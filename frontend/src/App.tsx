@@ -52,6 +52,7 @@ import { SettlementListPage } from './pages/commercial/SettlementListPage';
 import { LedgerListPage } from './pages/commercial/LedgerListPage';
 import { BillingPage } from './pages/settings/BillingPage';
 import { CustomFieldsPage } from './pages/settings/CustomFieldsPage';
+import { NotificationLogsPage } from './pages/settings/NotificationLogsPage';
 import { SuperAdminDashboardPage } from './pages/superadmin/SuperAdminDashboardPage';
 import { SuperAdminPlansPage } from './pages/superadmin/SuperAdminPlansPage';
 import { PublicTrackingPage } from './pages/public/PublicTrackingPage';
@@ -170,6 +171,7 @@ export const App: React.FC = () => {
           {/* Phase 5: SaaS Billing, Entitlements & Customization */}
           <Route path="settings/billing" element={<BillingPage />} />
           <Route path="settings/custom-fields" element={<CustomFieldsPage />} />
+          <Route path="settings/notifications" element={<NotificationLogsPage />} />
           <Route path="super-admin" element={<SuperAdminDashboardPage />} />
           <Route path="super-admin/plans" element={<SuperAdminPlansPage />} />
         </Route>

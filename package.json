@@ -15,6 +15,7 @@
     "test:phase4": "npm --prefix backend run test:phase4",
     "test:phase5": "npm --prefix backend run test:phase5",
     "test:issue05": "npm --prefix backend run test:issue05",
+    "test:issue06": "npm --prefix backend run test:issue06",
     "start": "npm --prefix backend run start"
   },
   "keywords": [

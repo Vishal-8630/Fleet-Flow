@@ -20,7 +20,7 @@ export type NotificationEvent =
   | 'SETTLEMENT_PAYOUT'
   | 'INVITATION'
   | 'INVOICE_ISSUED';
-export type NotificationStatus = 'queued' | 'sent' | 'delivered' | 'failed';
+export type NotificationStatus = 'queued' | 'sent' | 'delivered' | 'read' | 'failed' | 'skipped';
 
 export interface INotificationLog extends Document {
   company_id: Types.ObjectId;
@@ -74,11 +74,11 @@ const NotificationLogSchema = new Schema<INotificationLog>(
     message_preview: { type: String, required: true },
     template_name: { type: String, trim: true },
     template_variables: { type: Schema.Types.Mixed, default: {} },
-    provider_message_id: { type: String, trim: true },
+    provider_message_id: { type: String, trim: true, index: true },
     status: {
       type: String,
-      enum: ['queued', 'sent', 'delivered', 'failed'],
-      default: 'sent',
+      enum: ['queued', 'sent', 'delivered', 'read', 'failed', 'skipped'],
+      default: 'queued',
       index: true,
     },
     retry_count: { type: Number, default: 0 },

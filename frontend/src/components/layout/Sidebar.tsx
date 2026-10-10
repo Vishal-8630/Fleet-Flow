@@ -37,6 +37,7 @@ import {
   Sliders,
   CreditCard,
   Lock,
+  MessageSquare,
   X,
 } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
@@ -68,6 +69,7 @@ export const Sidebar: React.FC = () => {
     { label: 'General Ledger', path: '/ledger', icon: BookOpen, roles: ['admin', 'accountant'], feature: 'MOD_LEDGERS', tier: 'STD' },
     { label: 'Team & Access', path: '/team', icon: Users, roles: ['admin'] },
     { label: 'Custom Fields', path: '/settings/custom-fields', icon: Sliders, roles: ['admin'], feature: 'MOD_CUSTOM_FIELDS', tier: 'PRO' },
+    { label: 'Notification Logs', path: '/settings/notifications', icon: MessageSquare, feature: 'MOD_WHATSAPP', tier: 'PRO' },
     { label: 'Billing & Plans', path: '/settings/billing', icon: CreditCard, roles: ['admin'] },
     { label: 'Company Settings', path: '/settings/company', icon: Settings, roles: ['admin'] },
     { label: 'Profile & Security', path: '/settings/profile', icon: Lock },

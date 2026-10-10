@@ -45,6 +45,9 @@ import customFieldRoutes from './routes/customFieldRoutes.js';
 import superAdminRoutes from './routes/superAdminRoutes.js';
 import trackingRoutes from './routes/trackingRoutes.js';
 import dashboardRoutes from './routes/dashboardRoutes.js';
+import notificationRoutes from './routes/notificationRoutes.js';
+import webhookRoutes from './routes/webhookRoutes.js';
+import { startNotificationWorker } from './workers/notificationWorker.js';
 import { noSqlSanitizer } from './middleware/securityMiddleware.js';
 
 const app = express();
@@ -136,6 +139,8 @@ app.use('/api/settings/custom-fields', customFieldRoutes);
 app.use('/api/super-admin', superAdminRoutes);
 app.use('/api/public/track', trackingRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/webhooks', webhookRoutes);
 
 // ----------------------------------------------------------------------------
 // 4. Centralized Global Error Handler
@@ -177,6 +182,8 @@ export async function startServer() {
     if (MONGODB_URI && !MONGODB_URI.includes('<password>')) {
       await mongoose.connect(MONGODB_URI);
       console.log('✅ Connected to MongoDB Atlas / Database successfully.');
+      // Start background notification queue runner
+      startNotificationWorker(5000);
     } else {
       console.log('⚠️ MongoDB URI contains placeholders. Server starting in offline DB mode.');
     }
