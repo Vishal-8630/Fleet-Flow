@@ -14,12 +14,13 @@ import {
   getPartyStatement,
   recordPartyPayout,
 } from '../controllers/ledgerController.js';
-import { requireAuth, resolveTenantContext, requireRole } from '../middleware/authMiddleware.js';
+import { requireAuth, resolveTenantContext, requireRole, requireActiveSubscription } from '../middleware/authMiddleware.js';
+import { requireFeature } from '../middleware/entitlementMiddleware.js';
 
 const router = Router();
 
-// Protect all ledger routes with authentication and tenant context
-router.use(requireAuth, resolveTenantContext);
+// Protect all ledger routes with authentication, tenant context, subscription status, and module entitlement
+router.use(requireAuth, resolveTenantContext, requireActiveSubscription, requireFeature('MOD_LEDGERS'));
 
 // General Ledger endpoints
 router.get('/summary', getLedgerSummary);

@@ -13,12 +13,13 @@ import {
   recordInvoicePayment,
   cancelInvoice,
 } from '../controllers/invoiceController.js';
-import { requireAuth, resolveTenantContext, requireRole } from '../middleware/authMiddleware.js';
+import { requireAuth, resolveTenantContext, requireRole, requireActiveSubscription } from '../middleware/authMiddleware.js';
+import { requireFeature } from '../middleware/entitlementMiddleware.js';
 
 const router = Router();
 
-// Protect all invoice routes with authentication and tenant context
-router.use(requireAuth, resolveTenantContext);
+// Protect all invoice routes with authentication, tenant context, subscription status, and module entitlement
+router.use(requireAuth, resolveTenantContext, requireActiveSubscription, requireFeature('MOD_BILLING_INVOICE'));
 
 router.get('/metrics', getInvoiceMetrics);
 router.get('/', getInvoices);

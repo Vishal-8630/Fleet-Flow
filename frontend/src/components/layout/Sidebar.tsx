@@ -36,11 +36,12 @@ import {
   Layers,
   Sliders,
   CreditCard,
+  Lock,
 } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 
 export const Sidebar: React.FC = () => {
-  const { role, user } = useAuthStore();
+  const { role, user, enabledFeatures = [] } = useAuthStore();
   const isSuperAdmin = Boolean(user?.isSuperAdmin);
 
   // Platform Operator Super-Admin Exclusive Navigation Links
@@ -58,12 +59,12 @@ export const Sidebar: React.FC = () => {
     { label: 'Balance Parties', path: '/parties/balance', icon: Briefcase },
     { label: 'Trip Dispatch', path: '/operations/journeys', icon: Navigation },
     { label: 'Market Movements', path: '/operations/market-entries', icon: Layers },
-    { label: 'Bill Entries & LR', path: '/bill-entry/all', icon: Receipt },
-    { label: 'Freight Invoices', path: '/invoices', icon: FileSpreadsheet },
-    { label: 'Driver Settlements', path: '/settlements', icon: BadgeCent, roles: ['admin', 'accountant'] },
-    { label: 'General Ledger', path: '/ledger', icon: BookOpen, roles: ['admin', 'accountant'] },
+    { label: 'Bill Entries & LR', path: '/bill-entry/all', icon: Receipt, feature: 'MOD_LR_ENGINE', tier: 'STD' },
+    { label: 'Freight Invoices', path: '/invoices', icon: FileSpreadsheet, feature: 'MOD_BILLING_INVOICE', tier: 'STD' },
+    { label: 'Driver Settlements', path: '/settlements', icon: BadgeCent, roles: ['admin', 'accountant'], feature: 'MOD_SETTLEMENTS', tier: 'STD' },
+    { label: 'General Ledger', path: '/ledger', icon: BookOpen, roles: ['admin', 'accountant'], feature: 'MOD_LEDGERS', tier: 'STD' },
     { label: 'Team & Access', path: '/team', icon: Users, roles: ['admin'] },
-    { label: 'Custom Fields', path: '/settings/custom-fields', icon: Sliders, roles: ['admin'] },
+    { label: 'Custom Fields', path: '/settings/custom-fields', icon: Sliders, roles: ['admin'], feature: 'MOD_CUSTOM_FIELDS', tier: 'PRO' },
     { label: 'Billing & Plans', path: '/settings/billing', icon: CreditCard, roles: ['admin'] },
     { label: 'Company Settings', path: '/settings/company', icon: Settings, roles: ['admin'] },
   ];
@@ -117,6 +118,7 @@ export const Sidebar: React.FC = () => {
             </div>
             {filteredWorkspaceItems.map((item) => {
               const Icon = item.icon;
+              const isLocked = item.feature && !enabledFeatures.includes(item.feature as any);
               return (
                 <NavLink
                   key={item.path}
@@ -125,7 +127,13 @@ export const Sidebar: React.FC = () => {
                   className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
                 >
                   <Icon size={18} />
-                  <span>{item.label}</span>
+                  <span style={{ flex: 1 }}>{item.label}</span>
+                  {isLocked && (
+                    <span className="sidebar-lock-badge" title={`Requires ${item.tier} plan`}>
+                      <Lock size={10} />
+                      <span>{item.tier}</span>
+                    </span>
+                  )}
                 </NavLink>
               );
             })}

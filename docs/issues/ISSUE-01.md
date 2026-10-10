@@ -2,7 +2,7 @@
 
 ## Metadata
 - **Severity**: P0 (Critical)
-- **Status**: Implemented & Verified
+- **Status**: ✅ Resolved & Verified
 - **Category**: Security, Multi-Tenancy, Entitlements & Gating
 - **Date**: October 10, 2026
 
@@ -97,7 +97,10 @@ Created `requireQuota(resource: 'trucks' | 'drivers' | 'users')` middleware in `
 | `backend/src/middleware/authMiddleware.ts` | Enhanced `requireActiveSubscription` with trial expiry detection and consistent error codes |
 | `backend/src/middleware/entitlementMiddleware.ts` | Added `requireQuota` middleware for trucks, drivers, and user seat limits |
 | `backend/src/utils/featureCatalog.ts` | Added `validateModuleDependencies` and `resolveModuleDependencies` |
-| `backend/src/controllers/superAdminController.ts` | Wired module dependency validation on plan updates and quota overrides |
+| `backend/src/controllers/billingController.ts` | Added immediate plan switching for trials/tests, downgrade quota headroom checks, and scheduled downgrade management |
+| `backend/src/routes/billingRoutes.ts` | Mounted `apply-scheduled` and `cancel-scheduled` plan change routes |
+| `backend/src/controllers/superAdminController.ts` | Wired module dependency validation on plan updates and added `assignTenantPlan` |
+| `backend/src/routes/superAdminRoutes.ts` | Mounted `PATCH /tenants/:id/plan` for Super Admin plan assignments |
 | `backend/src/controllers/authController.ts` | Included `enabledFeatures` and `limits` in `getMe` session hydration payload |
 | `backend/src/routes/truckRoutes.ts` | Added `requireActiveSubscription`, `requireFeature('MOD_FLEET')`, and `requireQuota('trucks')` |
 | `backend/src/routes/driverRoutes.ts` | Added `requireActiveSubscription`, `requireFeature('MOD_DRIVERS')`, and `requireQuota('drivers')` |
@@ -108,11 +111,20 @@ Created `requireQuota(resource: 'trucks' | 'drivers' | 'users')` middleware in `
 | `backend/src/routes/invoiceRoutes.ts` | Added `requireActiveSubscription` and `requireFeature('MOD_BILLING_INVOICE')` |
 | `backend/src/routes/settlementRoutes.ts` | Added `requireActiveSubscription` and `requireFeature('MOD_SETTLEMENTS')` |
 | `backend/src/routes/ledgerRoutes.ts` | Added `requireActiveSubscription` and `requireFeature('MOD_LEDGERS')` |
-| `backend/src/routes/customFieldRoutes.ts` | Added `requireActiveSubscription` |
+| `backend/src/routes/customFieldRoutes.ts` | Added `requireActiveSubscription` and `requireFeature('MOD_CUSTOM_FIELDS')` |
 | `backend/src/routes/documentRoutes.ts` | Added `requireActiveSubscription` and `requireFeature('MOD_DOCUMENT_VAULT')` |
 | `backend/src/routes/companyRoutes.ts` | Added `requireActiveSubscription` and `requireQuota('users')` on member invites |
 | `frontend/src/stores/authStore.ts` | Added `enabledFeatures` and `limits` to `AuthState` |
-| `frontend/src/components/common/FeatureGate.tsx` | Connected to `useAuthStore` for automatic feature checking without prop drilling |
+| `frontend/src/stores/uiStore.ts` | Added automatic toast notification deduplication |
+| `frontend/src/components/common/FeatureGate.tsx` | Enhanced with `pageMode`, tier perks, sparkle badges, and upgrade CTA buttons |
+| `frontend/src/styles/components/featureGate.css` | Added styling for locked showcase cards and sidebar lock badges |
+| `frontend/src/components/layout/Sidebar.tsx` | Added `PRO` and `STD` lock badges next to tier-restricted navigation items |
+| `frontend/src/pages/settings/BillingPage.tsx` | Added immediate plan switching, scheduled downgrade banner with "Apply Immediately" button, and auth store re-hydration |
+| `frontend/src/pages/settings/CustomFieldsPage.tsx` | Guarded API fetching and wrapped studio in `FeatureGate` when locked |
+| `frontend/src/pages/commercial/LRListPage.tsx` | Guarded queries and wrapped with `FeatureGate('MOD_LR_ENGINE')` |
+| `frontend/src/pages/commercial/InvoiceListPage.tsx` | Guarded queries and wrapped with `FeatureGate('MOD_BILLING_INVOICE')` |
+| `frontend/src/pages/commercial/SettlementListPage.tsx` | Guarded queries and wrapped with `FeatureGate('MOD_SETTLEMENTS')` |
+| `frontend/src/pages/commercial/LedgerListPage.tsx` | Guarded queries and wrapped with `FeatureGate('MOD_LEDGERS')` |
 
 ---
 

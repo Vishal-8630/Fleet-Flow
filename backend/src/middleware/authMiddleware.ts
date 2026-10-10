@@ -197,17 +197,40 @@ export function requireRole(allowedRoles: UserRole[]) {
  *   `SUBSCRIPTION_SUSPENDED` if the workspace status is `suspended`, `cancelled`,
  *   or `expired`.
  */
-export function requireActiveSubscription(req: Request, res: Response, next: NextFunction): void {
-  const status = req.tenant?.status;
+export async function requireActiveSubscription(req: Request, res: Response, next: NextFunction): Promise<void> {
+  const company = req.company;
+  let status = req.tenant?.status || company?.subscription_status || 'trialing';
 
-  // Read-only methods (GET, HEAD, OPTIONS) are always allowed even when suspended
+  // Read-only methods (GET, HEAD, OPTIONS) are always allowed even when suspended/expired
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
     return next();
   }
 
-  if (['suspended', 'cancelled', 'expired'].includes(status || '')) {
+  // Automatic Trial Expiry Detection
+  if (status === 'trialing' && company?.trial_ends_at) {
+    if (new Date(company.trial_ends_at).getTime() < Date.now()) {
+      status = 'expired';
+      if (req.tenant) req.tenant.status = 'expired';
+      company.subscription_status = 'expired';
+      await Company.findByIdAndUpdate(company._id, { subscription_status: 'expired' }).catch(() => {});
+    }
+  }
+
+  if (status === 'expired') {
+    res.status(403).json({
+      code: 'SUBSCRIPTION_EXPIRED',
+      status: 'expired',
+      is_read_only: true,
+      error: 'Your 14-day free trial has expired. Please upgrade to a paid plan to perform write actions.',
+    });
+    return;
+  }
+
+  if (['suspended', 'cancelled', 'past_due'].includes(status)) {
     res.status(403).json({
       code: 'SUBSCRIPTION_SUSPENDED',
+      status,
+      is_read_only: true,
       error: 'Your workspace is in read-only mode due to an inactive subscription. Please renew your plan to perform write actions.',
     });
     return;

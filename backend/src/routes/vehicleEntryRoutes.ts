@@ -20,12 +20,13 @@ import {
   updateVehicleEntryPOD,
   deleteVehicleEntry,
 } from '../controllers/vehicleEntryController.js';
-import { requireAuth, resolveTenantContext, requireRole } from '../middleware/authMiddleware.js';
+import { requireAuth, resolveTenantContext, requireRole, requireActiveSubscription } from '../middleware/authMiddleware.js';
+import { requireFeature } from '../middleware/entitlementMiddleware.js';
 
 const router = Router();
 
-// Protect all endpoints with tenant context
-router.use(requireAuth, resolveTenantContext);
+// Protect all endpoints with tenant context, subscription status, and module entitlement
+router.use(requireAuth, resolveTenantContext, requireActiveSubscription, requireFeature('MOD_MARKET_VEHICLES'));
 
 // Read listings and metrics
 router.get('/', getVehicleEntries);

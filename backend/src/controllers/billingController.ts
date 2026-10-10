@@ -302,7 +302,7 @@ export async function changePlan(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    const { target_plan_id, billing_cycle = 'monthly' } = req.body;
+    const { target_plan_id, billing_cycle = 'monthly', immediate = true } = req.body;
     const targetPlan = await Plan.findById(target_plan_id);
     if (!targetPlan) {
       res.status(404).json({ error: 'Target plan not found.' });
@@ -323,41 +323,174 @@ export async function changePlan(req: Request, res: Response): Promise<void> {
       ? targetPlan.annual_price_paise
       : targetPlan.monthly_price_paise;
 
-    // Upgrade vs Downgrade
-    if (targetPricePaise >= currentPricePaise) {
-      // Immediate upgrade
+    // Check downgrade headroom quota if switching to a tier with quota caps
+    const [truckCount, driverCount, userCount] = await Promise.all([
+      Truck.countDocuments({ company_id: req.company._id, is_deleted: false }),
+      Driver.countDocuments({ company_id: req.company._id, is_deleted: false }),
+      CompanyMember.countDocuments({ company_id: req.company._id, status: 'active' }),
+    ]);
+
+    if (targetPlan.max_trucks !== -1 && truckCount > targetPlan.max_trucks) {
+      res.status(422).json({
+        code: 'DOWNGRADE_QUOTA_EXCEEDED',
+        error: `Cannot switch to ${targetPlan.name}. You currently have ${truckCount} active trucks, but ${targetPlan.name} allows a maximum of ${targetPlan.max_trucks}. Please decommission ${truckCount - targetPlan.max_trucks} trucks before switching.`,
+      });
+      return;
+    }
+
+    if (targetPlan.max_drivers !== -1 && driverCount > targetPlan.max_drivers) {
+      res.status(422).json({
+        code: 'DOWNGRADE_QUOTA_EXCEEDED',
+        error: `Cannot switch to ${targetPlan.name}. You currently have ${driverCount} active drivers, but ${targetPlan.name} allows a maximum of ${targetPlan.max_drivers}. Please remove ${driverCount - targetPlan.max_drivers} drivers first.`,
+      });
+      return;
+    }
+
+    if (targetPlan.max_users !== -1 && userCount > targetPlan.max_users) {
+      res.status(422).json({
+        code: 'DOWNGRADE_QUOTA_EXCEEDED',
+        error: `Cannot switch to ${targetPlan.name}. You currently have ${userCount} active users, but ${targetPlan.name} allows a maximum of ${targetPlan.max_users}.`,
+      });
+      return;
+    }
+
+    // If upgrading OR if in trial mode OR if immediate change requested: switch immediately
+    if (targetPricePaise >= currentPricePaise || subscription.status === 'trialing' || immediate) {
       subscription.plan_id = targetPlan._id as any;
       subscription.billing_cycle = billing_cycle;
-      subscription.status = 'active';
+      if (subscription.status !== 'trialing') {
+        subscription.status = 'active';
+      }
       subscription.scheduled_change = undefined;
       await subscription.save();
 
-      await Company.findByIdAndUpdate(req.company._id, { subscription_status: 'active' });
+      if (subscription.status !== 'trialing') {
+        await Company.findByIdAndUpdate(req.company._id, { subscription_status: 'active' });
+      }
 
       res.json({
         success: true,
-        type: 'immediate_upgrade',
-        message: `Upgraded to ${targetPlan.name} immediately.`,
+        type: 'immediate_change',
+        message: `Subscription successfully switched to ${targetPlan.name}!`,
         subscription,
       });
-    } else {
-      // Scheduled downgrade at end of current paid cycle
-      subscription.scheduled_change = {
-        action: 'downgrade',
-        target_plan_id: targetPlan._id as any,
-        effective_at: subscription.current_period_end,
-      };
-      await subscription.save();
-
-      res.json({
-        success: true,
-        type: 'scheduled_downgrade',
-        message: `Downgrade to ${targetPlan.name} scheduled for ${subscription.current_period_end.toLocaleDateString()}.`,
-        subscription,
-      });
+      return;
     }
+
+    // Otherwise scheduled downgrade at end of paid period
+    subscription.scheduled_change = {
+      action: 'downgrade',
+      target_plan_id: targetPlan._id as any,
+      effective_at: subscription.current_period_end,
+    };
+    await subscription.save();
+
+    res.json({
+      success: true,
+      type: 'scheduled_downgrade',
+      message: `Downgrade to ${targetPlan.name} scheduled for ${subscription.current_period_end.toLocaleDateString()}.`,
+      subscription,
+    });
   } catch (error: any) {
     res.status(500).json({ error: error.message || 'Failed to change plan.' });
+  }
+}
+
+/**
+ * POST /api/billing/apply-scheduled
+ * Immediately activates any pending scheduled plan downgrade or change.
+ */
+export async function applyScheduledChange(req: Request, res: Response): Promise<void> {
+  try {
+    if (!req.company) {
+      res.status(401).json({ error: 'Company context required.' });
+      return;
+    }
+
+    const subscription = await Subscription.findOne({ company_id: req.company._id });
+    if (!subscription || !subscription.scheduled_change?.target_plan_id) {
+      res.status(400).json({ error: 'No scheduled plan change found.' });
+      return;
+    }
+
+    const targetPlan = await Plan.findById(subscription.scheduled_change.target_plan_id);
+    if (!targetPlan) {
+      res.status(404).json({ error: 'Scheduled target plan not found.' });
+      return;
+    }
+
+    // Check downgrade headroom quota
+    const [truckCount, driverCount, userCount] = await Promise.all([
+      Truck.countDocuments({ company_id: req.company._id, is_deleted: false }),
+      Driver.countDocuments({ company_id: req.company._id, is_deleted: false }),
+      CompanyMember.countDocuments({ company_id: req.company._id, status: 'active' }),
+    ]);
+
+    if (targetPlan.max_trucks !== -1 && truckCount > targetPlan.max_trucks) {
+      res.status(422).json({
+        code: 'DOWNGRADE_QUOTA_EXCEEDED',
+        error: `Cannot switch to ${targetPlan.name}. You currently have ${truckCount} active trucks, but ${targetPlan.name} allows a maximum of ${targetPlan.max_trucks}. Please decommission ${truckCount - targetPlan.max_trucks} trucks before switching.`,
+      });
+      return;
+    }
+
+    if (targetPlan.max_drivers !== -1 && driverCount > targetPlan.max_drivers) {
+      res.status(422).json({
+        code: 'DOWNGRADE_QUOTA_EXCEEDED',
+        error: `Cannot switch to ${targetPlan.name}. You currently have ${driverCount} active drivers, but ${targetPlan.name} allows a maximum of ${targetPlan.max_drivers}. Please remove ${driverCount - targetPlan.max_drivers} drivers first.`,
+      });
+      return;
+    }
+
+    if (targetPlan.max_users !== -1 && userCount > targetPlan.max_users) {
+      res.status(422).json({
+        code: 'DOWNGRADE_QUOTA_EXCEEDED',
+        error: `Cannot switch to ${targetPlan.name}. You currently have ${userCount} active users, but ${targetPlan.name} allows a maximum of ${targetPlan.max_users}.`,
+      });
+      return;
+    }
+
+    subscription.plan_id = targetPlan._id as any;
+    subscription.scheduled_change = undefined;
+    await subscription.save();
+
+    res.json({
+      success: true,
+      message: `Plan successfully switched to ${targetPlan.name} immediately!`,
+      subscription,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Failed to apply scheduled plan.' });
+  }
+}
+
+/**
+ * POST /api/billing/cancel-scheduled
+ * Cancels a pending scheduled plan downgrade.
+ */
+export async function cancelScheduledChange(req: Request, res: Response): Promise<void> {
+  try {
+    if (!req.company) {
+      res.status(401).json({ error: 'Company context required.' });
+      return;
+    }
+
+    const subscription = await Subscription.findOne({ company_id: req.company._id });
+    if (!subscription || !subscription.scheduled_change) {
+      res.status(400).json({ error: 'No scheduled plan change found.' });
+      return;
+    }
+
+    subscription.scheduled_change = undefined;
+    await subscription.save();
+
+    res.json({
+      success: true,
+      message: 'Scheduled plan change has been cancelled.',
+      subscription,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Failed to cancel scheduled plan change.' });
   }
 }
 

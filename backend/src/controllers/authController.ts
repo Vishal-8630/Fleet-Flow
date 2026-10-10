@@ -27,6 +27,7 @@ import crypto from 'crypto';
 import { User } from '../models/User.js';
 import { Company } from '../models/Company.js';
 import { CompanyMember } from '../models/CompanyMember.js';
+import { getTenantEntitlements } from '../utils/entitlementService.js';
 
 /**
  * Returns the JWT signing secret dynamically from process.env to guarantee
@@ -174,6 +175,8 @@ export async function login(req: Request, res: Response): Promise<void> {
 
     res.cookie('token', token, getCookieOptions());
 
+    const entitlements = await getTenantEntitlements(company);
+
     res.json({
       message: 'Login successful.',
       user: {
@@ -182,8 +185,18 @@ export async function login(req: Request, res: Response): Promise<void> {
         email: user.email,
         isSuperAdmin: user.is_platform_super_admin,
       },
-      company: { id: company._id, name: company.name, slug: company.slug, status: company.subscription_status },
+      company: {
+        id: company._id,
+        name: company.name,
+        slug: company.slug,
+        status: company.subscription_status,
+        plan: entitlements.plan,
+        trialEndsAt: company.trial_ends_at,
+      },
       role: membership.role,
+      enabledFeatures: entitlements.enabled_features,
+      limits: entitlements.limits,
+      isReadOnly: entitlements.is_read_only,
     });
   } catch (error: any) {
     res.status(500).json({ error: error.message || 'Login failed.' });
@@ -205,9 +218,22 @@ export async function logout(_req: Request, res: Response): Promise<void> {
  * ----------------------------------------------------------------------------
  * Session hydration endpoint invoked by the frontend upon page load or app boot.
  * Returns the current authenticated user's profile, active company settings,
- * subscription status, and role.
+ * subscription status, entitlements, limits, and role.
  */
 export async function getMe(req: Request, res: Response): Promise<void> {
+  let enabledFeatures: string[] = [];
+  let limits = { max_trucks: 5, max_drivers: 5, max_users: 2 };
+  let isReadOnly = false;
+  let planInfo = { code: 'standard', name: 'Standard Plan' };
+
+  if (req.company) {
+    const entitlements = await getTenantEntitlements(req.company);
+    enabledFeatures = entitlements.enabled_features;
+    limits = entitlements.limits;
+    isReadOnly = entitlements.is_read_only;
+    planInfo = entitlements.plan;
+  }
+
   res.json({
     user: {
       id: req.user?._id,
@@ -223,8 +249,12 @@ export async function getMe(req: Request, res: Response): Promise<void> {
       settings: req.company?.settings,
       status: req.company?.subscription_status,
       trialEndsAt: req.company?.trial_ends_at,
+      plan: planInfo,
     },
     role: req.member?.role,
+    enabledFeatures,
+    limits,
+    isReadOnly,
   });
 }
 

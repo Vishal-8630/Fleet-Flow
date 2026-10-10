@@ -253,3 +253,48 @@ export function validateDependencies(enabledKeys: ModuleKey[]): { valid: boolean
 
   return { valid, missing };
 }
+
+/**
+ * Validates module dependencies returning array of missing requirement objects.
+ */
+export function validateModuleDependencies(modules: ModuleKey[]): {
+  valid: boolean;
+  missing: Array<{ module: ModuleKey; requires: ModuleKey[] }>;
+} {
+  const set = new Set(modules);
+  const missing: Array<{ module: ModuleKey; requires: ModuleKey[] }> = [];
+
+  for (const mod of modules) {
+    const def = MOD_CATALOG[mod];
+    if (!def) continue;
+    const unfulfilled = def.dependencies.filter((d) => !set.has(d));
+    if (unfulfilled.length > 0) {
+      missing.push({ module: mod, requires: unfulfilled });
+    }
+  }
+
+  return { valid: missing.length === 0, missing };
+}
+
+/**
+ * Recursively resolves and returns all required dependencies for a given list of modules.
+ */
+export function resolveModuleDependencies(modules: ModuleKey[]): ModuleKey[] {
+  const result = new Set<ModuleKey>(modules);
+  let added = true;
+  while (added) {
+    added = false;
+    for (const mod of Array.from(result)) {
+      const def = MOD_CATALOG[mod];
+      if (def) {
+        for (const dep of def.dependencies) {
+          if (!result.has(dep)) {
+            result.add(dep);
+            added = true;
+          }
+        }
+      }
+    }
+  }
+  return Array.from(result);
+}

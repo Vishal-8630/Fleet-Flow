@@ -19,6 +19,7 @@ import { Pagination } from '../../components/common/Pagination';
 import { Modal } from '../../components/common/Modal';
 import { toast } from '../../stores/uiStore';
 import { useAuthStore } from '../../stores/authStore';
+import { FeatureGate } from '../../components/common/FeatureGate';
 import {
   FileSpreadsheet,
   CheckCircle2,
@@ -37,7 +38,8 @@ import {
 
 export const InvoiceListPage: React.FC = () => {
   const queryClient = useQueryClient();
-  const { role } = useAuthStore();
+  const { role, enabledFeatures = [] } = useAuthStore();
+  const isUnlocked = enabledFeatures.includes('MOD_BILLING_INVOICE');
   const canEdit = role === 'admin' || role === 'accountant';
 
   // State
@@ -80,6 +82,7 @@ export const InvoiceListPage: React.FC = () => {
   // Queries
   const { data: metricsData } = useQuery({
     queryKey: ['invoice-metrics'],
+    enabled: isUnlocked,
     queryFn: async () => {
       const res = await api.get('/commercial/invoices/metrics');
       return res.data?.metrics;
@@ -88,6 +91,7 @@ export const InvoiceListPage: React.FC = () => {
 
   const { data: invoicesData, isLoading } = useQuery({
     queryKey: ['invoice-list', page, statusFilter, rcmFilter, searchQuery],
+    enabled: isUnlocked,
     queryFn: async () => {
       const params: any = { page, limit: 12 };
       if (statusFilter) params.status = statusFilter;
@@ -100,6 +104,7 @@ export const InvoiceListPage: React.FC = () => {
 
   const { data: partiesData } = useQuery({
     queryKey: ['billing-parties-lookup'],
+    enabled: isUnlocked,
     queryFn: async () => {
       const res = await api.get('/parties/billing', { params: { limit: 100 } });
       return res.data?.parties || [];
@@ -116,7 +121,7 @@ export const InvoiceListPage: React.FC = () => {
       });
       return res.data?.entries || [];
     },
-    enabled: Boolean(invoiceForm.billing_party_id),
+    enabled: isUnlocked && Boolean(invoiceForm.billing_party_id),
   });
 
   // Mutations
@@ -232,6 +237,29 @@ export const InvoiceListPage: React.FC = () => {
       },
     });
   };
+
+  if (!isUnlocked) {
+    return (
+      <div className="page-shell">
+        <PageHeader
+          title="GST Freight Invoicing"
+          subtitle="GTA Freight Tax Invoices complying with Indian GST laws, Section 9(3) RCM, and line item collections"
+          breadcrumbs={[
+            { label: 'Commercial OS', href: '/invoices' },
+            { label: 'Tax Invoices' },
+          ]}
+        />
+        <FeatureGate
+          feature="MOD_BILLING_INVOICE"
+          pageMode={true}
+          titleOverride="GST Tax Invoicing is Locked"
+          descOverride="Generating Section 9(3) RCM vs Forward Charge GST tax invoices, recording collections, and ledger posting require the Standard Commercial or Pro Enterprise tier."
+        >
+          {null}
+        </FeatureGate>
+      </div>
+    );
+  }
 
   return (
     <div className="page-shell">

@@ -32,7 +32,8 @@ import {
   verifyInvitationToken,
   acceptInvitation,
 } from '../controllers/companyController.js';
-import { requireAuth, resolveTenantContext, requireRole } from '../middleware/authMiddleware.js';
+import { requireAuth, resolveTenantContext, requireRole, requireActiveSubscription } from '../middleware/authMiddleware.js';
+import { requireQuota } from '../middleware/entitlementMiddleware.js';
 
 const router = Router();
 
@@ -44,10 +45,10 @@ router.post('/invitations/accept', acceptInvitation);
 
 // ----------------------------------------------------------------------------
 // Tenant-Scoped Authenticated Endpoints
-// Every downstream route requires valid login and resolves active company context
+// Every downstream route requires valid login, resolves active company context,
+// and respects subscription read-only lifecycle rules
 // ----------------------------------------------------------------------------
-router.use(requireAuth);
-router.use(resolveTenantContext);
+router.use(requireAuth, resolveTenantContext, requireActiveSubscription);
 
 // Company Profile & Operational Formatting
 router.get('/profile', getCompanyProfile);
@@ -55,7 +56,7 @@ router.put('/profile', requireRole(['admin']), updateCompanyProfile);
 
 // Team Members & Access Permissions
 router.get('/members', listCompanyMembers);
-router.post('/members/invite', requireRole(['admin']), inviteCompanyMember);
+router.post('/members/invite', requireRole(['admin']), requireQuota('users'), inviteCompanyMember);
 router.patch('/members/:id/role', requireRole(['admin']), updateMemberRole);
 router.patch('/members/:id/status', requireRole(['admin']), updateMemberStatus);
 router.delete('/members/:id', requireRole(['admin']), removeMember);

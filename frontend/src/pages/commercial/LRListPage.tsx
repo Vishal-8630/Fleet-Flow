@@ -19,6 +19,7 @@ import { Pagination } from '../../components/common/Pagination';
 import { Modal } from '../../components/common/Modal';
 import { toast } from '../../stores/uiStore';
 import { useAuthStore } from '../../stores/authStore';
+import { FeatureGate } from '../../components/common/FeatureGate';
 import {
   Receipt,
   FileCheck2,
@@ -38,7 +39,8 @@ import {
 
 export const LRListPage: React.FC = () => {
   const queryClient = useQueryClient();
-  const { role } = useAuthStore();
+  const { role, enabledFeatures = [] } = useAuthStore();
+  const isUnlocked = enabledFeatures.includes('MOD_LR_ENGINE');
   const canEdit = role === 'admin' || role === 'dispatcher' || role === 'accountant';
 
   // State
@@ -90,6 +92,7 @@ export const LRListPage: React.FC = () => {
   // Queries
   const { data: metricsData } = useQuery({
     queryKey: ['lr-metrics'],
+    enabled: isUnlocked,
     queryFn: async () => {
       const res = await api.get('/commercial/entries/metrics');
       return res.data?.metrics;
@@ -98,6 +101,7 @@ export const LRListPage: React.FC = () => {
 
   const { data: lrsData, isLoading } = useQuery({
     queryKey: ['lr-list', page, statusFilter, termsFilter, searchQuery],
+    enabled: isUnlocked,
     queryFn: async () => {
       const params: any = { page, limit: 12 };
       if (statusFilter) params.status = statusFilter;
@@ -110,6 +114,7 @@ export const LRListPage: React.FC = () => {
 
   const { data: partiesData } = useQuery({
     queryKey: ['billing-parties-lookup'],
+    enabled: isUnlocked,
     queryFn: async () => {
       const res = await api.get('/parties/billing', { params: { limit: 100 } });
       return res.data?.parties || [];
@@ -213,6 +218,29 @@ export const LRListPage: React.FC = () => {
       }
     }
   };
+
+  if (!isUnlocked) {
+    return (
+      <div className="page-shell">
+        <PageHeader
+          title="Lorry Receipts (LR / Bilty)"
+          subtitle="Manage official 3-part consignment notes, freight billing terms, and dispatch manifests"
+          breadcrumbs={[
+            { label: 'Commercial OS', href: '/bill-entry/all' },
+            { label: 'Lorry Receipts' },
+          ]}
+        />
+        <FeatureGate
+          feature="MOD_LR_ENGINE"
+          pageMode={true}
+          titleOverride="Lorry Receipt (LR) Engine is Locked"
+          descOverride="Official 3-part consignment notes, freight billing terms, and dispatch manifests require the Standard Commercial or Pro Enterprise tier."
+        >
+          {null}
+        </FeatureGate>
+      </div>
+    );
+  }
 
   return (
     <div className="page-shell">

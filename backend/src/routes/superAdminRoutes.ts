@@ -18,6 +18,7 @@ import {
   overrideTenantQuota,
   extendTenantTrial,
   toggleTenantStatus,
+  assignTenantPlan,
   impersonateTenant,
   getAuditLogs,
   getPlatformPlansCatalog,
@@ -41,6 +42,7 @@ router.get('/tenants', listAllTenants);
 router.patch('/tenants/:id/override', overrideTenantQuota);
 router.patch('/tenants/:id/extend-trial', extendTenantTrial);
 router.patch('/tenants/:id/status', toggleTenantStatus);
+router.patch('/tenants/:id/plan', assignTenantPlan);
 router.post('/tenants/:id/impersonate', impersonateTenant);
 router.get('/audit-logs', getAuditLogs);
 

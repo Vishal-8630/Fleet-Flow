@@ -28,6 +28,8 @@ import { Plus, Database, Archive, Trash2, CheckCircle, Sliders, Edit3 } from 'lu
 import { PageHeader } from '../../components/common/PageHeader';
 import { Modal } from '../../components/common/Modal';
 import { toast } from '../../stores/uiStore';
+import { useAuthStore } from '../../stores/authStore';
+import { FeatureGate } from '../../components/common/FeatureGate';
 
 type EntityType = 'Truck' | 'Driver' | 'TruckJourney' | 'BillingParty' | 'BalanceParty' | 'Entry';
 
@@ -55,6 +57,9 @@ const ENTITIES: { key: EntityType; label: string }[] = [
 ];
 
 export const CustomFieldsPage: React.FC = () => {
+  const enabledFeatures = useAuthStore((state) => state.enabledFeatures);
+  const isUnlocked = enabledFeatures.includes('MOD_CUSTOM_FIELDS');
+
   const [activeEntity, setActiveEntity] = useState<EntityType>('Truck');
   const [fields, setFields] = useState<CustomField[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -73,10 +78,15 @@ export const CustomFieldsPage: React.FC = () => {
   });
 
   useEffect(() => {
+    if (!isUnlocked) {
+      setLoading(false);
+      return;
+    }
     fetchCustomFields();
-  }, [activeEntity]);
+  }, [activeEntity, isUnlocked]);
 
   const fetchCustomFields = async () => {
+    if (!isUnlocked) return;
     try {
       setLoading(true);
       const res = await axios.get(`/api/settings/custom-fields?entity=${activeEntity}&include_archived=true`, {
@@ -84,6 +94,10 @@ export const CustomFieldsPage: React.FC = () => {
       });
       setFields(res.data.fields || []);
     } catch (err: any) {
+      if (err.response?.status === 403) {
+        useAuthStore.getState().checkAuth();
+        return;
+      }
       toast.error(err.response?.data?.error || 'Failed to load custom fields.');
     } finally {
       setLoading(false);
@@ -180,33 +194,46 @@ export const CustomFieldsPage: React.FC = () => {
         title="Dynamic Custom Fields Studio"
         subtitle="Define custom attributes, metadata, and validation rules per operational entity"
         actions={
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => setModalOpen(true)}
-          >
-            <Plus size={16} />
-            Register Custom Field
-          </button>
+          isUnlocked ? (
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => setModalOpen(true)}
+            >
+              <Plus size={16} />
+              Register Custom Field
+            </button>
+          ) : undefined
         }
       />
 
-      {/* Entity Selector Tabs */}
-      <div className="custom-fields-entity-tabs">
-        {ENTITIES.map((ent) => (
-          <button
-            key={ent.key}
-            type="button"
-            className={`entity-tab-btn ${activeEntity === ent.key ? 'active' : ''}`}
-            onClick={() => setActiveEntity(ent.key)}
-          >
-            {ent.label}
-          </button>
-        ))}
-      </div>
+      {!isUnlocked ? (
+        <FeatureGate
+          feature="MOD_CUSTOM_FIELDS"
+          pageMode={true}
+          titleOverride="Dynamic Custom Fields Studio is Locked"
+          descOverride="Define custom attributes, metadata, and validation rules across Trucks, Drivers, Trips, Parties, and LRs. Upgrade to Pro Enterprise to unlock custom fields studio."
+        >
+          {null}
+        </FeatureGate>
+      ) : (
+        <>
+          {/* Entity Selector Tabs */}
+          <div className="custom-fields-entity-tabs">
+            {ENTITIES.map((ent) => (
+              <button
+                key={ent.key}
+                type="button"
+                className={`entity-tab-btn ${activeEntity === ent.key ? 'active' : ''}`}
+                onClick={() => setActiveEntity(ent.key)}
+              >
+                {ent.label}
+              </button>
+            ))}
+          </div>
 
-      {/* Custom Fields Table */}
-      <div className="card" style={{ padding: 0 }}>
+          {/* Custom Fields Table */}
+          <div className="card" style={{ padding: 0 }}>
         {loading ? (
           <div style={{ padding: '60px', textAlign: 'center' }}>
             <div className="loading-spinner" />
@@ -308,6 +335,8 @@ export const CustomFieldsPage: React.FC = () => {
           </div>
         )}
       </div>
+    </>
+  )}
 
       {/* Register Custom Field Modal */}
       <Modal

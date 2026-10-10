@@ -20,6 +20,7 @@ import { Pagination } from '../../components/common/Pagination';
 import { Modal } from '../../components/common/Modal';
 import { toast } from '../../stores/uiStore';
 import { useAuthStore } from '../../stores/authStore';
+import { FeatureGate } from '../../components/common/FeatureGate';
 import {
   BookOpen,
   TrendingUp,
@@ -39,7 +40,8 @@ import {
 
 export const LedgerListPage: React.FC = () => {
   const queryClient = useQueryClient();
-  const { role } = useAuthStore();
+  const { role, enabledFeatures = [] } = useAuthStore();
+  const isUnlocked = enabledFeatures.includes('MOD_LEDGERS');
   const canEdit = role === 'admin' || role === 'accountant';
 
   // State
@@ -83,6 +85,7 @@ export const LedgerListPage: React.FC = () => {
   // Queries
   const { data: summaryData } = useQuery({
     queryKey: ['ledger-summary'],
+    enabled: isUnlocked,
     queryFn: async () => {
       const res = await api.get('/commercial/ledger/summary');
       return res.data?.summary;
@@ -99,7 +102,7 @@ export const LedgerListPage: React.FC = () => {
       const res = await api.get('/commercial/ledger', { params });
       return res.data;
     },
-    enabled: activeTab === 'ledger',
+    enabled: isUnlocked && activeTab === 'ledger',
   });
 
   const { data: vendorBalancesData, isLoading: isVendorsLoading } = useQuery({
@@ -108,7 +111,7 @@ export const LedgerListPage: React.FC = () => {
       const res = await api.get('/commercial/ledger/party-balances');
       return res.data?.party_balances || [];
     },
-    enabled: activeTab === 'vendors',
+    enabled: isUnlocked && activeTab === 'vendors',
   });
 
   // Query single vendor statement
@@ -206,6 +209,29 @@ export const LedgerListPage: React.FC = () => {
       },
     });
   };
+
+  if (!isUnlocked) {
+    return (
+      <div className="page-shell">
+        <PageHeader
+          title="General Ledger & Accounts"
+          subtitle="Double-entry journal accounting across 17 commercial categories with sub-contractor fleet reconciliation"
+          breadcrumbs={[
+            { label: 'Commercial OS', href: '/ledger' },
+            { label: 'Financial Ledger' },
+          ]}
+        />
+        <FeatureGate
+          feature="MOD_LEDGERS"
+          pageMode={true}
+          titleOverride="Double-Entry General Ledger is Locked"
+          descOverride="Double-entry journal accounting across 17 categories, counter-balancing reversals, and vendor reconciliation require the Standard Commercial or Pro Enterprise tier."
+        >
+          {null}
+        </FeatureGate>
+      </div>
+    );
+  }
 
   return (
     <div className="page-shell">

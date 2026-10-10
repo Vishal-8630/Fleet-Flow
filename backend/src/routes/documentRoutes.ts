@@ -18,12 +18,13 @@ import {
   getPresignedUrl,
   serveLocalFile,
 } from '../controllers/documentController.js';
-import { requireAuth, resolveTenantContext } from '../middleware/authMiddleware.js';
+import { requireAuth, resolveTenantContext, requireActiveSubscription } from '../middleware/authMiddleware.js';
+import { requireFeature } from '../middleware/entitlementMiddleware.js';
 
 const router = Router();
 
-// Protect all document routes with authentication and tenant isolation
-router.use(requireAuth, resolveTenantContext);
+// Protect all document routes with authentication, tenant isolation, subscription status, and module entitlement
+router.use(requireAuth, resolveTenantContext, requireActiveSubscription, requireFeature('MOD_DOCUMENT_VAULT'));
 
 // Upload statutory compliance document
 router.post('/upload', documentUploadMiddleware, uploadDocument);

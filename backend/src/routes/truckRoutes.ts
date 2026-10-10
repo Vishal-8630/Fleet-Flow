@@ -20,19 +20,20 @@ import {
   assignDriver,
   unassignDriver,
 } from '../controllers/truckController.js';
-import { requireAuth, resolveTenantContext, requireRole } from '../middleware/authMiddleware.js';
+import { requireAuth, resolveTenantContext, requireRole, requireActiveSubscription } from '../middleware/authMiddleware.js';
+import { requireFeature, requireQuota } from '../middleware/entitlementMiddleware.js';
 
 const router = Router();
 
-// Protect all fleet routes with authentication and tenant context
-router.use(requireAuth, resolveTenantContext);
+// Protect all fleet routes with authentication, tenant context, subscription status, and module entitlement
+router.use(requireAuth, resolveTenantContext, requireActiveSubscription, requireFeature('MOD_FLEET'));
 
 // Read fleet listings and details (Accessible to all authenticated tenant members)
 router.get('/', listTrucks);
 router.get('/:id', getTruckById);
 
 // Create, edit, and soft-delete vehicles (Admin & Dispatcher roles)
-router.post('/', requireRole(['admin', 'dispatcher']), createTruck);
+router.post('/', requireRole(['admin', 'dispatcher']), requireQuota('trucks'), createTruck);
 router.put('/:id', requireRole(['admin', 'dispatcher']), updateTruck);
 router.delete('/:id', requireRole(['admin']), deleteTruck);
 

@@ -47,13 +47,27 @@ export const useUiStore = create<UiState>((set) => ({
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
   
   /**
-   * Pushes a new toast alert to the queue and returns its unique ID
+   * Pushes a new toast alert to the queue and returns its unique ID.
+   * Automatically deduplicates identical consecutive or concurrent notifications.
    */
   addToast: (toast) => {
-    const id = Math.random().toString(36).substring(2, 9);
-    const newToast: Toast = { ...toast, id, duration: toast.duration || 4500 };
-    set((state) => ({ toasts: [...state.toasts, newToast] }));
-    return id;
+    let existingId = '';
+    set((state) => {
+      const isDuplicate = state.toasts.some(
+        (t) => t.message === toast.message && t.type === toast.type
+      );
+      if (isDuplicate) {
+        existingId = state.toasts.find(
+          (t) => t.message === toast.message && t.type === toast.type
+        )?.id || '';
+        return state;
+      }
+      const id = Math.random().toString(36).substring(2, 9);
+      existingId = id;
+      const newToast: Toast = { ...toast, id, duration: toast.duration || 4500 };
+      return { toasts: [...state.toasts, newToast] };
+    });
+    return existingId;
   },
 
   /**

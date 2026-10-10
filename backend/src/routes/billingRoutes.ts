@@ -19,6 +19,8 @@ import {
   initializeCheckout,
   verifyPayment,
   changePlan,
+  applyScheduledChange,
+  cancelScheduledChange,
   toggleAddon,
   handleBillingWebhook,
 } from '../controllers/billingController.js';
@@ -40,6 +42,8 @@ router.post('/calculate-change', calculatePlanChangePreview);
 router.post('/checkout', initializeCheckout);
 router.post('/verify-payment', requireRole(['admin']), verifyPayment);
 router.post('/change-plan', requireRole(['admin']), changePlan);
+router.post('/apply-scheduled', requireRole(['admin']), applyScheduledChange);
+router.post('/cancel-scheduled', requireRole(['admin']), cancelScheduledChange);
 router.post('/toggle-addon', requireRole(['admin']), toggleAddon);
 
 export default router;

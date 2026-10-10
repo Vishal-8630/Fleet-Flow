@@ -29,6 +29,7 @@
 
 import { create } from 'zustand';
 import { api } from '../api/client';
+import { ModuleKey } from '../utils/featureCatalog';
 
 export type UserRole = 'admin' | 'dispatcher' | 'accountant' | 'viewer';
 
@@ -46,6 +47,10 @@ export interface Company {
   slug: string;
   status: 'trialing' | 'active' | 'past_due' | 'suspended' | 'cancelled' | 'expired';
   trialEndsAt?: string;
+  plan?: {
+    code: string;
+    name: string;
+  };
   settings?: {
     currency: string;
     timezone: string;
@@ -55,10 +60,19 @@ export interface Company {
   };
 }
 
+export interface ResourceLimits {
+  max_trucks: number;
+  max_drivers: number;
+  max_users: number;
+}
+
 interface AuthState {
   user: User | null;
   company: Company | null;
   role: UserRole | null;
+  enabledFeatures: ModuleKey[];
+  limits: ResourceLimits | null;
+  isReadOnly: boolean;
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
@@ -75,7 +89,7 @@ interface AuthState {
     gstin?: string;
   }) => Promise<void>;
   logout: () => Promise<void>;
-  setAuth: (user: User, company: Company, role?: UserRole) => void;
+  setAuth: (user: User, company: Company, role?: UserRole, enabledFeatures?: ModuleKey[], limits?: ResourceLimits | null) => void;
   clearError: () => void;
 }
 
@@ -83,6 +97,9 @@ export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   company: null,
   role: null,
+  enabledFeatures: [],
+  limits: null,
+  isReadOnly: false,
   isAuthenticated: false,
   isLoading: true,
   error: null,
@@ -98,6 +115,9 @@ export const useAuthStore = create<AuthState>((set) => ({
         user: res.data.user,
         company: res.data.company,
         role: res.data.role,
+        enabledFeatures: res.data.enabledFeatures || [],
+        limits: res.data.limits || null,
+        isReadOnly: Boolean(res.data.isReadOnly),
         isAuthenticated: true,
         isLoading: false,
       });
@@ -106,6 +126,9 @@ export const useAuthStore = create<AuthState>((set) => ({
         user: null,
         company: null,
         role: null,
+        enabledFeatures: [],
+        limits: null,
+        isReadOnly: false,
         isAuthenticated: false,
         isLoading: false,
       });
@@ -123,6 +146,9 @@ export const useAuthStore = create<AuthState>((set) => ({
         user: res.data.user,
         company: res.data.company,
         role: res.data.role,
+        enabledFeatures: res.data.enabledFeatures || [],
+        limits: res.data.limits || null,
+        isReadOnly: Boolean(res.data.isReadOnly),
         isAuthenticated: true,
         isLoading: false,
       });
@@ -143,6 +169,9 @@ export const useAuthStore = create<AuthState>((set) => ({
         user: res.data.user,
         company: res.data.company,
         role: 'admin',
+        enabledFeatures: res.data.enabledFeatures || [],
+        limits: res.data.limits || null,
+        isReadOnly: false,
         isAuthenticated: true,
         isLoading: false,
       });
@@ -163,6 +192,9 @@ export const useAuthStore = create<AuthState>((set) => ({
         user: null,
         company: null,
         role: null,
+        enabledFeatures: [],
+        limits: null,
+        isReadOnly: false,
         isAuthenticated: false,
         isLoading: false,
         error: null,
@@ -173,11 +205,14 @@ export const useAuthStore = create<AuthState>((set) => ({
   /**
    * Helper to set authenticated state directly (used during invitation acceptance)
    */
-  setAuth: (user, company, role = 'dispatcher') => {
+  setAuth: (user, company, role = 'dispatcher', enabledFeatures = [], limits = null) => {
     set({
       user,
       company,
       role,
+      enabledFeatures,
+      limits,
+      isReadOnly: false,
       isAuthenticated: true,
       isLoading: false,
       error: null,

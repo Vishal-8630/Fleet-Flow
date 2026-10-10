@@ -26,6 +26,7 @@ import { PlatformAuditLog } from '../models/PlatformAuditLog.js';
 import { PlatformSetting } from '../models/PlatformSetting.js';
 import { PromoCode } from '../models/PromoCode.js';
 import { seedBillingCatalog } from '../utils/billingSeedService.js';
+import { validateModuleDependencies } from '../utils/featureCatalog.js';
 
 /**
  * GET /api/super-admin/kpis
@@ -170,6 +171,21 @@ export async function overrideTenantQuota(req: Request, res: Response): Promise<
       return;
     }
 
+    if (custom_feature_grants && Array.isArray(custom_feature_grants) && custom_feature_grants.length > 0) {
+      const depCheck = validateModuleDependencies(custom_feature_grants);
+      if (!depCheck.valid) {
+        const errorMsg = depCheck.missing
+          .map((m) => `Module ${m.module} requires: ${m.requires.join(', ')}`)
+          .join('; ');
+        res.status(400).json({
+          code: 'INVALID_MODULE_DEPENDENCIES',
+          error: `Cannot grant features. Missing required module dependencies: ${errorMsg}`,
+          details: depCheck.missing,
+        });
+        return;
+      }
+    }
+
     const subscription = await Subscription.findOneAndUpdate(
       { company_id: company._id },
       {
@@ -302,6 +318,65 @@ export async function toggleTenantStatus(req: Request, res: Response): Promise<v
     });
   } catch (error: any) {
     res.status(500).json({ error: error.message || 'Failed to update tenant status.' });
+  }
+}
+
+/**
+ * PATCH /api/super-admin/tenants/:id/plan
+ * Super admin can immediately reassign a tenant to any pricing tier.
+ */
+export async function assignTenantPlan(req: Request, res: Response): Promise<void> {
+  try {
+    const { id } = req.params;
+    const { plan_id, plan_code } = req.body;
+
+    const company = await Company.findById(id);
+    if (!company) {
+      res.status(404).json({ error: 'Company not found.' });
+      return;
+    }
+
+    let plan = null;
+    if (plan_id) {
+      plan = await Plan.findById(plan_id);
+    } else if (plan_code) {
+      plan = await Plan.findOne({ code: plan_code });
+    }
+
+    if (!plan) {
+      res.status(404).json({ error: 'Plan not found.' });
+      return;
+    }
+
+    const subscription = await Subscription.findOneAndUpdate(
+      { company_id: company._id },
+      {
+        $set: {
+          plan_id: plan._id,
+          scheduled_change: undefined,
+        },
+      },
+      { new: true, upsert: true }
+    ).populate('plan_id');
+
+    await PlatformAuditLog.create({
+      actor_user_id: req.user!._id,
+      actor_email: req.user!.email,
+      action: 'plan_reassigned',
+      target_company_id: company._id,
+      target_company_name: company.name,
+      ip_address: req.ip,
+      user_agent: req.headers['user-agent'],
+      details: { new_plan_code: plan.code, new_plan_name: plan.name },
+    });
+
+    res.json({
+      success: true,
+      message: `Successfully assigned ${plan.name} to ${company.name}.`,
+      subscription,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Failed to assign plan.' });
   }
 }
 
@@ -443,7 +518,21 @@ export async function updatePlan(req: Request, res: Response): Promise<void> {
     if (max_trucks !== undefined) plan.max_trucks = Number(max_trucks);
     if (max_drivers !== undefined) plan.max_drivers = Number(max_drivers);
     if (max_users !== undefined) plan.max_users = Number(max_users);
-    if (included_features !== undefined) plan.included_features = included_features;
+    if (included_features !== undefined) {
+      const depCheck = validateModuleDependencies(included_features);
+      if (!depCheck.valid) {
+        const errorMsg = depCheck.missing
+          .map((m) => `Module ${m.module} requires: ${m.requires.join(', ')}`)
+          .join('; ');
+        res.status(400).json({
+          code: 'INVALID_MODULE_DEPENDENCIES',
+          error: `Cannot update plan. Missing required module dependencies: ${errorMsg}`,
+          details: depCheck.missing,
+        });
+        return;
+      }
+      plan.included_features = included_features;
+    }
     if (is_active !== undefined) plan.is_active = Boolean(is_active);
     if (is_public !== undefined) plan.is_public = Boolean(is_public);
 

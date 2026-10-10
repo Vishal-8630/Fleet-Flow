@@ -16,6 +16,9 @@
 import { Request, Response, NextFunction } from 'express';
 import { ModuleKey, MOD_CATALOG } from '../utils/featureCatalog.js';
 import { hasFeatureAccess, getTenantEntitlements } from '../utils/entitlementService.js';
+import { Truck } from '../models/Truck.js';
+import { Driver } from '../models/Driver.js';
+import { CompanyMember } from '../models/CompanyMember.js';
 
 /**
  * Ensures the tenant has access to a specific module before executing the route.
@@ -76,6 +79,75 @@ export function requireAllFeatures(moduleKeys: ModuleKey[]) {
       next();
     } catch (error: any) {
       res.status(500).json({ error: 'Failed to verify feature entitlements.' });
+    }
+  };
+}
+
+/**
+ * Ensures the tenant has not exceeded their plan quota for resources (trucks, drivers, user seats).
+ */
+export function requireQuota(resource: 'trucks' | 'drivers' | 'users') {
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      if (!req.company) {
+        res.status(401).json({ error: 'Company context required for quota check.' });
+        return;
+      }
+
+      const companyId = req.company._id;
+      const entitlements = await getTenantEntitlements(req.company);
+      const limits = entitlements.limits;
+
+      if (resource === 'trucks') {
+        const limit = limits.max_trucks;
+        if (limit !== -1) {
+          const currentCount = await Truck.countDocuments({ company_id: companyId, is_deleted: false });
+          if (currentCount >= limit) {
+            res.status(403).json({
+              code: 'QUOTA_EXCEEDED',
+              resource: 'trucks',
+              limit,
+              current: currentCount,
+              error: `Truck quota exceeded (${currentCount}/${limit}). Upgrade your plan or purchase a fleet booster to register more vehicles.`,
+            });
+            return;
+          }
+        }
+      } else if (resource === 'drivers') {
+        const limit = limits.max_drivers;
+        if (limit !== -1) {
+          const currentCount = await Driver.countDocuments({ company_id: companyId, is_deleted: false });
+          if (currentCount >= limit) {
+            res.status(403).json({
+              code: 'QUOTA_EXCEEDED',
+              resource: 'drivers',
+              limit,
+              current: currentCount,
+              error: `Driver quota exceeded (${currentCount}/${limit}). Upgrade your plan or add driver capacity to onboard more drivers.`,
+            });
+            return;
+          }
+        }
+      } else if (resource === 'users') {
+        const limit = limits.max_users;
+        if (limit !== -1) {
+          const currentCount = await CompanyMember.countDocuments({ company_id: companyId, status: 'active' });
+          if (currentCount >= limit) {
+            res.status(403).json({
+              code: 'QUOTA_EXCEEDED',
+              resource: 'users',
+              limit,
+              current: currentCount,
+              error: `User seat quota exceeded (${currentCount}/${limit}). Upgrade your plan to invite more team members.`,
+            });
+            return;
+          }
+        }
+      }
+
+      next();
+    } catch (error: any) {
+      res.status(500).json({ error: 'Failed to verify resource quota.' });
     }
   };
 }

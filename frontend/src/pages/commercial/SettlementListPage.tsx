@@ -20,6 +20,7 @@ import { Pagination } from '../../components/common/Pagination';
 import { Modal } from '../../components/common/Modal';
 import { toast } from '../../stores/uiStore';
 import { useAuthStore } from '../../stores/authStore';
+import { FeatureGate } from '../../components/common/FeatureGate';
 import {
   BadgeCent,
   CheckCircle2,
@@ -38,7 +39,8 @@ import {
 
 export const SettlementListPage: React.FC = () => {
   const queryClient = useQueryClient();
-  const { role } = useAuthStore();
+  const { role, enabledFeatures = [] } = useAuthStore();
+  const isUnlocked = enabledFeatures.includes('MOD_SETTLEMENTS');
   const canEdit = role === 'admin' || role === 'accountant';
 
   // State
@@ -74,6 +76,7 @@ export const SettlementListPage: React.FC = () => {
   // Queries
   const { data: metricsData } = useQuery({
     queryKey: ['settlement-metrics'],
+    enabled: isUnlocked,
     queryFn: async () => {
       const res = await api.get('/commercial/settlements/metrics');
       return res.data?.metrics;
@@ -82,6 +85,7 @@ export const SettlementListPage: React.FC = () => {
 
   const { data: settlementsData, isLoading } = useQuery({
     queryKey: ['settlements-list', page, paymentStatusFilter, searchQuery],
+    enabled: isUnlocked,
     queryFn: async () => {
       const params: any = { page, limit: 12 };
       if (paymentStatusFilter) params.payment_status = paymentStatusFilter;
@@ -93,6 +97,7 @@ export const SettlementListPage: React.FC = () => {
 
   const { data: driversData } = useQuery({
     queryKey: ['drivers-lookup'],
+    enabled: isUnlocked,
     queryFn: async () => {
       const res = await api.get('/fleet/drivers', { params: { limit: 100 } });
       return res.data?.drivers || [];
@@ -107,7 +112,7 @@ export const SettlementListPage: React.FC = () => {
       const res = await api.get(`/commercial/settlements/driver/${settlementForm.driver_id}/pending-trips`);
       return res.data;
     },
-    enabled: Boolean(settlementForm.driver_id),
+    enabled: isUnlocked && Boolean(settlementForm.driver_id),
   });
 
   // Mutations
@@ -207,6 +212,29 @@ export const SettlementListPage: React.FC = () => {
       payload: disburseForm,
     });
   };
+
+  if (!isUnlocked) {
+    return (
+      <div className="page-shell">
+        <PageHeader
+          title="Driver Trip Settlements"
+          subtitle="Perform ACID-transactional driver wage reconciliation, diesel mileage variance audits, and advance deductions"
+          breadcrumbs={[
+            { label: 'Commercial OS', href: '/settlements' },
+            { label: 'Driver Settlements' },
+          ]}
+        />
+        <FeatureGate
+          feature="MOD_SETTLEMENTS"
+          pageMode={true}
+          titleOverride="Driver Trip Settlements is Locked"
+          descOverride="Driver trip settlement calculations, mileage variance penalties, payout vouchers, and advance deductions require the Standard Commercial or Pro Enterprise tier."
+        >
+          {null}
+        </FeatureGate>
+      </div>
+    );
+  }
 
   return (
     <div className="page-shell">

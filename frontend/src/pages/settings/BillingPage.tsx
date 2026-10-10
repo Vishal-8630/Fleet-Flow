@@ -140,15 +140,52 @@ export const BillingPage: React.FC = () => {
     try {
       const res = await axios.post(
         '/api/billing/change-plan',
-        { target_plan_id: targetPlan._id, billing_cycle: billingCycle },
+        { target_plan_id: targetPlan._id, billing_cycle: billingCycle, immediate: true },
         { withCredentials: true }
       );
 
       toast.success(res.data.message || 'Subscription updated successfully!');
       setProrationModalOpen(false);
-      fetchBillingData();
+      await fetchBillingData();
+      await useAuthStore.getState().checkAuth();
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Failed to update subscription.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleApplyScheduled = async () => {
+    setActionLoading(true);
+    try {
+      const res = await axios.post(
+        '/api/billing/apply-scheduled',
+        {},
+        { withCredentials: true }
+      );
+      toast.success(res.data.message || 'Plan applied immediately!');
+      await fetchBillingData();
+      await useAuthStore.getState().checkAuth();
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to apply plan.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleCancelScheduled = async () => {
+    setActionLoading(true);
+    try {
+      const res = await axios.post(
+        '/api/billing/cancel-scheduled',
+        {},
+        { withCredentials: true }
+      );
+      toast.success(res.data.message || 'Scheduled plan change cancelled.');
+      await fetchBillingData();
+      await useAuthStore.getState().checkAuth();
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to cancel scheduled plan.');
     } finally {
       setActionLoading(false);
     }
@@ -265,6 +302,75 @@ export const BillingPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Pending Scheduled Plan Change Alert Banner */}
+      {currentSub?.scheduled_change && (
+        <div
+          style={{
+            marginBottom: '24px',
+            padding: '16px 20px',
+            backgroundColor: '#eff6ff',
+            borderRadius: '12px',
+            border: '1px solid #bfdbfe',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '16px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div
+              style={{
+                width: '36px',
+                height: '36px',
+                borderRadius: '8px',
+                backgroundColor: '#dbeafe',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#2563eb',
+              }}
+            >
+              <Clock size={20} />
+            </div>
+            <div>
+              <div style={{ fontWeight: 600, color: '#1e3a8a', fontSize: '0.9375rem' }}>
+                Pending Downgrade Scheduled
+              </div>
+              <div style={{ color: '#3b82f6', fontSize: '0.8125rem' }}>
+                A plan downgrade is scheduled to take effect on{' '}
+                {new Date(currentSub.scheduled_change.effective_at).toLocaleDateString('en-IN', {
+                  day: 'numeric',
+                  month: 'short',
+                  year: 'numeric',
+                })}. You can apply it immediately right now for testing or cancel it.
+              </div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button
+              type="button"
+              className="btn btn-primary"
+              style={{ padding: '8px 16px', fontSize: '0.8125rem', fontWeight: 600 }}
+              onClick={handleApplyScheduled}
+              disabled={actionLoading}
+            >
+              {actionLoading ? 'Processing...' : 'Apply Immediately'}
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              style={{ padding: '8px 16px', fontSize: '0.8125rem' }}
+              onClick={handleCancelScheduled}
+              disabled={actionLoading}
+            >
+              Cancel Downgrade
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 2. Real-Time Resource Meters (Elevated KPI Grid) */}
       <div className="usage-meters-grid">
@@ -728,9 +834,25 @@ export const BillingPage: React.FC = () => {
                 <div className="proration-row total">
                   <span>Net Amount Due Today</span>
                   <span className="proration-due-amount">
-                    ₹{prorationData.net_payable_rupees.toLocaleString('en-IN')}
+                    {status === 'trialing' ? '₹0 (Free Trial Active)' : `₹${prorationData.net_payable_rupees.toLocaleString('en-IN')}`}
                   </span>
                 </div>
+              </div>
+            )}
+
+            {status === 'trialing' && (
+              <div
+                style={{
+                  marginTop: '12px',
+                  padding: '10px 14px',
+                  backgroundColor: '#f0fdf4',
+                  borderRadius: '6px',
+                  border: '1px solid #bbf7d0',
+                  color: '#166534',
+                  fontSize: '0.8125rem',
+                }}
+              >
+                ✓ <strong>Free Trial Plan Switch:</strong> Switching to <strong>{targetPlan?.name}</strong> applies immediately without any payment today. Your trial will continue on the selected plan with its respective feature set and limits.
               </div>
             )}
 
@@ -749,7 +871,11 @@ export const BillingPage: React.FC = () => {
                 onClick={handleConfirmPlanChange}
                 disabled={actionLoading}
               >
-                {actionLoading ? 'Processing...' : 'Confirm & Apply Plan'}
+                {actionLoading
+                  ? 'Processing...'
+                  : targetPlan
+                  ? `Confirm & Switch to ${targetPlan.name}`
+                  : 'Confirm & Apply Plan'}
               </button>
             </div>
           </div>
