@@ -484,15 +484,13 @@ export const LRListPage: React.FC = () => {
 
         {/* Pagination */}
         {lrsData?.pagination && (
-          <div style={{ padding: '1rem', borderTop: '1px solid var(--border-color)' }}>
-            <Pagination
-              currentPage={page}
-              totalPages={lrsData.pagination.pages}
-              totalItems={lrsData.pagination.total}
-              pageSize={12}
-              onPageChange={setPage}
-            />
-          </div>
+          <Pagination
+            currentPage={page}
+            totalPages={lrsData.pagination.pages}
+            totalItems={lrsData.pagination.total}
+            pageSize={12}
+            onPageChange={setPage}
+          />
         )}
       </div>
 

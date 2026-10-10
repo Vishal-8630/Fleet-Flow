@@ -8,6 +8,7 @@ import { Router } from 'express';
 import {
   getLedgerEntries,
   getLedgerSummary,
+  getLedgerReconciliation,
   createManualLedgerEntry,
   reverseLedgerEntry,
   getPartyBalances,
@@ -16,6 +17,7 @@ import {
 } from '../controllers/ledgerController.js';
 import { requireAuth, resolveTenantContext, requireRole, requireActiveSubscription } from '../middleware/authMiddleware.js';
 import { requireFeature } from '../middleware/entitlementMiddleware.js';
+import { requireIdempotency } from '../middleware/idempotencyMiddleware.js';
 
 const router = Router();
 
@@ -24,13 +26,17 @@ router.use(requireAuth, resolveTenantContext, requireActiveSubscription, require
 
 // General Ledger endpoints
 router.get('/summary', getLedgerSummary);
+router.get('/reconciliation', getLedgerReconciliation);
 router.get('/', getLedgerEntries);
-router.post('/', requireRole(['admin', 'accountant']), createManualLedgerEntry);
-router.post('/:id/reverse', requireRole(['admin', 'accountant']), reverseLedgerEntry);
+router.post('/', requireRole(['admin', 'accountant']), requireIdempotency, createManualLedgerEntry);
+router.post('/manual', requireRole(['admin', 'accountant']), requireIdempotency, createManualLedgerEntry);
+router.post('/:id/reverse', requireRole(['admin', 'accountant']), requireIdempotency, reverseLedgerEntry);
 
-// Party Balance Reconciliation endpoints
+// Party Balance Reconciliation endpoints (with frontend compatibility aliases)
 router.get('/party-balances', getPartyBalances);
 router.get('/party-balances/:partyId/statement', getPartyStatement);
-router.post('/party-balances/:partyId/payout', requireRole(['admin', 'accountant']), recordPartyPayout);
+router.get('/party-statements/:partyId', getPartyStatement);
+router.post('/party-balances/:partyId/payout', requireRole(['admin', 'accountant']), requireIdempotency, recordPartyPayout);
+router.post('/parties/:partyId/payout', requireRole(['admin', 'accountant']), requireIdempotency, recordPartyPayout);
 
 export default router;

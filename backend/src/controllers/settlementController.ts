@@ -18,6 +18,8 @@ import { Company } from '../models/Company.js';
 import { notifyDriverSettlement } from '../utils/notificationService.js';
 import { logAuditEvent } from '../utils/auditService.js';
 import { validateTenantOwnership, TenantOwnershipError } from '../utils/ownershipValidator.js';
+import { calculateDriverSettlement, roundMoney } from '../utils/settlementCalculator.js';
+import { postDoubleEntryJournal, postSettlementDisbursementJournal } from '../utils/ledgerService.js';
 
 export const getSettlements = async (req: Request, res: Response) => {
   try {
@@ -186,48 +188,17 @@ export const previewSettlement = async (req: Request, res: Response) => {
       is_deleted: false,
     });
 
-    const total_kms = journeys.reduce((sum, j) => sum + (j.total_distance_kms || 0), 0);
-    const total_advances = journeys.reduce((sum, j) => sum + (j.starting_cash_advance || 0), 0);
-    const total_reimbursements = journeys.reduce((sum, j) => sum + (j.total_driver_expenses || 0), 0);
-    const total_diesel_litres = journeys.reduce((sum, j) => sum + (j.total_diesel_litres || 0), 0);
-
-    const base_earnings = Math.round(total_kms * Number(rate_per_km) * 100) / 100;
-    const gross_earnings = Math.round((base_earnings + total_reimbursements) * 100) / 100;
-
-    // Diesel Penalty Math: If actual km/L < benchmark km/L, deduct excess fuel consumed
-    let fuel_variance_penalty = 0;
-    if (total_kms > 0 && benchmark_mileage > 0) {
-      const benchmarkLitresAllowed = total_kms / Number(benchmark_mileage);
-      if (total_diesel_litres > benchmarkLitresAllowed) {
-        const excessLitres = total_diesel_litres - benchmarkLitresAllowed;
-        fuel_variance_penalty = Math.round(excessLitres * Number(diesel_price_per_litre) * 100) / 100;
-      }
-    }
-
-    const total_deductions = Math.round((total_advances + fuel_variance_penalty + Number(other_deductions)) * 100) / 100;
-    const net_amount = Math.round((gross_earnings - total_deductions) * 100) / 100;
-
-    const settlement_type =
-      net_amount > 0 ? 'payable_to_driver' : net_amount < 0 ? 'receivable_from_driver' : 'settled_even';
+    const calculation = calculateDriverSettlement({
+      journeys: journeys as any,
+      rate_per_km,
+      benchmark_mileage,
+      diesel_price_per_litre,
+      other_deductions,
+      other_deductions_notes,
+    });
 
     res.json({
-      calculation: {
-        total_kms,
-        rate_per_km: Number(rate_per_km),
-        base_earnings,
-        total_reimbursements,
-        gross_earnings,
-        total_advances,
-        benchmark_mileage: Number(benchmark_mileage),
-        actual_diesel_litres: total_diesel_litres,
-        actual_mileage: total_diesel_litres > 0 ? Math.round((total_kms / total_diesel_litres) * 100) / 100 : 0,
-        fuel_variance_penalty,
-        other_deductions: Number(other_deductions),
-        other_deductions_notes,
-        total_deductions,
-        net_amount,
-        settlement_type,
-      },
+      calculation,
     });
   } catch (err: any) {
     if (err instanceof TenantOwnershipError) {
@@ -306,29 +277,31 @@ export const confirmSettlement = async (req: Request, res: Response) => {
       });
     }
 
-    // 5. Compute Calculations
-    const total_kms = journeys.reduce((sum, j) => sum + (j.total_distance_kms || 0), 0);
-    const total_advances = journeys.reduce((sum, j) => sum + (j.starting_cash_advance || 0), 0);
-    const total_reimbursements = journeys.reduce((sum, j) => sum + (j.total_driver_expenses || 0), 0);
-    const total_diesel_litres = journeys.reduce((sum, j) => sum + (j.total_diesel_litres || 0), 0);
+    // 5. Compute Calculations with Decimal-Safe Settlement Calculator
+    const calculation = calculateDriverSettlement({
+      journeys: journeys as any,
+      rate_per_km,
+      benchmark_mileage,
+      diesel_price_per_litre,
+      other_deductions,
+      other_deductions_notes,
+    });
 
-    const base_earnings = Math.round(total_kms * Number(rate_per_km) * 100) / 100;
-    const gross_earnings = Math.round((base_earnings + total_reimbursements) * 100) / 100;
-
-    let fuel_variance_penalty = 0;
-    if (total_kms > 0 && benchmark_mileage > 0) {
-      const benchmarkLitresAllowed = total_kms / Number(benchmark_mileage);
-      if (total_diesel_litres > benchmarkLitresAllowed) {
-        const excessLitres = total_diesel_litres - benchmarkLitresAllowed;
-        fuel_variance_penalty = Math.round(excessLitres * Number(diesel_price_per_litre) * 100) / 100;
-      }
-    }
-
-    const total_deductions = Math.round((total_advances + fuel_variance_penalty + Number(other_deductions)) * 100) / 100;
-    const net_amount = Math.round((gross_earnings - total_deductions) * 100) / 100;
-
-    const settlement_type =
-      net_amount > 0 ? 'payable_to_driver' : net_amount < 0 ? 'receivable_from_driver' : 'settled_even';
+    const {
+      total_kms,
+      base_earnings,
+      total_reimbursements,
+      gross_earnings,
+      total_advances,
+      actual_diesel_litres,
+      actual_mileage,
+      fuel_variance_penalty,
+      total_deductions,
+      net_amount,
+      settlement_type,
+      amount_company_owes_driver,
+      amount_driver_owes_company,
+    } = calculation;
 
     // 6. Concurrency-Safe Atomic Sequential Settlement Number
     const updatedCompany = await Company.findByIdAndUpdate(
@@ -385,46 +358,91 @@ export const confirmSettlement = async (req: Request, res: Response) => {
 
     await newSettlement.save({ session });
 
-    // 6. Lock all selected Journeys
+    // 8. Lock all selected Journeys
     await TruckJourney.updateMany(
       { _id: { $in: journey_ids }, company_id: companyId },
       { $set: { is_settled: true, settlement_id: newSettlement._id } },
       { session }
     );
 
-    // 7. Update Driver Ledger Balances
+    // 9. Update Driver Ledger Balances
     driver.running_advance_balance = 0;
-    driver.amount_company_owes_driver = net_amount > 0 ? net_amount : 0;
-    driver.amount_driver_owes_company = net_amount < 0 ? Math.abs(net_amount) : 0;
+    driver.amount_company_owes_driver = amount_company_owes_driver;
+    driver.amount_driver_owes_company = amount_driver_owes_company;
     driver.last_settlement_date = new Date();
     driver.last_settlement_id = newSettlement._id as any;
     await driver.save({ session });
 
-    // 8. Auto-post to General Ledger
-    const ledgerCount = await Ledger.countDocuments({ company_id: companyId }).session(session);
-    const transaction_number = `TXN-${String(ledgerCount + 1).padStart(4, '0')}`;
+    // 10. Post Balanced Double-Entry Journal to General Ledger
+    if (net_amount !== 0) {
+      const validAbsAmount = roundMoney(Math.abs(net_amount));
+      const legs: any[] =
+        net_amount > 0
+          ? [
+              {
+                category: 'driver_settlement',
+                balance_type: 'debit',
+                amount: validAbsAmount,
+                payment_mode: 'system',
+                party_name: driver.name,
+                reference_number: newSettlement.settlement_number,
+                description: `Trip settlement ${newSettlement.settlement_number} for driver ${driver.name}`,
+                settlement_id: newSettlement._id,
+                driver_id: driver._id,
+              },
+              {
+                category: 'driver_advance',
+                balance_type: 'credit',
+                amount: validAbsAmount,
+                payment_mode: 'system',
+                party_name: driver.name,
+                reference_number: newSettlement.settlement_number,
+                description: `Wage liability clearing credit for settlement ${newSettlement.settlement_number}`,
+                settlement_id: newSettlement._id,
+                driver_id: driver._id,
+              },
+            ]
+          : [
+              {
+                category: 'driver_advance',
+                balance_type: 'debit',
+                amount: validAbsAmount,
+                payment_mode: 'system',
+                party_name: driver.name,
+                reference_number: newSettlement.settlement_number,
+                description: `Excess advance deficit debit for settlement ${newSettlement.settlement_number}`,
+                settlement_id: newSettlement._id,
+                driver_id: driver._id,
+              },
+              {
+                category: 'driver_settlement',
+                balance_type: 'credit',
+                amount: validAbsAmount,
+                payment_mode: 'system',
+                party_name: driver.name,
+                reference_number: newSettlement.settlement_number,
+                description: `Settlement balance credit for ${newSettlement.settlement_number}`,
+                settlement_id: newSettlement._id,
+                driver_id: driver._id,
+              },
+            ];
 
-    const ledgerEntry = new Ledger({
-      company_id: companyId,
-      transaction_number,
-      transaction_date: new Date(),
-      category: 'driver_settlement',
-      transaction_type: 'settlement',
-      balance_type: 'debit',
-      amount: Math.abs(net_amount),
-      payment_mode: 'system',
-      reference_number: newSettlement.settlement_number,
-      party_name: driver.name,
-      description: `Trip settlement ${newSettlement.settlement_number} for driver ${driver.name} across ${journeys.length} trips`,
-      is_auto_generated: true,
-      settlement_id: newSettlement._id,
-      driver_id: driver._id,
-      created_by: req.user?._id,
-    });
+      await postDoubleEntryJournal({
+        company_id: companyId!,
+        session,
+        transaction_type: 'settlement',
+        description: `Settlement ${newSettlement.settlement_number} for driver ${driver.name} across ${journeys.length} trips`,
+        reference_number: newSettlement.settlement_number,
+        party_name: driver.name,
+        legs,
+        settlement_id: newSettlement._id,
+        driver_id: driver._id,
+        created_by: req.user?._id,
+        is_auto_generated: true,
+      });
+    }
 
-    await ledgerEntry.save({ session });
-
-    // 9. Commit Transaction Atomically
+    // 11. Commit Transaction Atomically
     await session.commitTransaction();
     session.endSession();
 
@@ -462,6 +480,9 @@ export const confirmSettlement = async (req: Request, res: Response) => {
 };
 
 export const markSettlementPaid = async (req: Request, res: Response) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
   try {
     const companyId = req.tenant?.id;
     const { payment_mode = 'bank_transfer', payment_ref } = req.body;
@@ -470,10 +491,18 @@ export const markSettlementPaid = async (req: Request, res: Response) => {
       _id: req.params.id,
       company_id: companyId,
       is_deleted: false,
-    });
+    }).session(session);
 
     if (!settlement) {
+      await session.abortTransaction();
+      session.endSession();
       return res.status(404).json({ error: 'Settlement not found.' });
+    }
+
+    if (settlement.payment_status === 'paid') {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(400).json({ error: 'Settlement is already marked as paid.' });
     }
 
     settlement.payment_status = 'paid';
@@ -481,19 +510,51 @@ export const markSettlementPaid = async (req: Request, res: Response) => {
     settlement.payment_mode = payment_mode;
     settlement.payment_ref = payment_ref;
 
-    await settlement.save();
+    await settlement.save({ session });
 
     // Also update driver owes balance
     await Driver.updateOne(
       { _id: settlement.driver_id, company_id: companyId },
-      { $set: { amount_company_owes_driver: 0, amount_driver_owes_company: 0 } }
+      { $set: { amount_company_owes_driver: 0, amount_driver_owes_company: 0 } },
+      { session }
     );
+
+    // Post double-entry disbursement journal if net_amount is non-zero
+    if (settlement.net_amount !== 0) {
+      await postSettlementDisbursementJournal({
+        company_id: companyId!,
+        session,
+        settlement_id: settlement._id as any,
+        settlement_number: settlement.settlement_number,
+        driver_id: settlement.driver_id as any,
+        driver_name: settlement.driver_snapshot.name,
+        net_amount: settlement.net_amount,
+        payment_mode,
+        payment_ref,
+        created_by: req.user?._id,
+      });
+    }
+
+    await session.commitTransaction();
+    session.endSession();
+
+    logAuditEvent({
+      company_id: companyId!,
+      entity_type: 'settlement',
+      entity_id: settlement._id,
+      entity_identifier: settlement.settlement_number,
+      action: 'UPDATE',
+      description: `Settlement ${settlement.settlement_number} marked as paid via ${payment_mode} (Ref: ${payment_ref || 'N/A'}).`,
+      req,
+    });
 
     res.json({
       message: 'Settlement marked as paid and disbursed.',
       settlement,
     });
   } catch (err: any) {
+    await session.abortTransaction();
+    session.endSession();
     res.status(400).json({ error: err.message || 'Failed to mark settlement paid.' });
   }
 };

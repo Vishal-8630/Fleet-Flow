@@ -10,9 +10,15 @@
  */
 
 import { Request, Response } from 'express';
+import mongoose from 'mongoose';
 import { Ledger } from '../models/Ledger.js';
 import { BalanceParty } from '../models/BalanceParty.js';
 import { VehicleEntry } from '../models/VehicleEntry.js';
+import { Invoice } from '../models/Invoice.js';
+import { Settlement } from '../models/Settlement.js';
+import { Company } from '../models/Company.js';
+import { roundMoney } from '../utils/settlementCalculator.js';
+import { postDoubleEntryJournal } from '../utils/ledgerService.js';
 
 export const getLedgerEntries = async (req: Request, res: Response) => {
   try {
@@ -27,10 +33,15 @@ export const getLedgerEntries = async (req: Request, res: Response) => {
       const searchRegex = new RegExp(req.query.search as string, 'i');
       query.$or = [
         { transaction_number: searchRegex },
+        { journal_id: searchRegex },
         { description: searchRegex },
         { party_name: searchRegex },
         { reference_number: searchRegex },
       ];
+    }
+
+    if (req.query.journal_id) {
+      query.journal_id = req.query.journal_id;
     }
 
     if (req.query.category) {
@@ -174,6 +185,9 @@ export const createManualLedgerEntry = async (req: Request, res: Response) => {
 };
 
 export const reverseLedgerEntry = async (req: Request, res: Response) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
   try {
     const companyId = req.tenant?.id;
     const { reversal_reason } = req.body;
@@ -182,33 +196,39 @@ export const reverseLedgerEntry = async (req: Request, res: Response) => {
       _id: req.params.id,
       company_id: companyId,
       is_deleted: false,
-    });
+    }).session(session);
 
     if (!originalEntry) {
+      await session.abortTransaction();
+      session.endSession();
       return res.status(404).json({ error: 'Ledger entry not found.' });
     }
 
     if (originalEntry.is_reversal) {
+      await session.abortTransaction();
+      session.endSession();
       return res.status(400).json({ error: 'This ledger entry has already been reversed.' });
     }
 
     // Flag original entry as reversed
     originalEntry.is_reversal = true;
     originalEntry.reversal_reason = reversal_reason || 'Reversed by user';
-    await originalEntry.save();
+    await originalEntry.save({ session });
 
     // Create the counter-balancing reversal entry
-    const count = await Ledger.countDocuments({ company_id: companyId });
+    const count = await Ledger.countDocuments({ company_id: companyId }).session(session);
     const transaction_number = `REV-${String(count + 1).padStart(4, '0')}`;
+    const reversal_journal_id = originalEntry.journal_id ? `REV-${originalEntry.journal_id}` : undefined;
 
     const reversalEntry = new Ledger({
       company_id: companyId,
       transaction_number,
+      journal_id: reversal_journal_id,
       transaction_date: new Date(),
       category: originalEntry.category,
       transaction_type: originalEntry.transaction_type,
       balance_type: originalEntry.balance_type === 'debit' ? 'credit' : 'debit', // Invert balance
-      amount: originalEntry.amount,
+      amount: roundMoney(originalEntry.amount),
       payment_mode: originalEntry.payment_mode,
       reference_number: `REV:${originalEntry.transaction_number}`,
       party_name: originalEntry.party_name,
@@ -223,17 +243,140 @@ export const reverseLedgerEntry = async (req: Request, res: Response) => {
       balance_party_id: originalEntry.balance_party_id,
       settlement_id: originalEntry.settlement_id,
       invoice_id: originalEntry.invoice_id,
+      vehicle_entry_id: originalEntry.vehicle_entry_id,
       created_by: req.user?._id,
     });
 
-    await reversalEntry.save();
+    await reversalEntry.save({ session });
+
+    await session.commitTransaction();
+    session.endSession();
 
     res.json({
       message: 'Journal entry reversed with counter-balancing audit posting.',
       reversal_entry: reversalEntry,
     });
   } catch (err: any) {
+    await session.abortTransaction();
+    session.endSession();
     res.status(500).json({ error: err.message || 'Failed to reverse entry.' });
+  }
+};
+
+/**
+ * GET /api/commercial/ledger/reconciliation
+ * Performs an automated financial audit verifying that debits and credits
+ * are balanced across the entire general ledger, checking double-entry journal
+ * consistency, and reconciling invoices and driver settlements.
+ */
+export const getLedgerReconciliation = async (req: Request, res: Response) => {
+  try {
+    const companyId = req.tenant?.id;
+
+    // 1. Ledger Balance Aggregates
+    const [ledgerAgg] = await Ledger.aggregate([
+      { $match: { company_id: companyId, is_deleted: false } },
+      {
+        $group: {
+          _id: null,
+          totalCredits: { $sum: { $cond: [{ $eq: ['$balance_type', 'credit'] }, '$amount', 0] } },
+          totalDebits: { $sum: { $cond: [{ $eq: ['$balance_type', 'debit'] }, '$amount', 0] } },
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    const totalDebits = roundMoney(ledgerAgg?.totalDebits || 0);
+    const totalCredits = roundMoney(ledgerAgg?.totalCredits || 0);
+    const difference = roundMoney(Math.abs(totalDebits - totalCredits));
+    const isBalanced = difference === 0;
+
+    // 2. Journal Double-Entry Integrity Check
+    const journalUnbalance = await Ledger.aggregate([
+      { $match: { company_id: companyId, is_deleted: false, journal_id: { $exists: true, $ne: null } } },
+      {
+        $group: {
+          _id: '$journal_id',
+          debits: { $sum: { $cond: [{ $eq: ['$balance_type', 'debit'] }, '$amount', 0] } },
+          credits: { $sum: { $cond: [{ $eq: ['$balance_type', 'credit'] }, '$amount', 0] } },
+          legsCount: { $sum: 1 },
+        },
+      },
+      {
+        $project: {
+          journal_id: '$_id',
+          debits: 1,
+          credits: 1,
+          legsCount: 1,
+          variance: { $abs: { $subtract: ['$debits', '$credits'] } },
+        },
+      },
+      {
+        $match: {
+          variance: { $gt: 0.001 },
+        },
+      },
+    ]);
+
+    // 3. Invoicing Commercial Balance
+    const [invoiceAgg] = await Invoice.aggregate([
+      { $match: { company_id: companyId, is_deleted: false, status: { $ne: 'cancelled' } } },
+      {
+        $group: {
+          _id: null,
+          totalInvoiced: { $sum: '$total_amount' },
+          totalCollected: { $sum: '$paid_amount' },
+          totalBalance: { $sum: '$balance_amount' },
+          invoicesCount: { $sum: 1 },
+        },
+      },
+    ]);
+
+    // 4. Driver Settlement Statistics
+    const [settlementAgg] = await Settlement.aggregate([
+      { $match: { company_id: companyId, is_deleted: false } },
+      {
+        $group: {
+          _id: null,
+          totalNetSettled: { $sum: '$net_amount' },
+          totalPaidOut: { $sum: { $cond: [{ $eq: ['$payment_status', 'paid'] }, '$net_amount', 0] } },
+          totalUnpaid: { $sum: { $cond: [{ $eq: ['$payment_status', 'unpaid'] }, '$net_amount', 0] } },
+          settlementsCount: { $sum: 1 },
+        },
+      },
+    ]);
+
+    res.json({
+      reconciliation: {
+        global_ledger: {
+          total_debits: totalDebits,
+          total_credits: totalCredits,
+          difference,
+          is_balanced: isBalanced,
+          transaction_count: ledgerAgg?.count || 0,
+        },
+        journal_integrity: {
+          unbalanced_journals_count: journalUnbalance.length,
+          unbalanced_journals: journalUnbalance,
+          all_journals_balanced: journalUnbalance.length === 0,
+        },
+        invoicing: {
+          total_invoiced: roundMoney(invoiceAgg?.totalInvoiced || 0),
+          total_collected: roundMoney(invoiceAgg?.totalCollected || 0),
+          total_outstanding: roundMoney(invoiceAgg?.totalBalance || 0),
+          invoices_count: invoiceAgg?.invoicesCount || 0,
+        },
+        driver_settlements: {
+          total_net_settled: roundMoney(settlementAgg?.totalNetSettled || 0),
+          total_paid_out: roundMoney(settlementAgg?.totalPaidOut || 0),
+          total_unpaid_outstanding: roundMoney(settlementAgg?.totalUnpaid || 0),
+          settlements_count: settlementAgg?.settlementsCount || 0,
+        },
+        is_healthy: isBalanced && journalUnbalance.length === 0,
+      },
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to compute financial reconciliation.' });
   }
 };
 

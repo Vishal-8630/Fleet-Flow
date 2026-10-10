@@ -59,6 +59,8 @@ export interface ICompany extends Document {
     invoice_seq: number;
     journey_seq: number;
     settlement_seq: number;
+    journal_seq?: number;
+    transaction_seq?: number;
   };
   subscription_status: 'trialing' | 'active' | 'past_due' | 'suspended' | 'cancelled' | 'expired';
   trial_ends_at: Date;
@@ -120,6 +122,8 @@ const CompanySchema = new Schema<ICompany>(
       invoice_seq: { type: Number, default: 0 },
       journey_seq: { type: Number, default: 0 },
       settlement_seq: { type: Number, default: 0 },
+      journal_seq: { type: Number, default: 0 },
+      transaction_seq: { type: Number, default: 0 },
     },
     subscription_status: {
       type: String,

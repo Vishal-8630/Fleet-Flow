@@ -7,7 +7,7 @@
 
 ## Progress Tracker Overview
 
-| Phase | Description | Status | Completion % |
+| Phase / Track | Description | Status | Completion % |
 | :--- | :--- | :--- | :--- |
 | **Phase 1** | Foundation, Multi-Tenancy & Design System | ✅ Completed | 100% |
 | **Phase 2** | Master Data Registries & Compliance Vault | ✅ Completed | 100% |
@@ -15,6 +15,11 @@
 | **Phase 4** | Commercial Engine, Invoices & Settlements | ✅ Completed | 100% |
 | **Phase 5** | SaaS Billing, Entitlements & Customization | ✅ Completed | 100% |
 | **Phase 6** | Public Tracking, Automation & Release | ✅ Completed | 100% |
+| **Issue 01** | Backend Subscription Status & Plan Permissions | ✅ Resolved | 100% |
+| **Issue 02** | Complete and Secure Real Subscription Payments | ✅ Resolved | 100% |
+| **Issue 03** | Harden Authentication and Account Recovery | ✅ Resolved | 100% |
+| **Issue 04** | Verify and Enforce Tenant Isolation Across the API | ✅ Resolved | 100% |
+| **Issue 05** | Make Financial Records Dependable & Accounting Sound | ✅ Resolved | 100% |
 
 ---
 
@@ -409,5 +414,155 @@
   * ✅ ACID Concurrency Conflict Defense: Concurrent settlement requests executed; exactly 1 succeeded, 4 safely rejected with 0 ledger corruption.
   * ✅ Immutable Audit Trail & Notification Logging: Confirmed database persistence for audit records and notification dispatches.
   * **100% of Phase 6 acceptance criteria verified and passed against live MongoDB database.**
+
+---
+
+### Issue 01: Enforce Subscription Status and Plan Permissions on the Backend (P0 Critical)
+* **[Read-Only Suspension & Expired Trial Invariant] (`backend/src/middleware/authMiddleware.ts`):**
+  * Enhanced `requireActiveSubscription` to enforce a strict read-only model: `GET`, `HEAD`, and `OPTIONS` remain permitted so suspended/expired tenants retain access to historical records, accounting books, and tax invoices.
+  * Mutative write operations (`POST`, `PUT`, `PATCH`, `DELETE`) are strictly blocked with HTTP 403 (`SUBSCRIPTION_EXPIRED` or `SUBSCRIPTION_SUSPENDED`, with `is_read_only: true`).
+  * Implemented automated trial expiration: if a tenant is in `trialing` status and `trial_ends_at < Date.now()`, the middleware automatically transitions `subscription_status` to `'expired'` in MongoDB.
+* **[Route-Level Feature Gating Across All Modules] (`backend/src/middleware/entitlementMiddleware.ts`):**
+  * Mounted `requireFeature` middleware across all core operational Express routers:
+    * `truckRoutes.ts` $\rightarrow$ `requireFeature('MOD_FLEET')`
+    * `driverRoutes.ts` $\rightarrow$ `requireFeature('MOD_DRIVERS')`
+    * `journeyRoutes.ts` $\rightarrow$ `requireFeature('MOD_TRIPS')`
+    * `vehicleEntryRoutes.ts` $\rightarrow$ `requireFeature('MOD_MARKET_VEHICLES')`
+    * `partyRoutes.ts` $\rightarrow$ `requireFeature('MOD_PARTIES')`
+    * `entryRoutes.ts` $\rightarrow$ `requireFeature('MOD_LR_ENGINE')`
+    * `invoiceRoutes.ts` $\rightarrow$ `requireFeature('MOD_BILLING_INVOICE')`
+    * `settlementRoutes.ts` $\rightarrow$ `requireFeature('MOD_SETTLEMENTS')`
+    * `ledgerRoutes.ts` $\rightarrow$ `requireFeature('MOD_LEDGERS')`
+    * `customFieldRoutes.ts` $\rightarrow$ `requireFeature('MOD_CUSTOM_FIELDS')`
+    * `documentRoutes.ts` $\rightarrow$ `requireFeature('MOD_DOCUMENT_VAULT')`
+  * Unauthorized requests return uniform `FEATURE_LOCKED` payloads specifying module key, display title, and required plan tier.
+* **[Resource Quota Verification] (`requireQuota`):**
+  * Created `requireQuota(resource: 'trucks' | 'drivers' | 'users')` in `entitlementMiddleware.ts`.
+  * Intercepts creation endpoints (`POST /api/trucks`, `POST /api/drivers`, `POST /api/company/members/invite`) and verifies active database counts against plan `limits` before allowing inserts. Returns HTTP 403 `QUOTA_EXCEEDED` if headroom is exhausted.
+* **[Module Dependency Resolution & Catalog Integrity] (`backend/src/utils/featureCatalog.ts`):**
+  * Created `validateModuleDependencies()` and `resolveModuleDependencies()`.
+  * Enforces dependency tree rules (e.g., `MOD_BILLING_INVOICE` requires `MOD_LR_ENGINE`; `MOD_SETTLEMENTS` requires `MOD_TRIPS` and `MOD_DRIVERS`).
+  * Integrated in `superAdminController.ts` during plan creation, updates, and quota overrides.
+* **[Frontend Entitlements Hydration & `<FeatureGate>` Integration]:**
+  * Updated `GET /api/auth/me` (`authController.ts`) to hydrate `enabledFeatures` and `limits` into the client session.
+  * Connected `authStore.ts` and `FeatureGate.tsx` to conditionally lock navigation and feature controls with upgrade CTAs.
+
+---
+
+### Issue 02: Complete and Secure Real Subscription Payments (P0 Critical)
+* **[Official Razorpay Gateway Integration] (`backend/src/utils/paymentGateway.ts`):**
+  * Integrated official Razorpay client wrapper with environment variable / platform credentials fallback.
+  * Refactored `initializeCheckout` in `billingController.ts`: validates plan ID and calculates amount in integer paise on the server (preventing client-side price tampering).
+  * Validates and applies promotional codes from `PromoCode.ts`.
+  * Generates real Razorpay Orders via `razorpay.orders.create({ amount, currency: 'INR', receipt, notes })` and returns authenticated `order_id` and public `key_id`.
+* **[Fail-Closed HMAC SHA-256 Payment Signature Verification]:**
+  * In `verifyPayment` (`billingController.ts`), eliminated permissive bypass logic: `razorpay_order_id`, `razorpay_payment_id`, and `razorpay_signature` are mandatory.
+  * Verified signature against `${razorpay_order_id}|${razorpay_payment_id}` using `crypto.createHmac('sha256', secret)`.
+  * Strictly fails closed: throws HTTP 500 if server secrets are missing and HTTP 400 on signature mismatch.
+* **[Raw Request Buffer Capture & Webhook Cryptographic Verification] (`backend/src/server.ts`):**
+  * Configured Express JSON middleware with `verify` hook retaining the exact unparsed raw request buffer (`req.rawBody`).
+  * Verified `x-razorpay-signature` against raw payload buffer using HMAC SHA-256.
+  * Integrated replay defense via `ProcessedWebhook` database model.
+* **[Lifecycle Webhook Automation & Grace Periods]:**
+  * Handled `payment.captured` & `subscription.charged`: updates subscription status to `active`, extends `current_period_end`, resets dunning counters.
+  * Handled `payment.failed`: initiates 7-day grace period with `past_due` warning.
+  * Handled `subscription.cancelled` & `subscription.halted`: switches tenant to `suspended` (read-only mode).
+* **[Payment Ledger & Downgrade Quota Headroom Defense]:**
+  * Created `PaymentTransaction.ts` model recording orders, payment IDs, amounts, payment methods, and receipt URLs (`GET /api/billing/history`).
+  * Enforced usage headroom evaluation in `changePlan`: rejects plan downgrades with HTTP 422 `DOWNGRADE_QUOTA_EXCEEDED` if current truck, driver, or member count exceeds the target tier's quota limits.
+
+---
+
+### Issue 03: Harden Authentication and Account Recovery (P0 Critical)
+* **[Self-Service Password Reset & Account Recovery Engine] (`backend/src/controllers/authController.ts`):**
+  * Enhanced `User.ts` model with `reset_password_token`, `reset_password_expires`, and `token_version`.
+  * Implemented `POST /api/auth/forgot-password`: generates cryptographically secure 32-byte tokens, stores SHA-256 hash with 15-minute expiration, and dispatches reset email. Returns uniform 200 response to prevent account enumeration.
+  * Implemented `POST /api/auth/reset-password`: validates token hash, checks expiration, hashes new password with bcrypt, and invalidates the token.
+  * Implemented `POST /api/auth/change-password`: authenticated endpoint verifying current password before updating and revoking existing sessions.
+* **[Session Invalidation via `token_version`]:**
+  * Integrated `token_version` check in `requireAuth` (`authMiddleware.ts`): incrementing `token_version` upon password reset or security revocation instantly invalidates all previously issued JWTs.
+* **[Transactional Email Delivery Engine] (`backend/src/utils/emailService.ts`):**
+  * Built email dispatch service supporting SMTP/Nodemailer and transactional providers with development console fallback.
+  * Designed HTML email templates for workspace invitations, password resets (15-min expiring links), and password change security notices.
+* **[Multi-Tiered Rate Limiting & DoS Defense] (`backend/src/middleware/securityMiddleware.ts`):**
+  * `authLimiter`: Max 5 login attempts per 15 minutes per IP.
+  * `registerLimiter`: Max 3 company registrations per hour per IP.
+  * `passwordResetLimiter`: Max 3 password reset requests per hour per email/IP.
+  * `invitationLimiter`: Max 10 invitations per minute per workspace.
+* **[Multi-Document ACID Company Registration]:**
+  * Refactored `registerCompany` in `authController.ts` to execute inside a MongoDB transaction (`session.startTransaction()`).
+  * Guarantees atomic creation of `User`, `Company`, `CompanyMember` (admin role), and trial `Subscription`, preventing orphaned documents on registration errors.
+* **[Production Environment Security Guard] (`backend/src/server.ts`):**
+  * Enforced fail-fast startup check: refuses to boot in production if `JWT_SECRET` uses the default fallback string or if required secrets are missing.
+* **[Frontend Password Recovery Workflows]:**
+  * Built `ForgotPasswordPage.tsx` and `ResetPasswordPage.tsx` using generic CSS tokens.
+  * Registered `/forgot-password` and `/reset-password` routes in `App.tsx`.
+
+---
+
+### Issue 04: Verify and Enforce Tenant Isolation Across the Entire API (P0 Critical)
+* **[Deep Foreign-Key Ownership Validation] (`backend/src/utils/ownershipValidator.ts`):**
+  * Created `validateTenantOwnership()`: explicitly validates that secondary foreign keys (`truck_id`, `driver_id`, `billing_party_id`, `journey_id`, `lr_ids`) belong to the requesting tenant's `company_id`.
+  * Intercepts `POST /api/journeys`, `POST /api/entries`, `POST /api/invoices`, `POST /api/settlements`, and party creation routes to eliminate IDOR via relational references.
+* **[Multi-Tenant Workspace Switching & Header Context Resolver]:**
+  * Added `GET /api/auth/workspaces`: lists all active company memberships for authenticated user.
+  * Added `POST /api/auth/switch-company`: verifies membership and re-issues an updated JWT encoded with the selected `companyId`.
+  * Enhanced `resolveTenantContext` in `authMiddleware.ts` to respect `x-company-id` header and verify active membership before entering `AsyncLocalStorage` context.
+* **[Concurrency-Safe Atomic Sequence Numbering]:**
+  * Added atomic sequence counters (`lr_seq`, `invoice_seq`, `journey_seq`) to `Company.ts`.
+  * Replaced in-memory count queries with atomic `findOneAndUpdate({ _id: companyId }, { $inc: { ... } }, { new: true })`.
+  * Enforced database-level compound unique indexes:
+    * `EntrySchema.index({ company_id: 1, lr_number: 1 }, { unique: true })`
+    * `InvoiceSchema.index({ company_id: 1, invoice_number: 1 }, { unique: true })`
+* **[Audited Super-Admin Impersonation & Persistent UI Banner]:**
+  * Mandated audited `reason` string in `POST /api/super-admin/tenants/:id/impersonate` stored in `PlatformAuditLog`.
+  * Built `<ImpersonationBanner.tsx>` sticky layout component notifying users of active support sessions with immediate "Exit Impersonation" control.
+* **[Automated Negative Cross-Tenant Test Suite] (`backend/src/scripts/verifyIssue04.ts`):**
+  * Automated penetration test attempting cross-tenant read/write/delete/export operations across Tenant Alpha and Tenant Beta.
+  * Confirmed 100% rejection rate with zero cross-tenant contamination.
+
+---
+
+### Issue 05: Make Financial Records Dependable & Accounting Sound (P0 Critical)
+* **[Mathematical Precision & Floating-Point Drift Guard] (`backend/src/utils/settlementCalculator.ts`):**
+  * Implemented `roundMoney()` providing deterministic round-half-up 2-decimal precision (`Math.round((amount + Number.EPSILON) * 100) / 100`).
+  * Eliminated IEEE 754 floating-point drift (e.g. `0.1 + 0.2 = 0.30000000000000004` $\rightarrow$ `0.30`).
+  * Implemented `calculateDriverSettlement()` with strict invariants:
+    * Gross Driver Earnings = Base Trip Allowance + Approved Reimbursements.
+    * Total Deductions = Cash Advances + Fuel Variance Penalty + Shortage/Other Deductions.
+    * Net Amount = Gross Earnings - Total Deductions.
+    * Direction evaluation: If Net > 0 $\rightarrow$ `payable_to_driver`; If Net < 0 $\rightarrow$ `receivable_from_driver` (negative balance carried over as driver advance rollover).
+* **[Balanced Double-Entry Journal Engine] (`backend/src/utils/ledgerService.ts`):**
+  * Created `postDoubleEntryJournal()` enforcing the fundamental accounting invariant: $\sum \text{Debits} == \sum \text{Credits}$ per `journal_id`.
+  * Pre-commit validation rejects any unbalanced journal transaction before database persistence.
+  * Implemented specialized generators:
+    * `postSettlementDisbursementJournal()`: Debits driver settlement / advance clearing account and credits cash/bank or advance rollover.
+    * `postInvoicePaymentJournal()`: Multi-leg journal handling freight income credits, bank transfer debits, and Indian TDS tax deductions (`rto_border_tax` account).
+* **[ACID Multi-Document Transactions Across Financial Workflows]:**
+  * Wrapped settlement confirmation and payment disbursement in Mongoose ACID transactions (`session.startTransaction()`) in `settlementController.ts`.
+  * Wrapped invoice payment collections (`recordInvoicePayment`) and document cancellations (`cancelInvoice`) in ACID transactions in `invoiceController.ts`.
+  * Wrapped ledger entry reversals in ACID transactions in `ledgerController.ts` with counter-balancing entries (`is_reversal: true`, `reversed_entry_id`).
+* **[Idempotency Guard & Replay Attack Defense]:**
+  * Created `IdempotencyKey` model with 24-hour TTL expiration and compound unique index `{ company_id: 1, key: 1 }`.
+  * Created `requireIdempotency` middleware in `backend/src/middleware/idempotencyMiddleware.ts`:
+    * Intercepts `X-Idempotency-Key` header or `idempotency_key` payload parameter.
+    * Caches completed response payloads; identical replay requests immediately return cached responses with header `X-Cache: IDEMPOTENT_HIT`, preventing duplicate payouts or billing records.
+  * Applied to `settlementRoutes.ts`, `invoiceRoutes.ts`, and `ledgerRoutes.ts`.
+* **[Financial Reconciliation Audit Engine]:**
+  * Implemented `GET /api/commercial/ledger/reconciliation` in `ledgerController.ts` and mounted in `ledgerRoutes.ts`.
+  * Computes total debits vs total credits across the organization, verifying zero imbalance ($\Delta = 0.00$), and identifies any individual unbalanced journals.
+  * Added route aliases in `ledgerRoutes.ts` (`/manual`, `/party-statements/:partyId`, `/parties/:partyId/payout`) guaranteeing 100% backward compatibility with frontend pages (`LedgerListPage.tsx`).
+* **[Automated Test Verification Suite] (`backend/src/scripts/verifyIssue05.ts`):**
+  * Executed comprehensive 8-step test suite against live MongoDB Atlas:
+    * ✅ Test 1: Precision & Zero Floating-Point Drift (50 fractional accumulations verified).
+    * ✅ Test 2: Driver Settlement Engine & Rollover Invariants (payable and receivable math verified).
+    * ✅ Test 3: Double-Entry Balanced Journal Engine ($\sum \text{Debits} == \sum \text{Credits}$ strictly enforced).
+    * ✅ Test 4: Multi-Document ACID Atomicity & Rollback Integrity (0 orphaned records on simulated failure).
+    * ✅ Test 5: Idempotency Key Guard Against Duplicate Payments (24-hour TTL and duplicate rejection verified).
+    * ✅ Test 6: Invoice Payment Collection with TDS & Double-Entry (3 balanced legs verified).
+    * ✅ Test 7: Financial Reconciliation Report Engine ($\Delta = \text{₹0.00}$ global balance verified).
+    * ✅ Test 8: Counter-Balancing Journal Reversal Audit Trail (reversal link & balanced books verified).
+  * **100% of Issue 05 verification criteria passed without errors.**
+
 
 

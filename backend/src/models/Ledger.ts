@@ -64,6 +64,7 @@ export type LedgerPaymentMode =
 export interface ILedger extends Document {
   company_id: Types.ObjectId;
   transaction_number: string;
+  journal_id?: string;
   transaction_date: Date;
 
   // Category & Balance
@@ -113,6 +114,12 @@ const LedgerSchema = new Schema<ILedger>(
       required: true,
       trim: true,
       uppercase: true,
+    },
+    journal_id: {
+      type: String,
+      trim: true,
+      uppercase: true,
+      index: true,
     },
     transaction_date: {
       type: Date,
@@ -215,6 +222,7 @@ const LedgerSchema = new Schema<ILedger>(
 
 // Compound indexes per tenant company
 LedgerSchema.index({ company_id: 1, transaction_number: 1 }, { unique: true });
+LedgerSchema.index({ company_id: 1, journal_id: 1 });
 LedgerSchema.index({ company_id: 1, transaction_date: -1 });
 LedgerSchema.index({ company_id: 1, category: 1, transaction_date: -1 });
 LedgerSchema.index({ company_id: 1, balance_type: 1 });

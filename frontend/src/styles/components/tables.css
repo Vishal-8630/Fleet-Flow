@@ -19,6 +19,17 @@
   box-sizing: border-box;
 }
 
+/* When embedded inside a card, strip redundant outer borders, radii and shadows to prevent double-container appearance */
+.card > .table-responsive,
+.card > .table-wrapper,
+.card .table-responsive,
+.card .table-wrapper {
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  background-color: transparent;
+}
+
 /* Custom subtle scrollbar for tables */
 .table-responsive::-webkit-scrollbar,
 .table-wrapper::-webkit-scrollbar {

@@ -520,15 +520,13 @@ export const InvoiceListPage: React.FC = () => {
 
         {/* Pagination */}
         {invoicesData?.pagination && (
-          <div style={{ padding: '1rem', borderTop: '1px solid var(--border-color)' }}>
-            <Pagination
-              currentPage={page}
-              totalPages={invoicesData.pagination.pages}
-              totalItems={invoicesData.pagination.total}
-              pageSize={12}
-              onPageChange={setPage}
-            />
-          </div>
+          <Pagination
+            currentPage={page}
+            totalPages={invoicesData.pagination.pages}
+            totalItems={invoicesData.pagination.total}
+            pageSize={12}
+            onPageChange={setPage}
+          />
         )}
       </div>
 

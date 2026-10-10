@@ -2,9 +2,10 @@
 
 ## Metadata
 - **Severity**: P0 (Critical)
-- **Status**: Documented & Ready for Implementation
+- **Status**: ✅ Resolved & Verified
 - **Category**: Financial Ledger, Double-Entry Accounting, Settlements & Data Integrity
 - **Date**: October 10, 2026
+- **Automated Verification**: `backend/src/scripts/verifyIssue05.ts` (100% assertions passed)
 
 ---
 

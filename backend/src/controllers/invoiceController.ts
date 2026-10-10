@@ -9,6 +9,7 @@
  */
 
 import { Request, Response } from 'express';
+import mongoose from 'mongoose';
 import { Invoice } from '../models/Invoice.js';
 import { Entry } from '../models/Entry.js';
 import { BillingParty } from '../models/BillingParty.js';
@@ -16,6 +17,8 @@ import { Company } from '../models/Company.js';
 import { Ledger } from '../models/Ledger.js';
 import { logAuditEvent } from '../utils/auditService.js';
 import { validateTenantOwnership, TenantOwnershipError } from '../utils/ownershipValidator.js';
+import { roundMoney } from '../utils/settlementCalculator.js';
+import { postInvoicePaymentJournal } from '../utils/ledgerService.js';
 
 export const getInvoices = async (req: Request, res: Response) => {
   try {
@@ -329,14 +332,19 @@ export const createInvoice = async (req: Request, res: Response) => {
 };
 
 export const recordInvoicePayment = async (req: Request, res: Response) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
   try {
     const companyId = req.tenant?.id;
     const { amount, tds_amount = 0, payment_mode = 'bank_transfer', reference_number, notes } = req.body;
 
-    const paymentVal = Number(amount);
-    const tdsVal = Number(tds_amount) || 0;
+    const paymentVal = roundMoney(Number(amount));
+    const tdsVal = roundMoney(Number(tds_amount) || 0);
 
     if (!paymentVal || paymentVal <= 0) {
+      await session.abortTransaction();
+      session.endSession();
       return res.status(400).json({ error: 'Valid payment amount is required.' });
     }
 
@@ -344,19 +352,23 @@ export const recordInvoicePayment = async (req: Request, res: Response) => {
       _id: req.params.id,
       company_id: companyId,
       is_deleted: false,
-    });
+    }).session(session);
 
     if (!invoice) {
+      await session.abortTransaction();
+      session.endSession();
       return res.status(404).json({ error: 'Invoice not found.' });
     }
 
     if (invoice.status === 'paid') {
+      await session.abortTransaction();
+      session.endSession();
       return res.status(400).json({ error: 'Invoice is already settled in full.' });
     }
 
-    const totalSettledInStep = paymentVal + tdsVal;
-    invoice.paid_amount = Math.round((invoice.paid_amount + totalSettledInStep) * 100) / 100;
-    invoice.balance_amount = Math.max(0, Math.round((invoice.total_amount - invoice.paid_amount) * 100) / 100);
+    const totalSettledInStep = roundMoney(paymentVal + tdsVal);
+    invoice.paid_amount = roundMoney(invoice.paid_amount + totalSettledInStep);
+    invoice.balance_amount = Math.max(0, roundMoney(invoice.total_amount - invoice.paid_amount));
     invoice.status = invoice.balance_amount <= 0 ? 'paid' : 'partially_paid';
 
     invoice.payment_history.push({
@@ -368,71 +380,106 @@ export const recordInvoicePayment = async (req: Request, res: Response) => {
       notes,
     });
 
-    await invoice.save();
+    await invoice.save({ session });
 
-    // Automatically post journal credit to General Ledger
-    const ledgerTxCount = await Ledger.countDocuments({ company_id: companyId });
-    const transaction_number = `TXN-${String(ledgerTxCount + 1).padStart(4, '0')}`;
-
-    const ledgerEntry = new Ledger({
-      company_id: companyId,
-      transaction_number,
-      transaction_date: new Date(),
-      category: 'payment_received',
-      transaction_type: 'invoice_payment',
-      balance_type: 'credit',
-      amount: paymentVal,
-      payment_mode: payment_mode === 'bank_transfer' ? 'bank' : payment_mode === 'cash' ? 'cash' : 'upi',
-      reference_number: reference_number || invoice.invoice_number,
-      party_name: invoice.billing_party_snapshot?.name,
-      description: `Payment received against Invoice ${invoice.invoice_number}${tdsVal > 0 ? ` (TDS: ₹${tdsVal})` : ''}`,
-      is_auto_generated: true,
-      invoice_id: invoice._id,
-      billing_party_id: invoice.billing_party_id,
+    // Automatically post balanced double-entry journal to General Ledger
+    await postInvoicePaymentJournal({
+      company_id: companyId!,
+      session,
+      invoice_id: invoice._id as any,
+      invoice_number: invoice.invoice_number,
+      billing_party_id: invoice.billing_party_id as any,
+      party_name: invoice.billing_party_snapshot?.name || 'Customer',
+      payment_amount: paymentVal,
+      tds_amount: tdsVal,
+      payment_mode,
+      reference_number,
       created_by: req.user?._id,
     });
 
-    await ledgerEntry.save();
+    await session.commitTransaction();
+    session.endSession();
+
+    logAuditEvent({
+      company_id: companyId!,
+      entity_type: 'invoice',
+      entity_id: invoice._id,
+      entity_identifier: invoice.invoice_number,
+      action: 'UPDATE',
+      description: `Payment of ₹${paymentVal}${tdsVal > 0 ? ` (TDS: ₹${tdsVal})` : ''} recorded against Invoice ${invoice.invoice_number}.`,
+      req,
+    });
 
     res.json({
       message: 'Payment recorded and posted to General Ledger.',
       invoice,
     });
   } catch (err: any) {
+    await session.abortTransaction();
+    session.endSession();
     res.status(400).json({ error: err.message || 'Failed to record payment.' });
   }
 };
 
 export const cancelInvoice = async (req: Request, res: Response) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
   try {
     const companyId = req.tenant?.id;
     const invoice = await Invoice.findOne({
       _id: req.params.id,
       company_id: companyId,
       is_deleted: false,
-    });
+    }).session(session);
 
     if (!invoice) {
+      await session.abortTransaction();
+      session.endSession();
       return res.status(404).json({ error: 'Invoice not found.' });
     }
 
+    if (invoice.status === 'cancelled') {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(400).json({ error: 'Invoice has already been cancelled.' });
+    }
+
     if (invoice.paid_amount > 0) {
+      await session.abortTransaction();
+      session.endSession();
       return res.status(400).json({ error: 'Cannot cancel invoice with recorded payment collections. Reverse payments first.' });
     }
 
     invoice.status = 'cancelled';
-    await invoice.save();
+    await invoice.save({ session });
 
     // Release associated LRs back to active status
     if (invoice.lr_ids?.length > 0) {
       await Entry.updateMany(
         { _id: { $in: invoice.lr_ids }, company_id: companyId },
-        { $set: { status: 'active', invoice_id: null } }
+        { $set: { status: 'active', invoice_id: null } },
+        { session }
       );
     }
 
+    await session.commitTransaction();
+    session.endSession();
+
+    logAuditEvent({
+      company_id: companyId!,
+      entity_type: 'invoice',
+      entity_id: invoice._id,
+      entity_identifier: invoice.invoice_number,
+      action: 'UPDATE',
+      description: `Invoice ${invoice.invoice_number} voided/cancelled and linked LRs released.`,
+      req,
+    });
+
     res.json({ message: 'Invoice cancelled and linked LRs released.' });
   } catch (err: any) {
+    await session.abortTransaction();
+    session.endSession();
     res.status(500).json({ error: err.message || 'Failed to cancel invoice.' });
   }
 };

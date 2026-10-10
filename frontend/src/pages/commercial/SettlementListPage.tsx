@@ -461,15 +461,13 @@ export const SettlementListPage: React.FC = () => {
 
         {/* Pagination */}
         {settlementsData?.pagination && (
-          <div style={{ padding: '1rem', borderTop: '1px solid var(--border-color)' }}>
-            <Pagination
-              currentPage={page}
-              totalPages={settlementsData.pagination.pages}
-              totalItems={settlementsData.pagination.total}
-              pageSize={12}
-              onPageChange={setPage}
-            />
-          </div>
+          <Pagination
+            currentPage={page}
+            totalPages={settlementsData.pagination.pages}
+            totalItems={settlementsData.pagination.total}
+            pageSize={12}
+            onPageChange={setPage}
+          />
         )}
       </div>
 

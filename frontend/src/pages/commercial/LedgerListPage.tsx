@@ -508,15 +508,13 @@ export const LedgerListPage: React.FC = () => {
             </div>
 
             {ledgerData?.pagination && (
-              <div style={{ padding: '1rem', borderTop: '1px solid var(--border-color)' }}>
-                <Pagination
-                  currentPage={page}
-                  totalPages={ledgerData.pagination.pages}
-                  totalItems={ledgerData.pagination.total}
-                  pageSize={15}
-                  onPageChange={setPage}
-                />
-              </div>
+              <Pagination
+                currentPage={page}
+                totalPages={ledgerData.pagination.pages}
+                totalItems={ledgerData.pagination.total}
+                pageSize={15}
+                onPageChange={setPage}
+              />
             )}
           </div>
         </>
