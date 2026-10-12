@@ -9,6 +9,7 @@
  */
 
 import { Request, Response } from 'express';
+import { Types } from 'mongoose';
 import { Entry } from '../models/Entry.js';
 import { Company } from '../models/Company.js';
 import { notifyLRGenerated } from '../utils/notificationService.js';
@@ -84,6 +85,7 @@ export const getEntries = async (req: Request, res: Response) => {
 export const getEntryMetrics = async (req: Request, res: Response) => {
   try {
     const companyId = req.tenant?.id;
+    const companyObjectId = new Types.ObjectId(String(companyId));
 
     const [totalLrs, activeLrs, invoicedLrs, toBeBilled, aggregateVal] = await Promise.all([
       Entry.countDocuments({ company_id: companyId, is_deleted: false }),
@@ -91,7 +93,7 @@ export const getEntryMetrics = async (req: Request, res: Response) => {
       Entry.countDocuments({ company_id: companyId, is_deleted: false, status: 'invoiced' }),
       Entry.countDocuments({ company_id: companyId, is_deleted: false, freight_terms: 'to_be_billed', status: 'active' }),
       Entry.aggregate([
-        { $match: { company_id: companyId, is_deleted: false } },
+        { $match: { company_id: companyObjectId, is_deleted: false } },
         { $group: { _id: null, totalFreight: { $sum: '$freight_amount' } } },
       ]),
     ]);

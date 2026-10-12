@@ -20,6 +20,7 @@
 import { z } from 'zod';
 import { Types } from 'mongoose';
 import { CustomFieldDefinition, CustomFieldTargetEntity, ICustomFieldDefinition } from '../models/CustomFieldDefinition.js';
+export { RESERVED_PROPERTY_NAMES, CUSTOM_FIELD_KEY_REGEX, validateCustomFieldKey } from './customFieldKeyValidator.js';
 
 /**
  * Validates an incoming `custom_fields` object against registered definitions for an entity.

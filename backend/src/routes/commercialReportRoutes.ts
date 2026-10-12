@@ -8,6 +8,7 @@
 
 import { Router } from 'express';
 import { requireAuth, resolveTenantContext } from '../middleware/authMiddleware.js';
+import { requireStrictIdempotency } from '../middleware/idempotencyMiddleware.js';
 import {
   getArAgingReport,
   getTripProfitabilityReport,
@@ -25,6 +26,6 @@ router.get('/aging', getArAgingReport);
 router.get('/profitability', getTripProfitabilityReport);
 router.get('/export/tally', exportToTallyXml);
 router.get('/credit-notes', listCreditNotes);
-router.post('/credit-notes', createCreditNote);
+router.post('/credit-notes', requireStrictIdempotency, createCreditNote);
 
 export default router;

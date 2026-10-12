@@ -226,6 +226,8 @@ LedgerSchema.index({ company_id: 1, journal_id: 1 });
 LedgerSchema.index({ company_id: 1, transaction_date: -1 });
 LedgerSchema.index({ company_id: 1, category: 1, transaction_date: -1 });
 LedgerSchema.index({ company_id: 1, balance_type: 1 });
+LedgerSchema.index({ company_id: 1, balance_party_id: 1, transaction_date: -1 });
+LedgerSchema.index({ company_id: 1, billing_party_id: 1, transaction_date: -1 });
 
 // Multi-tenant isolation plugin
 LedgerSchema.plugin(tenantPlugin);

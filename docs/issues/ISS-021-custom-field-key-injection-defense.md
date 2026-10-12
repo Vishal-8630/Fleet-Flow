@@ -5,7 +5,7 @@
 **Type:** Security / Input Validation Vulnerability  
 **Severity:** `P2` (Moderate)  
 **Priority:** `P2` (Moderate)  
-**Status:** Confirmed Security Risk  
+**Status:** Resolved & Verified (Batch 2)  
 **Date:** October 2026  
 **Related Master Register Entry:** [`docs/FLEET_FLOW_MASTER_REGISTER.md`](../FLEET_FLOW_MASTER_REGISTER.md#2-issues--defects-register-iss-)
 
@@ -75,10 +75,25 @@ export function sanitizeFieldKey(key: string): string {
 ---
 
 ## 6. Acceptance Criteria
-- [ ] Attempting to create a custom field with `__proto__`, `constructor`, or `$where` is rejected with HTTP 400.
-- [ ] Valid snake_case keys (e.g. `chassis_color`, `toll_fastag_bank`) are accepted.
+- [x] Attempting to create a custom field with `__proto__`, `constructor`, or `$where` is rejected with HTTP 400.
+- [x] Valid snake_case keys (e.g. `chassis_color`, `toll_fastag_bank`) are accepted.
+- [x] Keys containing uppercase, spaces, dots (`.`), or leading dollar signs (`$`) are rejected with HTTP 400.
+- [x] Schema-level Mongoose validation blocks reserved keys on direct model operations.
+- [x] Dynamic values validation (`validateCustomFieldValues`) enforces strict regex and reserved key checks.
 
 ---
 
 ## 7. Definition of Done
-1. Sanitization function implemented and unit tested.
+1. [x] Sanitization function implemented in `backend/src/utils/customFieldKeyValidator.ts` and integrated in `CustomFieldDefinition.ts` and `customFieldController.ts`.
+2. [x] Tested and verified in `backend/src/tests/integration/phase21Hardening.test.ts`.
+
+---
+
+## 8. Verification Evidence (Batch 2)
+- **Automated Test Suite:** `backend/src/tests/integration/phase21Hardening.test.ts` (7/7 tests passing).
+- **Test Scenarios Verified:**
+  1. Prototype Pollution Defense: Rejects `__proto__`, `constructor`, `prototype` with HTTP 400.
+  2. MongoDB Operator Injection: Rejects `$where`, `$regex`, `$gt`, and keys with dots (`foo.bar`) with HTTP 400.
+  3. Format Validation: Rejects spaces, uppercase letters, invalid lengths (<2, >32) with HTTP 400.
+  4. Legitimate Keys: Accepts valid snake_case keys (`chassis_number`, `gps_imei`) with HTTP 201.
+  5. Multi-Tenant Isolation: Custom field definitions are strictly isolated per tenant.

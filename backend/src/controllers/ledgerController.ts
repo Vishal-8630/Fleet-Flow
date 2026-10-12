@@ -19,6 +19,7 @@ import { Settlement } from '../models/Settlement.js';
 import { Company } from '../models/Company.js';
 import { roundMoney } from '../utils/settlementCalculator.js';
 import { postDoubleEntryJournal } from '../utils/ledgerService.js';
+import { runInTransaction, ConfigurationError } from '../utils/transactionHelper.js';
 
 export const getLedgerEntries = async (req: Request, res: Response) => {
   try {
@@ -88,10 +89,11 @@ export const getLedgerEntries = async (req: Request, res: Response) => {
 export const getLedgerSummary = async (req: Request, res: Response) => {
   try {
     const companyId = req.tenant?.id;
+    const companyObjectId = new mongoose.Types.ObjectId(String(companyId));
 
     const [aggregates, categoryBreakdown] = await Promise.all([
       Ledger.aggregate([
-        { $match: { company_id: companyId, is_deleted: false } },
+        { $match: { company_id: companyObjectId, is_deleted: false } },
         {
           $group: {
             _id: null,
@@ -102,7 +104,7 @@ export const getLedgerSummary = async (req: Request, res: Response) => {
         },
       ]),
       Ledger.aggregate([
-        { $match: { company_id: companyId, is_deleted: false } },
+        { $match: { company_id: companyObjectId, is_deleted: false } },
         {
           $group: {
             _id: '$category',
@@ -148,7 +150,40 @@ export const createManualLedgerEntry = async (req: Request, res: Response) => {
       driver_id,
       billing_party_id,
       balance_party_id,
+      legs,
     } = req.body;
+
+    // Multi-leg double-entry manual journal voucher (atomic transaction)
+    if (legs && Array.isArray(legs) && legs.length >= 2) {
+      const journalResult = await runInTransaction(
+        async (session) => {
+          const posted = await postDoubleEntryJournal({
+            company_id: companyId!,
+            session,
+            transaction_date: transaction_date ? new Date(transaction_date) : new Date(),
+            transaction_type: 'manual_adjustment',
+            description: description || 'Manual Double-Entry Journal Voucher',
+            reference_number,
+            party_name,
+            legs,
+            is_auto_generated: false,
+            created_by: req.user?._id,
+            truck_id,
+            driver_id,
+            billing_party_id,
+            balance_party_id,
+          });
+          return {
+            message: 'Manual journal voucher recorded with double-entry balance.',
+            journal_id: posted.journal_id,
+            entries: posted.entries,
+          };
+        },
+        { statusCode: 201 }
+      );
+
+      return res.status(201).json(journalResult);
+    }
 
     const count = await Ledger.countDocuments({ company_id: companyId });
     const transaction_number = `TXN-${String(count + 1).padStart(4, '0')}`;
@@ -180,85 +215,92 @@ export const createManualLedgerEntry = async (req: Request, res: Response) => {
       entry: newEntry,
     });
   } catch (err: any) {
+    if (err instanceof ConfigurationError) {
+      return res.status(500).json({ error: err.message, code: 'CONFIGURATION_ERROR' });
+    }
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ error: err.message });
+    }
     res.status(400).json({ error: err.message || 'Failed to create ledger entry.' });
   }
 };
 
 export const reverseLedgerEntry = async (req: Request, res: Response) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-
   try {
     const companyId = req.tenant?.id;
     const { reversal_reason } = req.body;
 
-    const originalEntry = await Ledger.findOne({
-      _id: req.params.id,
-      company_id: companyId,
-      is_deleted: false,
-    }).session(session);
+    const reversalEntry = await runInTransaction(async (session) => {
+      const originalEntry = await Ledger.findOne({
+        _id: req.params.id,
+        company_id: companyId,
+        is_deleted: false,
+      }).session(session);
 
-    if (!originalEntry) {
-      await session.abortTransaction();
-      session.endSession();
-      return res.status(404).json({ error: 'Ledger entry not found.' });
-    }
+      if (!originalEntry) {
+        const err: any = new Error('Ledger entry not found.');
+        err.statusCode = 404;
+        throw err;
+      }
 
-    if (originalEntry.is_reversal) {
-      await session.abortTransaction();
-      session.endSession();
-      return res.status(400).json({ error: 'This ledger entry has already been reversed.' });
-    }
+      if (originalEntry.is_reversal) {
+        const err: any = new Error('This ledger entry has already been reversed.');
+        err.statusCode = 400;
+        throw err;
+      }
 
-    // Flag original entry as reversed
-    originalEntry.is_reversal = true;
-    originalEntry.reversal_reason = reversal_reason || 'Reversed by user';
-    await originalEntry.save({ session });
+      // Flag original entry as reversed
+      originalEntry.is_reversal = true;
+      originalEntry.reversal_reason = reversal_reason || 'Reversed by user';
+      await originalEntry.save({ session });
 
-    // Create the counter-balancing reversal entry
-    const count = await Ledger.countDocuments({ company_id: companyId }).session(session);
-    const transaction_number = `REV-${String(count + 1).padStart(4, '0')}`;
-    const reversal_journal_id = originalEntry.journal_id ? `REV-${originalEntry.journal_id}` : undefined;
+      // Create the counter-balancing reversal entry
+      const count = await Ledger.countDocuments({ company_id: companyId }).session(session);
+      const transaction_number = `REV-${String(count + 1).padStart(4, '0')}`;
+      const reversal_journal_id = originalEntry.journal_id ? `REV-${originalEntry.journal_id}` : undefined;
 
-    const reversalEntry = new Ledger({
-      company_id: companyId,
-      transaction_number,
-      journal_id: reversal_journal_id,
-      transaction_date: new Date(),
-      category: originalEntry.category,
-      transaction_type: originalEntry.transaction_type,
-      balance_type: originalEntry.balance_type === 'debit' ? 'credit' : 'debit', // Invert balance
-      amount: roundMoney(originalEntry.amount),
-      payment_mode: originalEntry.payment_mode,
-      reference_number: `REV:${originalEntry.transaction_number}`,
-      party_name: originalEntry.party_name,
-      description: `Reversal of ${originalEntry.transaction_number}: ${reversal_reason || 'Correction entry'}`,
-      is_auto_generated: true,
-      is_reversal: true,
-      reversed_entry_id: originalEntry._id,
-      journey_id: originalEntry.journey_id,
-      truck_id: originalEntry.truck_id,
-      driver_id: originalEntry.driver_id,
-      billing_party_id: originalEntry.billing_party_id,
-      balance_party_id: originalEntry.balance_party_id,
-      settlement_id: originalEntry.settlement_id,
-      invoice_id: originalEntry.invoice_id,
-      vehicle_entry_id: originalEntry.vehicle_entry_id,
-      created_by: req.user?._id,
+      const newReversal = new Ledger({
+        company_id: companyId,
+        transaction_number,
+        journal_id: reversal_journal_id,
+        transaction_date: new Date(),
+        category: originalEntry.category,
+        transaction_type: originalEntry.transaction_type,
+        balance_type: originalEntry.balance_type === 'debit' ? 'credit' : 'debit', // Invert balance
+        amount: roundMoney(originalEntry.amount),
+        payment_mode: originalEntry.payment_mode,
+        reference_number: `REV:${originalEntry.transaction_number}`,
+        party_name: originalEntry.party_name,
+        description: `Reversal of ${originalEntry.transaction_number}: ${reversal_reason || 'Correction entry'}`,
+        is_auto_generated: true,
+        is_reversal: true,
+        reversed_entry_id: originalEntry._id,
+        journey_id: originalEntry.journey_id,
+        truck_id: originalEntry.truck_id,
+        driver_id: originalEntry.driver_id,
+        billing_party_id: originalEntry.billing_party_id,
+        balance_party_id: originalEntry.balance_party_id,
+        settlement_id: originalEntry.settlement_id,
+        invoice_id: originalEntry.invoice_id,
+        vehicle_entry_id: originalEntry.vehicle_entry_id,
+        created_by: req.user?._id,
+      });
+
+      await newReversal.save({ session });
+      return {
+        message: 'Journal entry reversed with counter-balancing audit posting.',
+        reversal_entry: newReversal,
+      };
     });
 
-    await reversalEntry.save({ session });
-
-    await session.commitTransaction();
-    session.endSession();
-
-    res.json({
-      message: 'Journal entry reversed with counter-balancing audit posting.',
-      reversal_entry: reversalEntry,
-    });
+    res.json(reversalEntry);
   } catch (err: any) {
-    await session.abortTransaction();
-    session.endSession();
+    if (err instanceof ConfigurationError) {
+      return res.status(500).json({ error: err.message, code: 'CONFIGURATION_ERROR' });
+    }
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ error: err.message });
+    }
     res.status(500).json({ error: err.message || 'Failed to reverse entry.' });
   }
 };
@@ -272,10 +314,11 @@ export const reverseLedgerEntry = async (req: Request, res: Response) => {
 export const getLedgerReconciliation = async (req: Request, res: Response) => {
   try {
     const companyId = req.tenant?.id;
+    const companyObjectId = new mongoose.Types.ObjectId(String(companyId));
 
     // 1. Ledger Balance Aggregates
     const [ledgerAgg] = await Ledger.aggregate([
-      { $match: { company_id: companyId, is_deleted: false } },
+      { $match: { company_id: companyObjectId, is_deleted: false } },
       {
         $group: {
           _id: null,
@@ -293,7 +336,7 @@ export const getLedgerReconciliation = async (req: Request, res: Response) => {
 
     // 2. Journal Double-Entry Integrity Check
     const journalUnbalance = await Ledger.aggregate([
-      { $match: { company_id: companyId, is_deleted: false, journal_id: { $exists: true, $ne: null } } },
+      { $match: { company_id: companyObjectId, is_deleted: false, journal_id: { $exists: true, $ne: null } } },
       {
         $group: {
           _id: '$journal_id',
@@ -320,7 +363,7 @@ export const getLedgerReconciliation = async (req: Request, res: Response) => {
 
     // 3. Invoicing Commercial Balance
     const [invoiceAgg] = await Invoice.aggregate([
-      { $match: { company_id: companyId, is_deleted: false, status: { $ne: 'cancelled' } } },
+      { $match: { company_id: companyObjectId, is_deleted: false, status: { $ne: 'cancelled' } } },
       {
         $group: {
           _id: null,
@@ -334,7 +377,7 @@ export const getLedgerReconciliation = async (req: Request, res: Response) => {
 
     // 4. Driver Settlement Statistics
     const [settlementAgg] = await Settlement.aggregate([
-      { $match: { company_id: companyId, is_deleted: false } },
+      { $match: { company_id: companyObjectId, is_deleted: false } },
       {
         $group: {
           _id: null,
@@ -387,12 +430,13 @@ export const getLedgerReconciliation = async (req: Request, res: Response) => {
 export const getPartyBalances = async (req: Request, res: Response) => {
   try {
     const companyId = req.tenant?.id;
+    const companyObjectId = new mongoose.Types.ObjectId(String(companyId));
 
     const parties = await BalanceParty.find({ company_id: companyId, is_deleted: false }).lean();
 
     // Aggregate all vehicle entries by balance_party_id
     const movements = await VehicleEntry.aggregate([
-      { $match: { company_id: companyId, is_deleted: false } },
+      { $match: { company_id: companyObjectId, is_deleted: false } },
       {
         $group: {
           _id: '$balance_party_id',

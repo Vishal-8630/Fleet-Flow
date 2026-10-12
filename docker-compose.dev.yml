@@ -1,0 +1,50 @@
+# ==============================================================================
+# FLEET FLOW LOCAL DEVELOPMENT COMPOSE (docker-compose.dev.yml)
+# ==============================================================================
+# TOPOLOGY ARCHITECTURAL NOTICE (DEC-002 Option A):
+# Single-node MongoDB replica set (`rs0`) for local development only.
+# Staging and production deployments require a distributed multi-node Replica Set
+# or managed MongoDB Atlas cluster.
+# ==============================================================================
+
+version: '3.8'
+
+services:
+  mongo:
+    image: mongo:6.0
+    container_name: fleetflow-mongo-dev
+    command: mongod --replSet rs0 --bind_ip_all
+    ports:
+      - '27017:27017'
+    volumes:
+      - mongo_data_dev:/data/db
+    healthcheck:
+      test: >
+        mongosh --quiet --eval '
+          try {
+            const status = rs.status();
+            if (status.ok === 1 && (status.myState === 1 || status.myState === 2)) {
+              quit(0);
+            }
+            quit(1);
+          } catch (e) {
+            try {
+              const res = rs.initiate({
+                _id: "rs0",
+                members: [{ _id: 0, host: "localhost:27017" }]
+              });
+              if (res.ok === 1) quit(0);
+              quit(1);
+            } catch (initErr) {
+              quit(1);
+            }
+          }
+        '
+      interval: 5s
+      timeout: 10s
+      retries: 5
+      start_period: 5s
+
+volumes:
+  mongo_data_dev:
+    driver: local

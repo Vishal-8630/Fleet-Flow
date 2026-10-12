@@ -12,6 +12,7 @@
 
 import { Request, Response } from 'express';
 import { CustomFieldDefinition, CustomFieldTargetEntity } from '../models/CustomFieldDefinition.js';
+import { validateCustomFieldKey } from '../utils/customFieldKeyValidator.js';
 import { Truck } from '../models/Truck.js';
 import { Driver } from '../models/Driver.js';
 import { TruckJourney } from '../models/TruckJourney.js';
@@ -75,8 +76,14 @@ export async function createCustomField(req: Request, res: Response): Promise<vo
       return;
     }
 
-    // Normalize field key
-    const cleanKey = field_key.trim().toLowerCase().replace(/\s+/g, '_');
+    // Validate field_key to prevent prototype pollution and MongoDB operator injection (ISS-021)
+    const keyValidation = validateCustomFieldKey(field_key);
+    if (!keyValidation.isValid) {
+      res.status(400).json({ error: keyValidation.error });
+      return;
+    }
+
+    const cleanKey = field_key;
 
     // Check duplicate
     const existing = await CustomFieldDefinition.findOne({

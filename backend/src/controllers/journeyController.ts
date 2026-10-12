@@ -23,6 +23,7 @@
  */
 
 import { Request, Response } from 'express';
+import { Types } from 'mongoose';
 import { TruckJourney, JourneyStatus } from '../models/TruckJourney.js';
 import { Truck } from '../models/Truck.js';
 import { Driver } from '../models/Driver.js';
@@ -123,11 +124,13 @@ export const getJourneyMetrics = async (req: Request, res: Response) => {
       }),
     ]);
 
+    const companyObjectId = new Types.ObjectId(String(companyId));
+
     // Aggregate total diesel and average mileage across journeys this month
     const mileageAgg = await TruckJourney.aggregate([
       {
         $match: {
-          company_id: companyId,
+          company_id: companyObjectId,
           status: { $in: ['active', 'completed', 'delayed'] },
           is_deleted: false,
         },

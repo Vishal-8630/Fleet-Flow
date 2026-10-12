@@ -2,6 +2,9 @@ import jwt from 'jsonwebtoken';
 import { Company, ICompany } from '../models/Company.js';
 import { User, IUser } from '../models/User.js';
 import { CompanyMember, ICompanyMember, UserRole } from '../models/CompanyMember.js';
+import { Plan } from '../models/Plan.js';
+import { Subscription } from '../models/Subscription.js';
+import { MOD_CATALOG, ModuleKey } from '../utils/featureCatalog.js';
 
 export interface TestTenantContext {
   company: ICompany;
@@ -21,7 +24,7 @@ export async function createTestTenant(options?: {
   counter += 1;
   const uniqueId = `${Date.now()}-${counter}-${Math.random().toString(36).substring(2, 7)}`;
   const role = options?.role || 'admin';
-  const subStatus = options?.subscription_status || 'active';
+  const subStatus = (options?.subscription_status || 'active') as any;
 
   const company = await Company.create({
     name: options?.name || `Test Company ${uniqueId}`,
@@ -43,6 +46,30 @@ export async function createTestTenant(options?: {
       number_system: 'indian_lakhs',
       expense_categories: [],
     },
+  });
+
+  let enterprisePlan = await Plan.findOne({ code: 'enterprise' });
+  if (!enterprisePlan) {
+    enterprisePlan = await Plan.create({
+      name: 'Enterprise Plan',
+      code: 'enterprise',
+      description: 'Full enterprise capabilities',
+      monthly_price_paise: 999900,
+      annual_price_paise: 9999900,
+      included_features: Object.keys(MOD_CATALOG) as ModuleKey[],
+      max_trucks: -1,
+      max_drivers: -1,
+      max_users: -1,
+      is_active: true,
+      is_public: true,
+    });
+  }
+
+  await Subscription.create({
+    company_id: company._id,
+    plan_id: enterprisePlan._id,
+    status: subStatus,
+    billing_cycle: 'monthly',
   });
 
   const user = await User.create({

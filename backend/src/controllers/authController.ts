@@ -31,6 +31,7 @@ import { CompanyMember } from '../models/CompanyMember.js';
 import { Plan } from '../models/Plan.js';
 import { Subscription } from '../models/Subscription.js';
 import { getTenantEntitlements } from '../utils/entitlementService.js';
+import { runInTransaction, ConfigurationError } from '../utils/transactionHelper.js';
 import {
   sendPasswordResetEmail,
   sendPasswordChangedAlert,
@@ -80,7 +81,6 @@ export const getCookieOptions = () => ({
  * 8. Issues an HttpOnly JWT cookie and returns the user & company metadata.
  */
 export async function registerCompany(req: Request, res: Response): Promise<void> {
-  let session: mongoose.ClientSession | null = null;
   try {
     const { companyName, slug, name, email, password, phone, gstin } = req.body;
 
@@ -129,94 +129,84 @@ export async function registerCompany(req: Request, res: Response): Promise<void
       cleanSlug = `${cleanSlug}-${Math.random().toString(36).substring(2, 6)}`;
     }
 
-    // Multi-document transaction attempt (gracefully falls back if standalone MongoDB)
-    let useSession = false;
-    try {
-      session = await mongoose.startSession();
-      session.startTransaction();
-      useSession = true;
-    } catch {
-      session = null;
-      useSession = false;
-    }
+    // Multi-document ACID transaction: atomically creates User (if new), Company, CompanyMember, and Subscription
+    const { user: registeredUser, company: registeredCompany } = await runInTransaction(async (session) => {
+      let activeUser = user;
 
-    const sessionOption = useSession && session ? { session } : undefined;
+      // 2. Create User account if brand new
+      if (!activeUser) {
+        const password_hash = await bcrypt.hash(password, 12);
+        const users = await User.create(
+          [
+            {
+              name: name.trim(),
+              email: userEmail,
+              password_hash,
+              phone: phone.trim(),
+              token_version: 0,
+            },
+          ],
+          { session }
+        );
+        activeUser = users[0];
+      }
 
-    // 2. Create User account if brand new
-    if (!user) {
-      const password_hash = await bcrypt.hash(password, 12);
-      const users = await User.create(
+      // 3. Create Company Workspace with 14-day free trial
+      const companies = await Company.create(
         [
           {
-            name: name.trim(),
-            email: userEmail,
-            password_hash,
+            name: companyName.trim(),
+            slug: cleanSlug,
+            email: email.toLowerCase().trim(),
             phone: phone.trim(),
-            token_version: 0,
-          },
-        ],
-        sessionOption
-      );
-      user = users[0];
-    }
-
-    // 3. Create Company Workspace with 14-day free trial
-    const companies = await Company.create(
-      [
-        {
-          name: companyName.trim(),
-          slug: cleanSlug,
-          email: email.toLowerCase().trim(),
-          phone: phone.trim(),
-          gstin: gstin ? gstin.toUpperCase().trim() : undefined,
-          subscription_status: 'trialing',
-          trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
-        },
-      ],
-      sessionOption
-    );
-    const company = companies[0];
-
-    // 4. Create Company Member (Admin Role)
-    await CompanyMember.create(
-      [
-        {
-          company_id: company._id,
-          user_id: user._id,
-          email: user.email,
-          role: 'admin',
-          status: 'active',
-        },
-      ],
-      sessionOption
-    );
-
-    // 5. Initialize Trial Subscription if standard plan exists
-    const standardPlan = await Plan.findOne({ code: 'standard' });
-    if (standardPlan) {
-      await Subscription.create(
-        [
-          {
-            company_id: company._id,
-            plan_id: standardPlan._id,
-            billing_cycle: 'monthly',
-            status: 'trialing',
-            current_period_start: new Date(),
-            current_period_end: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+            gstin: gstin ? gstin.toUpperCase().trim() : undefined,
+            subscription_status: 'trialing',
             trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
           },
         ],
-        sessionOption
+        { session }
       );
-    }
+      const newCompany = companies[0];
 
-    if (useSession && session) {
-      await session.commitTransaction();
-    }
+      // 4. Create Company Member (Admin Role)
+      await CompanyMember.create(
+        [
+          {
+            company_id: newCompany._id,
+            user_id: activeUser._id,
+            email: activeUser.email,
+            role: 'admin',
+            status: 'active',
+          },
+        ],
+        { session }
+      );
+
+      // 5. Initialize Trial Subscription if standard plan or any active plan exists
+      const standardPlan = (await Plan.findOne({ code: 'standard' }).session(session)) || (await Plan.findOne().session(session));
+      if (standardPlan) {
+        await Subscription.create(
+          [
+            {
+              company_id: newCompany._id,
+              plan_id: standardPlan._id,
+              billing_cycle: 'monthly',
+              status: 'trialing',
+              current_period_start: new Date(),
+              current_period_end: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+              trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+            },
+          ],
+          { session }
+        );
+      }
+
+      return { user: activeUser, company: newCompany };
+    });
 
     // 6. Issue JWT session cookie with token_version
     const token = jwt.sign(
-      { userId: user._id, companyId: company._id, token_version: user.token_version || 0 },
+      { userId: registeredUser._id, companyId: registeredCompany._id, token_version: registeredUser.token_version || 0 },
       getJwtSecret(),
       { expiresIn: '7d' }
     );
@@ -225,20 +215,15 @@ export async function registerCompany(req: Request, res: Response): Promise<void
 
     res.status(201).json({
       message: 'Company workspace successfully registered!',
-      user: { id: user._id, name: user.name, email: user.email, isSuperAdmin: false },
-      company: { id: company._id, name: company.name, slug: company.slug, status: company.subscription_status },
+      user: { id: registeredUser._id, name: registeredUser.name, email: registeredUser.email, isSuperAdmin: false },
+      company: { id: registeredCompany._id, name: registeredCompany.name, slug: registeredCompany.slug, status: registeredCompany.subscription_status },
     });
   } catch (error: any) {
-    if (session) {
-      try {
-        await session.abortTransaction();
-      } catch {}
+    if (error instanceof ConfigurationError) {
+      res.status(500).json({ error: error.message, code: 'CONFIGURATION_ERROR' });
+      return;
     }
     res.status(500).json({ error: error.message || 'Registration failed.' });
-  } finally {
-    if (session) {
-      session.endSession();
-    }
   }
 }
 

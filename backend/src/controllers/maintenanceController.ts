@@ -19,6 +19,7 @@ import { TruckJourney } from '../models/TruckJourney.js';
 import { Ledger } from '../models/Ledger.js';
 import { postDoubleEntryJournal } from '../utils/ledgerService.js';
 import { roundMoney } from '../utils/settlementCalculator.js';
+import { runInTransaction, ConfigurationError } from '../utils/transactionHelper.js';
 
 function getCompanyId(req: Request): any {
   return req.company?._id || (req as any).companyId;
@@ -296,9 +297,6 @@ export async function updateWorkOrder(req: Request, res: Response): Promise<void
  * Completes work order, resets truck status, updates odometer, and posts to Ledger
  */
 export async function completeWorkOrder(req: Request, res: Response): Promise<void> {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-
   try {
     const companyId = getCompanyId(req);
     const userId = (req as any).user?._id;
@@ -310,96 +308,99 @@ export async function completeWorkOrder(req: Request, res: Response): Promise<vo
       post_to_ledger = true,
     } = req.body;
 
-    const order = await MaintenanceOrder.findOne({ _id: id, company_id: companyId }).session(session);
-    if (!order) {
-      await session.abortTransaction();
-      res.status(404).json({ error: 'Work order not found.' });
-      return;
-    }
-
-    if (order.status === 'completed') {
-      await session.abortTransaction();
-      res.status(400).json({ error: 'Work order is already completed.' });
-      return;
-    }
-
-    const truck = await Truck.findOne({ _id: order.truck_id, company_id: companyId }).session(session);
-    if (!truck) {
-      await session.abortTransaction();
-      res.status(404).json({ error: 'Associated truck not found.' });
-      return;
-    }
-
-    // 1. Calculate Downtime Hours
-    const finishDate = new Date(completed_date);
-    const startDate = new Date(order.start_date);
-    const downtimeHours = Math.max(0, Math.round(((finishDate.getTime() - startDate.getTime()) / (1000 * 60 * 60)) * 10) / 10);
-
-    // 2. Recalibrate Truck Odometer & Service Due
-    const serviceOdo = order.odometer_kms_at_service || truck.current_odometer_kms;
-    const newNextServiceDue = next_service_due_kms !== undefined
-      ? Number(next_service_due_kms)
-      : serviceOdo + (truck.service_interval_kms || 10000);
-
-    truck.status = 'available';
-    truck.last_service_kms = serviceOdo;
-    truck.next_service_due_kms = newNextServiceDue;
-    await truck.save({ session });
-
-    // 3. Mark Order Completed
-    order.status = 'completed';
-    order.completed_date = finishDate;
-    order.downtime_hours = downtimeHours;
-    if (vendor_invoice_no) order.vendor_invoice_no = vendor_invoice_no;
-    order.next_service_due_kms = newNextServiceDue;
-
-    // 4. Double-Entry General Ledger Posting
-    if (post_to_ledger && order.total_amount > 0) {
-      const journalVouchers = await postDoubleEntryJournal({
-        company_id: companyId!,
-        session,
-        transaction_type: 'expense',
-        description: `Maintenance Work Order ${order.work_order_no} for ${truck.truck_no} (${order.order_type.replace('_', ' ')})`,
-        reference_number: order.work_order_no,
-        party_name: order.vendor_name,
-        created_by: userId,
-        truck_id: truck._id,
-        legs: [
-          {
-            category: 'vehicle_maintenance',
-            balance_type: 'debit',
-            amount: order.total_amount,
-            truck_id: truck._id,
-            description: `Mechanical repair / parts & labor for ${truck.truck_no}`,
-          },
-          {
-            category: 'bank_transfer',
-            balance_type: 'credit',
-            amount: order.total_amount,
-            party_name: order.vendor_name,
-            description: `Payment to ${order.vendor_name} for WO ${order.work_order_no}`,
-          },
-        ],
-      });
-
-      if (journalVouchers?.entries?.length > 0) {
-        order.ledger_entry_id = journalVouchers.entries[0]._id;
+    const result = await runInTransaction(async (session) => {
+      const order = await MaintenanceOrder.findOne({ _id: id, company_id: companyId }).session(session);
+      if (!order) {
+        const err: any = new Error('Work order not found.');
+        err.statusCode = 404;
+        throw err;
       }
-    }
 
-    await order.save({ session });
-    await session.commitTransaction();
+      if (order.status === 'completed') {
+        const err: any = new Error('Work order is already completed.');
+        err.statusCode = 400;
+        throw err;
+      }
+
+      const truck = await Truck.findOne({ _id: order.truck_id, company_id: companyId }).session(session);
+      if (!truck) {
+        const err: any = new Error('Associated truck not found.');
+        err.statusCode = 404;
+        throw err;
+      }
+
+      // 1. Calculate Downtime Hours
+      const finishDate = new Date(completed_date);
+      const startDate = new Date(order.start_date);
+      const downtimeHours = Math.max(0, Math.round(((finishDate.getTime() - startDate.getTime()) / (1000 * 60 * 60)) * 10) / 10);
+
+      // 2. Recalibrate Truck Odometer & Service Due
+      const serviceOdo = order.odometer_kms_at_service || truck.current_odometer_kms;
+      const newNextServiceDue = next_service_due_kms !== undefined
+        ? Number(next_service_due_kms)
+        : serviceOdo + (truck.service_interval_kms || 10000);
+
+      truck.status = 'available';
+      truck.last_service_kms = serviceOdo;
+      truck.next_service_due_kms = newNextServiceDue;
+      await truck.save({ session });
+
+      // 3. Mark Order Completed
+      order.status = 'completed';
+      order.completed_date = finishDate;
+      order.downtime_hours = downtimeHours;
+      if (vendor_invoice_no) order.vendor_invoice_no = vendor_invoice_no;
+      order.next_service_due_kms = newNextServiceDue;
+
+      // 4. Double-Entry General Ledger Posting
+      if (post_to_ledger && order.total_amount > 0) {
+        const journalVouchers = await postDoubleEntryJournal({
+          company_id: companyId!,
+          session,
+          transaction_type: 'expense',
+          description: `Maintenance Work Order ${order.work_order_no} for ${truck.truck_no} (${order.order_type.replace('_', ' ')})`,
+          reference_number: order.work_order_no,
+          party_name: order.vendor_name,
+          created_by: userId,
+          truck_id: truck._id,
+          legs: [
+            {
+              category: 'vehicle_maintenance',
+              balance_type: 'debit',
+              amount: order.total_amount,
+              truck_id: truck._id,
+              description: `Mechanical repair / parts & labor for ${truck.truck_no}`,
+            },
+            {
+              category: 'bank_transfer',
+              balance_type: 'credit',
+              amount: order.total_amount,
+              party_name: order.vendor_name,
+              description: `Payment to ${order.vendor_name} for WO ${order.work_order_no}`,
+            },
+          ],
+        });
+
+        if (journalVouchers?.entries?.length > 0) {
+          order.ledger_entry_id = journalVouchers.entries[0]._id;
+        }
+      }
+
+      await order.save({ session });
+      return { order, truckNo: truck.truck_no };
+    });
 
     res.json({
       success: true,
-      message: `Work Order ${order.work_order_no} completed. Truck ${truck.truck_no} is now Available.`,
-      workOrder: order,
+      message: `Work Order ${result.order.work_order_no} completed. Truck ${result.truckNo} is now Available.`,
+      workOrder: result.order,
     });
   } catch (err: any) {
-    await session.abortTransaction();
-    res.status(500).json({ error: err.message });
-  } finally {
-    session.endSession();
+    if (err instanceof ConfigurationError) {
+      res.status(500).json({ error: err.message, code: 'CONFIGURATION_ERROR' });
+      return;
+    }
+    res.status(err.statusCode || 500).json({ error: err.message });
   }
 }
 
@@ -411,30 +412,45 @@ export async function cancelWorkOrder(req: Request, res: Response): Promise<void
   try {
     const companyId = getCompanyId(req);
     const { id } = req.params;
+    const { cancel_reason } = req.body;
 
-    const order = await MaintenanceOrder.findOne({ _id: id, company_id: companyId });
-    if (!order) {
-      res.status(404).json({ error: 'Work order not found.' });
-      return;
-    }
+    const result = await runInTransaction(async (session) => {
+      const order = await MaintenanceOrder.findOne({ _id: id, company_id: companyId }).session(session);
+      if (!order) {
+        const err: any = new Error('Work order not found.');
+        err.statusCode = 404;
+        throw err;
+      }
 
-    if (order.status === 'completed') {
-      res.status(400).json({ error: 'Completed work orders cannot be cancelled.' });
-      return;
-    }
+      if (order.status === 'completed') {
+        const err: any = new Error('Completed work orders cannot be cancelled.');
+        err.statusCode = 400;
+        throw err;
+      }
 
-    order.status = 'cancelled';
-    await order.save();
+      order.status = 'cancelled';
+      if (cancel_reason) {
+        order.notes = order.notes ? `${order.notes} | Cancel Reason: ${cancel_reason}` : `Cancel Reason: ${cancel_reason}`;
+      }
+      await order.save({ session });
 
-    // Revert truck status if in maintenance
-    await Truck.findOneAndUpdate(
-      { _id: order.truck_id, company_id: companyId, status: 'in_maintenance' },
-      { status: 'available' }
-    );
+      // Revert truck status if in maintenance
+      await Truck.findOneAndUpdate(
+        { _id: order.truck_id, company_id: companyId, status: 'in_maintenance' },
+        { status: 'available' },
+        { session }
+      );
 
-    res.json({ success: true, message: `Work order ${order.work_order_no} cancelled.` });
+      return order;
+    });
+
+    res.json({ success: true, message: `Work order ${result.work_order_no} cancelled.` });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    if (err instanceof ConfigurationError) {
+      res.status(500).json({ error: err.message, code: 'CONFIGURATION_ERROR' });
+      return;
+    }
+    res.status(err.statusCode || 500).json({ error: err.message });
   }
 }
 

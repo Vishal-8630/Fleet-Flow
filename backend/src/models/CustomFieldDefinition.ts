@@ -18,6 +18,7 @@
 
 import mongoose, { Document, Schema, Types } from 'mongoose';
 import { tenantPlugin } from '../plugins/tenantPlugin.js';
+import { validateCustomFieldKey } from '../utils/customFieldKeyValidator.js';
 
 export type CustomFieldTargetEntity =
   | 'Truck'
@@ -66,7 +67,10 @@ const CustomFieldDefinitionSchema = new Schema<ICustomFieldDefinition>(
       required: true,
       trim: true,
       lowercase: true,
-      match: [/^[a-z0-9_]+$/, 'Field key must contain only lowercase letters, numbers, and underscores.'],
+      validate: {
+        validator: (v: string) => validateCustomFieldKey(v).isValid,
+        message: (props: any) => validateCustomFieldKey(props.value).error || 'Invalid field key',
+      },
     },
     field_label: { type: String, required: true, trim: true },
     field_type: {

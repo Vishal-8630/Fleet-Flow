@@ -49,6 +49,7 @@ const router = Router();
 // Public Authentication & Recovery Endpoints (Rate Limited)
 // ----------------------------------------------------------------------------
 router.post('/register-company', registerLimiter, registerCompany);
+router.post('/register', registerLimiter, registerCompany);
 router.post('/login', authLimiter, login);
 router.post('/logout', logout);
 router.post('/forgot-password', passwordResetLimiter, forgotPassword);

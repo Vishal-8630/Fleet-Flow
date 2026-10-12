@@ -32,7 +32,17 @@ export const api = axios.create({
   },
 });
 
-// Attach explicit active company header if set in storage
+/**
+ * Generates a unique UUID v4 idempotency token.
+ * Can be bound to modal or form lifecycle to preserve keys across user retries.
+ */
+export function generateIdempotencyKey(): string {
+  return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+}
+
+// Attach explicit active company header if set in storage, and attach idempotency key for mutations (ISS-019)
 api.interceptors.request.use((config) => {
   if (typeof window !== 'undefined') {
     const activeCompanyId = localStorage.getItem('active_company_id');
@@ -40,6 +50,17 @@ api.interceptors.request.use((config) => {
       config.headers['x-company-id'] = activeCompanyId;
     }
   }
+
+  const method = config.method?.toLowerCase() || '';
+  if (['post', 'put', 'patch', 'delete'].includes(method)) {
+    // If the request config already contains an idempotency key (from a prior attempt or retry),
+    // preserve it to guarantee that retries of the same logical mutation reuse the same key!
+    // A fresh logical operation lacking this header receives a new UUID key.
+    if (!config.headers['x-idempotency-key'] && !config.headers['Idempotency-Key']) {
+      config.headers['x-idempotency-key'] = generateIdempotencyKey();
+    }
+  }
+
   return config;
 });
 

@@ -20,16 +20,22 @@
 import mongoose, { Document, Schema, Types } from 'mongoose';
 import { tenantPlugin } from '../plugins/tenantPlugin.js';
 
+export type IdempotencyStatus = 'PENDING' | 'COMMITTED' | 'RESOLVED' | 'FAILED';
+
 export interface IIdempotencyKey extends Document {
   company_id: Types.ObjectId;
   key: string;
   endpoint: string;
   method: string;
-  request_hash?: string;
-  status_code: number;
-  response_body: any;
+  request_hash: string;
+  status: IdempotencyStatus;
+  locked_at: Date;
+  lock_token?: string;
+  status_code?: number;
+  response_body?: any;
   expires_at: Date;
   created_at: Date;
+  updated_at: Date;
 }
 
 const IdempotencyKeySchema = new Schema<IIdempotencyKey>(
@@ -59,15 +65,29 @@ const IdempotencyKeySchema = new Schema<IIdempotencyKey>(
     },
     request_hash: {
       type: String,
+      required: true,
+      trim: true,
+    },
+    status: {
+      type: String,
+      enum: ['PENDING', 'COMMITTED', 'RESOLVED', 'FAILED'],
+      default: 'PENDING',
+      required: true,
+      index: true,
+    },
+    locked_at: {
+      type: Date,
+      default: Date.now,
+    },
+    lock_token: {
+      type: String,
       trim: true,
     },
     status_code: {
       type: Number,
-      required: true,
     },
     response_body: {
       type: Schema.Types.Mixed,
-      required: true,
     },
     expires_at: {
       type: Date,
@@ -76,7 +96,7 @@ const IdempotencyKeySchema = new Schema<IIdempotencyKey>(
     },
   },
   {
-    timestamps: { createdAt: 'created_at', updatedAt: false },
+    timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
   }
 );
 

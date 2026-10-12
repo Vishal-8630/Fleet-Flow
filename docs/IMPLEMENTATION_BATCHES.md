@@ -105,12 +105,12 @@ Implementation must follow strict structural dependencies. Security boundaries, 
   - `frontend/src/api/client.ts`
   - `backend/src/models/` (`GpsPing.ts`, `JournalEntry.ts`, `Document.ts`)
 * **Acceptance Criteria:**
-  - [ ] Multi-document transactions run cleanly in local Docker Compose (`rs0`) and CI without crashing.
-  - [ ] Financial operations on non-replicated MongoDB fail fast with clear `ConfigurationError`.
-  - [ ] Aggregation queries match documents accurately and return expected summaries.
-  - [ ] Duplicate financial POST requests with identical idempotency keys return cached responses.
-  - [ ] Custom field definitions reject prototype pollution keys with HTTP 400.
-* **Conditions to Exit Batch 2:** Multi-document transactional integrity verified in replica set mode; zero string-ObjectId aggregation bugs remaining.
+  - [x] Multi-document transactions run cleanly in local Docker Compose (`rs0`) and CI without crashing (10/10 tests in `phase25Transactions.test.ts`).
+  - [x] Financial operations on non-replicated MongoDB fail fast with clear `ConfigurationError`.
+  - [x] Aggregation queries match documents accurately and return expected summaries (7/7 tests in `phase21Hardening.test.ts`).
+  - [x] Duplicate financial POST requests with identical idempotency keys return cached responses (8/8 tests in `phase23Idempotency.test.ts`).
+  - [x] Custom field definitions reject prototype pollution keys with HTTP 400.
+* **Conditions to Exit Batch 2:** Multi-document transactional integrity verified in replica set mode; zero string-ObjectId aggregation bugs remaining; 90/90 backend tests passing. (EXIT CRITERIA MET).
 
 ---
 

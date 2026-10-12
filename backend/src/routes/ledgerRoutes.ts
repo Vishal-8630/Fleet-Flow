@@ -17,7 +17,7 @@ import {
 } from '../controllers/ledgerController.js';
 import { requireAuth, resolveTenantContext, requireRole, requireActiveSubscription } from '../middleware/authMiddleware.js';
 import { requireFeature } from '../middleware/entitlementMiddleware.js';
-import { requireIdempotency } from '../middleware/idempotencyMiddleware.js';
+import { requireStrictIdempotency, requireIdempotency } from '../middleware/idempotencyMiddleware.js';
 
 const router = Router();
 
@@ -28,15 +28,16 @@ router.use(requireAuth, resolveTenantContext, requireActiveSubscription, require
 router.get('/summary', getLedgerSummary);
 router.get('/reconciliation', getLedgerReconciliation);
 router.get('/', getLedgerEntries);
-router.post('/', requireRole(['admin', 'accountant']), requireIdempotency, createManualLedgerEntry);
-router.post('/manual', requireRole(['admin', 'accountant']), requireIdempotency, createManualLedgerEntry);
-router.post('/:id/reverse', requireRole(['admin', 'accountant']), requireIdempotency, reverseLedgerEntry);
+router.post('/', requireRole(['admin', 'accountant']), requireStrictIdempotency, createManualLedgerEntry);
+router.post('/manual', requireRole(['admin', 'accountant']), requireStrictIdempotency, createManualLedgerEntry);
+router.post('/journals', requireRole(['admin', 'accountant']), requireStrictIdempotency, createManualLedgerEntry);
+router.post('/:id/reverse', requireRole(['admin', 'accountant']), requireStrictIdempotency, reverseLedgerEntry);
 
 // Party Balance Reconciliation endpoints (with frontend compatibility aliases)
 router.get('/party-balances', getPartyBalances);
 router.get('/party-balances/:partyId/statement', getPartyStatement);
 router.get('/party-statements/:partyId', getPartyStatement);
-router.post('/party-balances/:partyId/payout', requireRole(['admin', 'accountant']), requireIdempotency, recordPartyPayout);
-router.post('/parties/:partyId/payout', requireRole(['admin', 'accountant']), requireIdempotency, recordPartyPayout);
+router.post('/party-balances/:partyId/payout', requireRole(['admin', 'accountant']), requireStrictIdempotency, recordPartyPayout);
+router.post('/parties/:partyId/payout', requireRole(['admin', 'accountant']), requireStrictIdempotency, recordPartyPayout);
 
 export default router;

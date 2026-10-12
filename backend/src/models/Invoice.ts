@@ -273,7 +273,7 @@ const InvoiceSchema = new Schema<IInvoice>(
 // Compound unique index per tenant company
 InvoiceSchema.index({ company_id: 1, invoice_number: 1 }, { unique: true });
 InvoiceSchema.index({ company_id: 1, invoice_date: -1 });
-InvoiceSchema.index({ company_id: 1, status: 1 });
+InvoiceSchema.index({ company_id: 1, status: 1, due_date: 1 });
 
 // Multi-tenant isolation plugin
 InvoiceSchema.plugin(tenantPlugin);

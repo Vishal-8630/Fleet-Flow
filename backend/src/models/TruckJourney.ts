@@ -495,6 +495,8 @@ const TruckJourneySchema = new Schema<ITruckJourney>(
 
 // Compound unique index: Journey number is unique per company tenant
 TruckJourneySchema.index({ company_id: 1, journey_number: 1 }, { unique: true });
+TruckJourneySchema.index({ company_id: 1, status: 1, start_date: -1 });
+TruckJourneySchema.index({ company_id: 1, truck_id: 1, start_date: -1 });
 TruckJourneySchema.index({ 'custom_fields.$**': 1 });
 
 // Multi-tenant isolation plugin

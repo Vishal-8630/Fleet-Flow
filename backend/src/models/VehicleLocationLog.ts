@@ -55,6 +55,7 @@ const VehicleLocationLogSchema = new Schema<IVehicleLocationLog>(
 );
 
 // Compound index for efficient time-series queries per truck
+VehicleLocationLogSchema.index({ company_id: 1, truck_id: 1, recorded_at: -1 });
 VehicleLocationLogSchema.index({ truck_id: 1, recorded_at: -1 });
 VehicleLocationLogSchema.index({ journey_id: 1, recorded_at: 1 });
 

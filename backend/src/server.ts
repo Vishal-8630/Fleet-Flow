@@ -57,6 +57,7 @@ import healthRoutes from './routes/healthRoutes.js';
 import publicMarketingRoutes from './routes/publicRoutes.js';
 import { startNotificationWorker } from './workers/notificationWorker.js';
 import { noSqlSanitizer } from './middleware/securityMiddleware.js';
+import { assertReplicaSetTopology } from './utils/transactionHelper.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -213,6 +214,8 @@ export async function startServer() {
     if (MONGODB_URI && !MONGODB_URI.includes('<password>')) {
       await mongoose.connect(MONGODB_URI);
       console.log('✅ Connected to MongoDB Atlas / Database successfully.');
+      assertReplicaSetTopology();
+      console.log('✅ MongoDB Replica Set topology verified.');
       // Start background notification queue runner
       startNotificationWorker(5000);
     } else {
@@ -223,7 +226,10 @@ export async function startServer() {
       console.log(`🚀 Fleet Flow SaaS Backend running on http://localhost:${PORT}`);
     });
   } catch (error) {
-    console.error('❌ Database connection failure:', error);
+    console.error('❌ Database connection failure or topology mismatch:', error);
+    if (process.env.NODE_ENV !== 'test') {
+      process.exit(1);
+    }
   }
 }
 

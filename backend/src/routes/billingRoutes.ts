@@ -12,6 +12,7 @@
 
 import { Router } from 'express';
 import { requireAuth, resolveTenantContext, requireRole } from '../middleware/authMiddleware.js';
+import { requireStrictIdempotency } from '../middleware/idempotencyMiddleware.js';
 import {
   getBillingPlans,
   getCompanySubscription,
@@ -44,7 +45,7 @@ router.get('/history', getBillingHistory);
 router.get('/invoices/:id/receipt', getBillingInvoiceReceipt);
 router.post('/calculate-change', calculatePlanChangePreview);
 router.post('/checkout', initializeCheckout);
-router.post('/verify-payment', requireRole(['admin']), verifyPayment);
+router.post('/verify-payment', requireRole(['admin']), requireStrictIdempotency, verifyPayment);
 router.post('/change-plan', requireRole(['admin']), changePlan);
 router.post('/apply-scheduled', requireRole(['admin']), applyScheduledChange);
 router.post('/cancel-scheduled', requireRole(['admin']), cancelScheduledChange);

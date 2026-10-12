@@ -16,6 +16,7 @@
  */
 
 import { Request, Response } from 'express';
+import { Types } from 'mongoose';
 import { VehicleEntry } from '../models/VehicleEntry.js';
 import { BalanceParty } from '../models/BalanceParty.js';
 
@@ -96,6 +97,7 @@ export const getVehicleEntries = async (req: Request, res: Response) => {
 export const getVehicleEntryMetrics = async (req: Request, res: Response) => {
   try {
     const companyId = req.tenant?.id;
+    const companyObjectId = new Types.ObjectId(String(companyId));
 
     const [totalEntries, pendingPodCount, financialAgg] = await Promise.all([
       VehicleEntry.countDocuments({ company_id: companyId, is_deleted: false }),
@@ -105,7 +107,7 @@ export const getVehicleEntryMetrics = async (req: Request, res: Response) => {
         is_deleted: false,
       }),
       VehicleEntry.aggregate([
-        { $match: { company_id: companyId, is_deleted: false } },
+        { $match: { company_id: companyObjectId, is_deleted: false } },
         {
           $group: {
             _id: null,

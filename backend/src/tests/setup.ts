@@ -1,22 +1,27 @@
-import { MongoMemoryServer } from 'mongodb-memory-server';
+import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import mongoose from 'mongoose';
 import { beforeAll, afterAll, afterEach } from 'vitest';
 
-let mongoServer: MongoMemoryServer;
+let mongoReplSet: MongoMemoryReplSet;
 
 beforeAll(async () => {
   process.env.NODE_ENV = 'test';
   process.env.JWT_SECRET = 'test_jwt_secret_key_12345678901234567890';
 
-  mongoServer = await MongoMemoryServer.create();
-  const uri = mongoServer.getUri();
+  mongoReplSet = await MongoMemoryReplSet.create({
+    replSet: {
+      count: 1, // Single-node replica set with full oplog and transaction support
+      storageEngine: 'wiredTiger',
+    },
+  });
+  const uri = mongoReplSet.getUri();
   await mongoose.connect(uri);
-});
+}, 60000);
 
 afterAll(async () => {
   await mongoose.disconnect();
-  if (mongoServer) {
-    await mongoServer.stop();
+  if (mongoReplSet) {
+    await mongoReplSet.stop();
   }
 });
 

@@ -270,6 +270,7 @@ const EntrySchema = new Schema<IEntry>(
 EntrySchema.index({ company_id: 1, lr_no: 1 }, { unique: true });
 EntrySchema.index({ company_id: 1, bill_no: 1 });
 EntrySchema.index({ company_id: 1, lr_date: -1 });
+EntrySchema.index({ company_id: 1, status: 1, lr_date: -1 });
 EntrySchema.index({ 'custom_fields.$**': 1 });
 
 // Multi-tenant isolation plugin

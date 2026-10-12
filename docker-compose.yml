@@ -1,0 +1,73 @@
+# ==============================================================================
+# FLEET FLOW CONTAINER ORCHESTRATION (docker-compose.yml)
+# ==============================================================================
+# TOPOLOGY ARCHITECTURAL NOTICE (DEC-002 Option A):
+# The single-node MongoDB replica set (`rs0`) service defined here is intended
+# for local containerized development and automated integration testing/CI.
+# It satisfies the MongoDB oplog requirement for multi-document ACID transactions.
+#
+# PRODUCTION REQUIREMENT:
+# In staging and production environments, Fleet Flow strictly requires a
+# distributed, high-availability multi-node Replica Set (minimum 3 nodes:
+# Primary-Secondary-Secondary) or managed MongoDB Atlas cluster with majority
+# write concern. A single-node replica set DOES NOT provide production HA.
+# ==============================================================================
+
+version: '3.8'
+
+services:
+  mongo:
+    image: mongo:6.0
+    container_name: fleetflow-mongo
+    command: mongod --replSet rs0 --bind_ip_all
+    restart: always
+    ports:
+      - '27017:27017'
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: >
+        mongosh --quiet --eval '
+          try {
+            const status = rs.status();
+            if (status.ok === 1 && (status.myState === 1 || status.myState === 2)) {
+              quit(0);
+            }
+            quit(1);
+          } catch (e) {
+            try {
+              const res = rs.initiate({
+                _id: "rs0",
+                members: [{ _id: 0, host: "localhost:27017" }]
+              });
+              if (res.ok === 1) quit(0);
+              quit(1);
+            } catch (initErr) {
+              quit(1);
+            }
+          }
+        '
+      interval: 5s
+      timeout: 10s
+      retries: 5
+      start_period: 5s
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: fleetflow-backend
+    restart: always
+    ports:
+      - '5000:5000'
+    environment:
+      - PORT=5000
+      - NODE_ENV=production
+      - MONGODB_URI=mongodb://mongo:27017/transport_saas?replicaSet=rs0
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+volumes:
+  mongo_data:
+    driver: local

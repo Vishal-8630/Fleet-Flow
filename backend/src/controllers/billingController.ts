@@ -30,6 +30,7 @@ import {
   verifyPaymentSignature,
   verifyWebhookSignature,
 } from '../utils/paymentGateway.js';
+import { runInTransaction, ConfigurationError } from '../utils/transactionHelper.js';
 
 /**
  * GET /api/billing/plans
@@ -344,44 +345,53 @@ export async function verifyPayment(req: Request, res: Response): Promise<void> 
     const periodDurationDays = billing_cycle === 'annual' ? 365 : 30;
     const periodEnd = new Date(now.getTime() + periodDurationDays * 24 * 60 * 60 * 1000);
 
-    // Update Subscription and Company
-    const subscription = await Subscription.findOneAndUpdate(
-      { company_id: companyId },
-      {
-        plan_id: targetPlan._id,
-        billing_cycle,
-        status: 'active',
-        current_period_start: now,
-        current_period_end: periodEnd,
-        'dunning.attempt_count': 0,
-        scheduled_change: undefined,
-      },
-      { new: true, upsert: true }
-    ).populate('plan_id');
+    // Update Subscription, Company, and PaymentTransaction atomically in a single transaction
+    const result = await runInTransaction(async (session) => {
+      const sub = await Subscription.findOneAndUpdate(
+        { company_id: companyId },
+        {
+          plan_id: targetPlan._id,
+          billing_cycle,
+          status: 'active',
+          current_period_start: now,
+          current_period_end: periodEnd,
+          'dunning.attempt_count': 0,
+          scheduled_change: undefined,
+        },
+        { new: true, upsert: true, session }
+      ).populate('plan_id');
 
-    await Company.findByIdAndUpdate(companyId, {
-      subscription_status: 'active',
+      await Company.findByIdAndUpdate(
+        companyId,
+        { subscription_status: 'active' },
+        { session }
+      );
+
+      const txn = await PaymentTransaction.findOneAndUpdate(
+        { order_id: razorpay_order_id },
+        {
+          payment_id: razorpay_payment_id,
+          payment_method,
+          status: 'success',
+          subscription_id: sub?._id,
+        },
+        { new: true, session }
+      );
+
+      return {
+        success: true,
+        message: `Payment verified successfully! Your workspace has been upgraded to ${targetPlan.name}.`,
+        subscription: sub,
+        transaction: txn,
+      };
     });
 
-    // Mark transaction as successful
-    const transaction = await PaymentTransaction.findOneAndUpdate(
-      { order_id: razorpay_order_id },
-      {
-        payment_id: razorpay_payment_id,
-        payment_method,
-        status: 'success',
-        subscription_id: subscription._id,
-      },
-      { new: true }
-    );
-
-    res.json({
-      success: true,
-      message: `Payment verified successfully! Your workspace has been upgraded to ${targetPlan.name}.`,
-      subscription,
-      transaction,
-    });
+    res.json(result);
   } catch (error: any) {
+    if (error instanceof ConfigurationError) {
+      res.status(500).json({ error: error.message, code: 'CONFIGURATION_ERROR' });
+      return;
+    }
     res.status(500).json({ error: error.message || 'Payment verification failed.' });
   }
 }

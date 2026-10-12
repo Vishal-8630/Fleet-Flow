@@ -5,7 +5,7 @@
 **Type:** Database / Operations Defect  
 **Severity:** `P1` (High)  
 **Priority:** `P1` (High)  
-**Status:** Confirmed Defect  
+**Status:** Resolved & Verified (Batch 2)  
 **Date:** October 2026  
 **Related Legacy Documents:** Preserves and supersedes [`docs/issues/ISSUE-12.md`](./ISSUE-12.md)  
 **Related Master Register Entry:** [`docs/FLEET_FLOW_MASTER_REGISTER.md`](../FLEET_FLOW_MASTER_REGISTER.md#2-issues--defects-register-iss-)
@@ -61,11 +61,26 @@ Apply this fix across `entryController.ts`, `journeyController.ts`, and `commerc
 ---
 
 ## 6. Acceptance Criteria
-- [ ] Aggregation metrics endpoints return accurate counts and revenue sums matching actual database records.
-- [ ] No raw string `companyId` is passed into aggregation `$match` filters.
+- [x] Aggregation metrics endpoints return accurate counts and revenue sums matching actual database records.
+- [x] No raw string `companyId` is passed into aggregation `$match` filters.
 
 ---
 
 ## 7. Definition of Done
-1. Type casting applied to all controller aggregations.
-2. Verified in [`TEST-001`](../testing/TEST-001-automated-http-integration-suite.md).
+1. [x] Type casting applied to all controller aggregations across `entryController.ts`, `journeyController.ts`, `settlementController.ts`, `invoiceController.ts`, `ledgerController.ts`, and `vehicleEntryController.ts`.
+2. [x] Verified in [`TEST-001`](../testing/TEST-001-automated-http-integration-suite.md) and `backend/src/tests/integration/phase21Hardening.test.ts`.
+
+---
+
+## 8. Verification Evidence (Batch 2)
+- **Automated Test Suite:** `backend/src/tests/integration/phase21Hardening.test.ts` (7/7 tests passing).
+- **Verified Endpoints:**
+  - `GET /api/entries/summary` (`getEntryMetrics`): Returns verified accurate counts grouped by status.
+  - `GET /api/truck-journeys/analytics` (`getJourneyMetrics`): Returns accurate total trips and revenue metrics matching seeded BSON documents.
+- **Controllers Updated with BSON ObjectId Casting:**
+  - `backend/src/controllers/entryController.ts`
+  - `backend/src/controllers/journeyController.ts`
+  - `backend/src/controllers/settlementController.ts`
+  - `backend/src/controllers/invoiceController.ts`
+  - `backend/src/controllers/ledgerController.ts`
+  - `backend/src/controllers/vehicleEntryController.ts`

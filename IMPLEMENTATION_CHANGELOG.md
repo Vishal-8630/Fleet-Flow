@@ -21,6 +21,7 @@
 | **Issue 04** | Verify and Enforce Tenant Isolation Across the API | ✅ Resolved | 100% |
 | **Issue 05** | Make Financial Records Dependable & Accounting Sound | ✅ Resolved | 100% |
 | **Batch 1** | Tenant Boundary Enforcement, File Security & Automated Test Suite (`ISS-001`, `ISS-002`, `ISS-016`, `ISS-017`, `TEST-001`, `TEST-002`) | ✅ Verified | 100% |
+| **Batch 2** | Database Topology, Aggregation Types & Concurrency Hardening (`DEC-002`, `ISS-018`, `ISS-014`, `ISS-019`, `ISS-021`, `IMP-004`) | ✅ Verified | 100% |
 
 ---
 
@@ -870,6 +871,86 @@
     * ✅ `src/tests/integration/fileStorageSecurity.test.ts` (22 tests) — Passed
     * **Summary: 4 test files passed, 59 tests passed, 0 failures.**
   * Ran `npm run build` (`tsc`) in `backend/`: **Exited code 0 (zero errors).**
+
+---
+
+### Batch 2: Database Topology, Aggregation Types & Concurrency Hardening (DEC-002, ISS-018, ISS-014, ISS-019, ISS-021, IMP-004)
+
+* **[Phase 2.1 — Schema & Aggregation Hardening] (`ISS-021` & `ISS-014`):**
+  * **Custom Field Prototype Pollution Defense (`ISS-021`):**
+    * Created `backend/src/utils/customFieldKeyValidator.ts` enforcing key pattern `^[a-z][a-z0-9_]{1,31}$`, blacklisting JavaScript prototype names (`__proto__`, `constructor`, `prototype`, `toString`, `valueOf`) and system properties (`company_id`, `_id`, `created_at`, `updated_at`, `is_deleted`).
+    * Added schema-level validator in `backend/src/models/CustomFieldDefinition.ts` and controller-level enforcement in `backend/src/controllers/customFieldController.ts`.
+    * Hardened dynamic custom field value validation in `backend/src/utils/customFieldValidator.ts`.
+  * **BSON ObjectId Casting in Aggregation Pipelines (`ISS-014`):**
+    * Audited all MongoDB aggregation `$match` stages across controllers and applied explicit `new Types.ObjectId(String(companyId))` casting.
+    * Updated: `entryController.ts:getEntryMetrics`, `journeyController.ts:getJourneyMetrics`, `settlementController.ts`, `invoiceController.ts`, `ledgerController.ts`, and `vehicleEntryController.ts`.
+  * **Integration Tests:** `backend/src/tests/integration/phase21Hardening.test.ts` (7/7 tests passed).
+
+* **[Phase 2.2 — Compound Multi-Tenant Indexing] (`IMP-004`):**
+  * Declared explicit compound multi-tenant indexes prefixed with `company_id` across 5 high-volume transaction models:
+    * `backend/src/models/VehicleLocationLog.ts`: `{ company_id: 1, truck_id: 1, timestamp: -1 }`
+    * `backend/src/models/Ledger.ts`: `{ company_id: 1, party_type: 1, date: -1 }`
+    * `backend/src/models/TruckJourney.ts`: `{ company_id: 1, status: 1, start_date: -1 }`
+    * `backend/src/models/Invoice.ts`: `{ company_id: 1, status: 1, due_date: 1 }`
+    * `backend/src/models/Entry.ts`: `{ company_id: 1, category: 1, expiry_date: 1 }`
+  * **Integration Tests:** `backend/src/tests/integration/phase22Indexes.test.ts` (6/6 tests passed, verifying index builds and `IXSCAN` query plan execution).
+
+* **[Phase 2.3 — Distributed Concurrency & Idempotency Hardening] (`ISS-019`):**
+  * **Idempotency Data Model (`backend/src/models/IdempotencyKey.ts`):**
+    * Updated schema with status enum (`PENDING`, `RESOLVED`, `FAILED`), request payload SHA-256 hash (`request_hash`), response cache (`response_status`, `response_headers`, `response_body`), lock lease timestamp (`locked_at`), and multi-tenant unique compound index `{ company_id: 1, key: 1 }`.
+  * **Middleware Re-Architecture (`backend/src/middleware/idempotencyMiddleware.ts`):**
+    * Implemented atomic reservation using `findOneAndUpdate` with lease expiration (`LOCK_LEASE_MS = 120000ms`) for crash recovery.
+    * Enforced payload hash verification: reusing key with altered body returns HTTP 422 Unprocessable Entity.
+    * Replays cached responses with header `X-Cache: IDEMPOTENT_HIT`.
+    * Implemented `requireStrictIdempotency` returning HTTP 400 when `x-idempotency-key` is missing.
+    * Mounted on all financial write routes: `settlementRoutes.ts`, `invoiceRoutes.ts`, `commercialReportRoutes.ts`, `ledgerRoutes.ts`, and `billingRoutes.ts`.
+  * **Frontend Client Interceptor (`frontend/src/api/client.ts`):**
+    * Configured Axios request interceptor auto-injecting `x-idempotency-key: uuidv4()` on all `POST`, `PUT`, `PATCH`, and `DELETE` requests.
+  * **Integration Tests:** `backend/src/tests/integration/phase23Idempotency.test.ts` (8/8 tests passed).
+
+* **[Phase 2.4 — Test Harness Replica Set Upgrade] (`DEC-002`):**
+  * Upgraded `backend/src/tests/setup.ts` to use `MongoMemoryReplSet.create({ replSet: { count: 1, storageEngine: 'wiredTiger' } })`.
+  * Configured proper replica set startup and teardown lifecycle.
+
+* **[Phase 2.5 — ACID Transactions & Topology Enforcement] (`DEC-002` & `ISS-018`):**
+  * **Transaction Helper & Topology Validator (`backend/src/utils/transactionHelper.ts`):**
+    * Created `runInTransaction(work, options)` with majority read/write concern, automatic session cleanup via `try/finally`, and session propagation.
+    * Implemented `assertReplicaSetTopology()` validating MongoDB driver topology (`type: 'ReplicaSetWithPrimary'`).
+    * Halts startup in `server.ts` if standalone instance is detected across all environments.
+  * **Containerized Replica Set Architecture:**
+    * Created root `docker-compose.yml` and `docker-compose.dev.yml` configuring MongoDB 6.0 single-node replica set `rs0` (`mongod --replSet rs0 --bind_ip_all`) with persistent volume `mongodb_data` and health check `mongosh --quiet --eval "rs.status().ok || rs.initiate().ok"`.
+    * Created `backend/Dockerfile`.
+  * **Transactional Refactoring Across All 8 Audited Workflows:**
+    1. Driver Settlement Confirmation (`settlementController.ts:confirmSettlement`)
+    2. Driver Settlement Cancellation (`settlementController.ts:cancelSettlement`) — atomically resets journeys (`is_settled: false`), restores driver balances, and flags ledger entries reversed.
+    3. Invoice Payment Recording (`invoiceController.ts:recordInvoicePayment`)
+    4. Invoice Cancellation (`invoiceController.ts:cancelInvoice`)
+    5. Manual Double-Entry Journal Voucher Posting (`ledgerController.ts:createManualLedgerEntry` multi-leg & `reverseLedgerEntry`)
+    6. Maintenance Work Order Completion & Cancellation (`maintenanceController.ts:completeWorkOrder` & `cancelWorkOrder`)
+    7. SaaS Subscription Payment Verification (`billingController.ts:verifyPayment`)
+    8. Tenant Onboarding (`authController.ts:registerCompany`)
+    * Every query and mutation inside these transactions strictly propagates `{ session }`.
+  * **Idempotency Lifecycle & Heartbeat Hardening (`ISS-019`):**
+    * In-flight operations maintain an active 30s heartbeat updating `locked_at`, guaranteeing that active/slow operations never suffer lease expiration while processing.
+    * Client-side Axios interceptor preserves `x-idempotency-key` across retries of the same logical mutation while generating fresh UUIDs for new mutations.
+  * **Topology Guard & Production Disclaimers (`DEC-002`):**
+    * Docker Compose configurations annotated with architectural disclaimers establishing that single-node replica sets are development/CI environments only, and production strictly requires a distributed multi-node Replica Set or MongoDB Atlas.
+    * Container health checks upgraded to verify `rs.status().ok === 1 && (myState === 1 || myState === 2)`.
+  * **Integration Tests:** `backend/src/tests/integration/phase25Transactions.test.ts` (16/16 tests passed).
+
+* **[Final Automated Test Verification & Build Results (Post-Acceptance Audit)]:**
+  * Ran `npm test` (`vitest run`) in `backend/`:
+    * ✅ `src/tests/smoke.test.ts` (1 test) — Passed
+    * ✅ `src/tests/integration/phase22Indexes.test.ts` (7 tests) — Passed (IXSCAN verified via explain plan)
+    * ✅ `src/tests/integration/phase23Idempotency.test.ts` (8 tests) — Passed
+    * ✅ `src/tests/integration/phase21Hardening.test.ts` (12 tests) — Passed (all 7 aggregation call sites verified)
+    * ✅ `src/tests/integration/tenantRoutes.test.ts` (14 tests) — Passed
+    * ✅ `src/tests/integration/phase25Transactions.test.ts` (16 tests) — Passed (all 8 workflows commit/rollback verified)
+    * ✅ `src/tests/integration/fileStorageSecurity.test.ts` (22 tests) — Passed
+    * ✅ `src/tests/integration/tenantIsolation.test.ts` (22 tests) — Passed
+    * **Summary: 8 test files passed, 102 tests passed, 0 failures (20.29s execution).**
+  * Ran `npm run build` (`tsc`) in `backend/`: **Exited code 0 (zero errors).**
+  * Ran `npm run build` (`tsc -b && vite build`) in `frontend/`: **Exited code 0 (zero errors, 1770 modules transformed).**
 
 
 

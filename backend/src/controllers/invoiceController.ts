@@ -19,6 +19,7 @@ import { logAuditEvent } from '../utils/auditService.js';
 import { validateTenantOwnership, TenantOwnershipError } from '../utils/ownershipValidator.js';
 import { roundMoney } from '../utils/settlementCalculator.js';
 import { postInvoicePaymentJournal } from '../utils/ledgerService.js';
+import { runInTransaction, ConfigurationError } from '../utils/transactionHelper.js';
 
 export const getInvoices = async (req: Request, res: Response) => {
   try {
@@ -83,9 +84,10 @@ export const getInvoices = async (req: Request, res: Response) => {
 export const getInvoiceMetrics = async (req: Request, res: Response) => {
   try {
     const companyId = req.tenant?.id;
+    const companyObjectId = new mongoose.Types.ObjectId(String(companyId));
 
     const [aggregate] = await Invoice.aggregate([
-      { $match: { company_id: companyId, is_deleted: false, status: { $ne: 'cancelled' } } },
+      { $match: { company_id: companyObjectId, is_deleted: false, status: { $ne: 'cancelled' } } },
       {
         $group: {
           _id: null,
@@ -332,9 +334,6 @@ export const createInvoice = async (req: Request, res: Response) => {
 };
 
 export const recordInvoicePayment = async (req: Request, res: Response) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-
   try {
     const companyId = req.tenant?.id;
     const { amount, tds_amount = 0, payment_mode = 'bank_transfer', reference_number, notes } = req.body;
@@ -343,143 +342,151 @@ export const recordInvoicePayment = async (req: Request, res: Response) => {
     const tdsVal = roundMoney(Number(tds_amount) || 0);
 
     if (!paymentVal || paymentVal <= 0) {
-      await session.abortTransaction();
-      session.endSession();
       return res.status(400).json({ error: 'Valid payment amount is required.' });
     }
 
-    const invoice = await Invoice.findOne({
-      _id: req.params.id,
-      company_id: companyId,
-      is_deleted: false,
-    }).session(session);
+    const invoice = await runInTransaction(async (session) => {
+      const existing = await Invoice.findOne({
+        _id: req.params.id,
+        company_id: companyId,
+        is_deleted: false,
+      }).session(session);
 
-    if (!invoice) {
-      await session.abortTransaction();
-      session.endSession();
-      return res.status(404).json({ error: 'Invoice not found.' });
-    }
+      if (!existing) {
+        const err: any = new Error('Invoice not found.');
+        err.statusCode = 404;
+        throw err;
+      }
 
-    if (invoice.status === 'paid') {
-      await session.abortTransaction();
-      session.endSession();
-      return res.status(400).json({ error: 'Invoice is already settled in full.' });
-    }
+      if (existing.status === 'paid') {
+        const err: any = new Error('Invoice is already settled in full.');
+        err.statusCode = 400;
+        throw err;
+      }
 
-    const totalSettledInStep = roundMoney(paymentVal + tdsVal);
-    invoice.paid_amount = roundMoney(invoice.paid_amount + totalSettledInStep);
-    invoice.balance_amount = Math.max(0, roundMoney(invoice.total_amount - invoice.paid_amount));
-    invoice.status = invoice.balance_amount <= 0 ? 'paid' : 'partially_paid';
+      const totalSettledInStep = roundMoney(paymentVal + tdsVal);
+      existing.paid_amount = roundMoney(existing.paid_amount + totalSettledInStep);
+      existing.balance_amount = Math.max(0, roundMoney(existing.total_amount - existing.paid_amount));
+      existing.status = existing.balance_amount <= 0 ? 'paid' : 'partially_paid';
 
-    invoice.payment_history.push({
-      date: new Date(),
-      amount: paymentVal,
-      tds_amount: tdsVal,
-      payment_mode,
-      reference_number,
-      notes,
+      existing.payment_history.push({
+        date: new Date(),
+        amount: paymentVal,
+        tds_amount: tdsVal,
+        payment_mode,
+        reference_number,
+        notes,
+      });
+
+      await existing.save({ session });
+
+      // Automatically post balanced double-entry journal to General Ledger
+      await postInvoicePaymentJournal({
+        company_id: companyId!,
+        session,
+        invoice_id: existing._id as any,
+        invoice_number: existing.invoice_number,
+        billing_party_id: existing.billing_party_id as any,
+        party_name: existing.billing_party_snapshot?.name || 'Customer',
+        payment_amount: paymentVal,
+        tds_amount: tdsVal,
+        payment_mode,
+        reference_number,
+        created_by: req.user?._id,
+      });
+
+      return {
+        message: 'Payment recorded and posted to General Ledger.',
+        invoice: existing,
+      };
     });
-
-    await invoice.save({ session });
-
-    // Automatically post balanced double-entry journal to General Ledger
-    await postInvoicePaymentJournal({
-      company_id: companyId!,
-      session,
-      invoice_id: invoice._id as any,
-      invoice_number: invoice.invoice_number,
-      billing_party_id: invoice.billing_party_id as any,
-      party_name: invoice.billing_party_snapshot?.name || 'Customer',
-      payment_amount: paymentVal,
-      tds_amount: tdsVal,
-      payment_mode,
-      reference_number,
-      created_by: req.user?._id,
-    });
-
-    await session.commitTransaction();
-    session.endSession();
 
     logAuditEvent({
       company_id: companyId!,
       entity_type: 'invoice',
-      entity_id: invoice._id,
-      entity_identifier: invoice.invoice_number,
+      entity_id: invoice.invoice._id,
+      entity_identifier: invoice.invoice.invoice_number,
       action: 'UPDATE',
-      description: `Payment of ₹${paymentVal}${tdsVal > 0 ? ` (TDS: ₹${tdsVal})` : ''} recorded against Invoice ${invoice.invoice_number}.`,
+      description: `Payment of ₹${paymentVal}${tdsVal > 0 ? ` (TDS: ₹${tdsVal})` : ''} recorded against Invoice ${invoice.invoice.invoice_number}.`,
       req,
     });
 
-    res.json({
-      message: 'Payment recorded and posted to General Ledger.',
-      invoice,
-    });
+    res.json(invoice);
   } catch (err: any) {
-    await session.abortTransaction();
-    session.endSession();
+    if (err instanceof ConfigurationError) {
+      return res.status(500).json({ error: err.message, code: 'CONFIGURATION_ERROR' });
+    }
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ error: err.message });
+    }
     res.status(400).json({ error: err.message || 'Failed to record payment.' });
   }
 };
 
 export const cancelInvoice = async (req: Request, res: Response) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-
   try {
     const companyId = req.tenant?.id;
-    const invoice = await Invoice.findOne({
-      _id: req.params.id,
-      company_id: companyId,
-      is_deleted: false,
-    }).session(session);
+    const invoice = await runInTransaction(async (session) => {
+      const existing = await Invoice.findOne({
+        _id: req.params.id,
+        company_id: companyId,
+        is_deleted: false,
+      }).session(session);
 
-    if (!invoice) {
-      await session.abortTransaction();
-      session.endSession();
-      return res.status(404).json({ error: 'Invoice not found.' });
-    }
+      if (!existing) {
+        const err: any = new Error('Invoice not found.');
+        err.statusCode = 404;
+        throw err;
+      }
 
-    if (invoice.status === 'cancelled') {
-      await session.abortTransaction();
-      session.endSession();
-      return res.status(400).json({ error: 'Invoice has already been cancelled.' });
-    }
+      if (existing.status === 'cancelled') {
+        const err: any = new Error('Invoice has already been cancelled.');
+        err.statusCode = 400;
+        throw err;
+      }
 
-    if (invoice.paid_amount > 0) {
-      await session.abortTransaction();
-      session.endSession();
-      return res.status(400).json({ error: 'Cannot cancel invoice with recorded payment collections. Reverse payments first.' });
-    }
+      if (existing.paid_amount > 0) {
+        const err: any = new Error('Cannot cancel invoice with recorded payment collections. Reverse payments first.');
+        err.statusCode = 400;
+        throw err;
+      }
 
-    invoice.status = 'cancelled';
-    await invoice.save({ session });
+      existing.status = 'cancelled';
+      await existing.save({ session });
 
-    // Release associated LRs back to active status
-    if (invoice.lr_ids?.length > 0) {
-      await Entry.updateMany(
-        { _id: { $in: invoice.lr_ids }, company_id: companyId },
-        { $set: { status: 'active', invoice_id: null } },
-        { session }
-      );
-    }
+      // Release associated LRs back to active status
+      if (existing.lr_ids?.length > 0) {
+        await Entry.updateMany(
+          { _id: { $in: existing.lr_ids }, company_id: companyId },
+          { $set: { status: 'active', invoice_id: null } },
+          { session }
+        );
+      }
 
-    await session.commitTransaction();
-    session.endSession();
+      return {
+        message: 'Invoice cancelled and linked LRs released.',
+        invoice: existing,
+      };
+    });
 
     logAuditEvent({
       company_id: companyId!,
       entity_type: 'invoice',
-      entity_id: invoice._id,
-      entity_identifier: invoice.invoice_number,
+      entity_id: invoice.invoice._id,
+      entity_identifier: invoice.invoice.invoice_number,
       action: 'UPDATE',
-      description: `Invoice ${invoice.invoice_number} voided/cancelled and linked LRs released.`,
+      description: `Invoice ${invoice.invoice.invoice_number} voided/cancelled and linked LRs released.`,
       req,
     });
 
-    res.json({ message: 'Invoice cancelled and linked LRs released.' });
+    res.json(invoice);
   } catch (err: any) {
-    await session.abortTransaction();
-    session.endSession();
+    if (err instanceof ConfigurationError) {
+      return res.status(500).json({ error: err.message, code: 'CONFIGURATION_ERROR' });
+    }
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ error: err.message });
+    }
     res.status(500).json({ error: err.message || 'Failed to cancel invoice.' });
   }
 };
