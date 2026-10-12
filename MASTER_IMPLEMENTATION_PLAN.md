@@ -3,7 +3,7 @@
 **Document Version:** 1.0.0  
 **Status:** Approved Architecture Blueprint  
 **Target Platform:** Multi-Tenant B2B Transport & Fleet Management SaaS  
-**Reference Document:** [`TRUCK_MANAGEMENT_SAAS_COMPLETE_SPEC.md`](file:///c:/Users/vishh/OneDrive/Desktop/Work/TransportManagement/TRUCK_MANAGEMENT_SAAS_COMPLETE_SPEC.md)
+**Reference Document:** [`TRUCK_MANAGEMENT_SAAS_COMPLETE_SPEC.md`](./TRUCK_MANAGEMENT_SAAS_COMPLETE_SPEC.md)
 
 ---
 
@@ -97,7 +97,7 @@ The plan enforces strict logical database isolation, server-authoritative entitl
 
 ### Phase 1: Foundation, Multi-Tenancy & Design System
 * **Goal:** Establish zero-leakage multi-tenancy, authentication, role-based security, and the complete generic design system.
-* **Detailed Plan Document:** [`docs/plans/PHASE_1_FOUNDATION_AND_TENANCY.md`](file:///c:/Users/vishh/OneDrive/Desktop/Work/TransportManagement/docs/plans/PHASE_1_FOUNDATION_AND_TENANCY.md)
+* **Detailed Plan Document:** [`docs/plans/PHASE_1_FOUNDATION_AND_TENANCY.md`](./docs/plans/PHASE_1_FOUNDATION_AND_TENANCY.md)
 * **Key Deliverables:**
   1. CSS Design System: `tokens/`, `base/`, `layout/`, `components/` (pure CSS, variables, buttons, tables, forms, modals).
   2. Data Layer: `Company`, `User`, `CompanyMember` schemas; Mongoose `tenantPlugin` with pre-query hooks and compound indexes.
@@ -107,7 +107,7 @@ The plan enforces strict logical database isolation, server-authoritative entitl
 
 ### Phase 2: Master Data Registries & Compliance Vault
 * **Goal:** Secure, tenant-isolated asset and partner registries with document storage.
-* **Detailed Plan Document:** [`docs/plans/PHASE_2_MASTER_REGISTRIES.md`](file:///c:/Users/vishh/OneDrive/Desktop/Work/TransportManagement/docs/plans/PHASE_2_MASTER_REGISTRIES.md)
+* **Detailed Plan Document:** [`docs/plans/PHASE_2_MASTER_REGISTRIES.md`](./docs/plans/PHASE_2_MASTER_REGISTRIES.md)
 * **Key Deliverables:**
   1. Truck Registry: Vehicle specs, driver assignment history, service intervals, soft-delete.
   2. Compliance Vault: S3 upload with presigned URLs; Fitness, Insurance, National Permit, State Permit, Tax, PUC expiry tracking.
@@ -117,7 +117,7 @@ The plan enforces strict logical database isolation, server-authoritative entitl
 
 ### Phase 3: Trip Dispatch, Expenses & Vehicle Movements
 * **Goal:** Core operational trip management from dispatch to delivery closeout.
-* **Detailed Plan Document:** [`docs/plans/PHASE_3_OPERATIONS_AND_DISPATCH.md`](file:///c:/Users/vishh/OneDrive/Desktop/Work/TransportManagement/docs/plans/PHASE_3_OPERATIONS_AND_DISPATCH.md)
+* **Detailed Plan Document:** [`docs/plans/PHASE_3_OPERATIONS_AND_DISPATCH.md`](./docs/plans/PHASE_3_OPERATIONS_AND_DISPATCH.md)
 * **Key Deliverables:**
   1. Journey Dispatch: Wizard assigning truck + driver (active conflict checks), checkpoints, starting cash advance, opening odometer.
   2. En-Route Milestones: Daily progress logging, incident and delay tracking.
@@ -127,7 +127,7 @@ The plan enforces strict logical database isolation, server-authoritative entitl
 
 ### Phase 4: Commercial Engine — LR, Invoicing, Settlements & Ledger
 * **Goal:** Complete financial accuracy, statutory tax compliance, and automated accounting reconciliation.
-* **Detailed Plan Document:** [`docs/plans/PHASE_4_COMMERCIAL_FINANCE_SETTLEMENTS.md`](file:///c:/Users/vishh/OneDrive/Desktop/Work/TransportManagement/docs/plans/PHASE_4_COMMERCIAL_FINANCE_SETTLEMENTS.md)
+* **Detailed Plan Document:** [`docs/plans/PHASE_4_COMMERCIAL_FINANCE_SETTLEMENTS.md`](./docs/plans/PHASE_4_COMMERCIAL_FINANCE_SETTLEMENTS.md)
 * **Key Deliverables:**
   1. LR Print Engine: Client-side vector printable 3-part LR stationary (Consignor, Consignee, Driver/POD copy) and empty LR template.
   2. GST Invoicing Engine: Freight bills, dynamic extra charges, automated CGST/SGST/IGST calculation, RCM flags, instant PDF download.
@@ -137,7 +137,7 @@ The plan enforces strict logical database isolation, server-authoritative entitl
 
 ### Phase 5: SaaS Billing, Entitlements & Workspace Customization
 * **Goal:** Complete commercial SaaS infrastructure, dynamic feature gates, customer customization studio, and super-admin controls.
-* **Detailed Plan Document:** [`docs/plans/PHASE_5_SAAS_BILLING_ENTITLEMENTS_CUSTOMIZATION.md`](file:///c:/Users/vishh/OneDrive/Desktop/Work/TransportManagement/docs/plans/PHASE_5_SAAS_BILLING_ENTITLEMENTS_CUSTOMIZATION.md)
+* **Detailed Plan Document:** [`docs/plans/PHASE_5_SAAS_BILLING_ENTITLEMENTS_CUSTOMIZATION.md`](./docs/plans/PHASE_5_SAAS_BILLING_ENTITLEMENTS_CUSTOMIZATION.md)
 * **Key Deliverables:**
   1. Feature Catalog & Gating: 20 catalog modules, dependency resolution, `requireFeature` middleware, frontend `<FeatureGate>`.
   2. Subscription Billing: Dynamic `Plan` and `AddOn` catalog, Razorpay recurring subscriptions, cryptographic webhook idempotency.
@@ -148,7 +148,7 @@ The plan enforces strict logical database isolation, server-authoritative entitl
 
 ### Phase 6: Public Tracking, Automation, Hardening & Release
 * **Goal:** Customer-facing touchpoints, notifications, comprehensive testing, and production deployment runbooks.
-* **Detailed Plan Document:** [`docs/plans/PHASE_6_HARDENING_VERIFICATION_RELEASE.md`](file:///c:/Users/vishh/OneDrive/Desktop/Work/TransportManagement/docs/plans/PHASE_6_HARDENING_VERIFICATION_RELEASE.md)
+* **Detailed Plan Document:** [`docs/plans/PHASE_6_HARDENING_VERIFICATION_RELEASE.md`](./docs/plans/PHASE_6_HARDENING_VERIFICATION_RELEASE.md)
 * **Key Deliverables:**
   1. Public Shipment Tracking: `/track/:lrNumber` route with sanitized milestone data (no driver phone, freight rates, or financial data exposed).
   2. Automated Notifications: Meta Cloud API / WhatsApp service worker and transactional emails (Resend/SendGrid) for LR and dispatch events.

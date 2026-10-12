@@ -4,17 +4,18 @@
 
 ---
 
-## 1. Public LR Consignment Milestone Tracking
+## 1. Secure Public Consignment Milestone Tracking
 
-### 1.1 Dedicated Public Route (`/track/:lrNumber`)
-* A clean, mobile-responsive tracking portal accessible to shippers and consignees without requiring authentication.
-* **Strict Data Sanitization (Privacy Invariant):**
-  * **Allowed Public Fields:** Current Milestone Status (Booked $\rightarrow$ Dispatched $\rightarrow$ In Transit at City $\rightarrow$ Out for Delivery $\rightarrow$ Delivered), Last Known City/Checkpoint, Estimated Delivery Date, Consignment Package Count, and Vehicle Registration Number.
-  * **Redacted Internal Fields:** Driver Phone Number, Driver Name, Freight Rate, Advance Cash, Bill Value, and Internal Dispatch Remarks are strictly stripped prior to response transmission.
+### 1.1 Secure Tracking Routes & Invariants (Reconciled with [`ISS-005`](../issues/ISS-005-public-tracking-privacy-idor.md))
+* **Primary Route (`/track?token=:trackingToken`)**: Shippers and consignees receive direct links containing an unguessable 128-bit cryptographically random token (`tracking_token`). Zero credentials required; zero risk of sequential IDOR scanning or cross-tenant collision.
+* **Secondary Route (`/track`)**: Consignors or consignees entering an LR number manually must provide a 3-factor lookup: `Company Code` + `LR Number` + `Consignor/Consignee Phone Number` (or 4-digit SMS OTP). Querying bare LR numbers without tenant disambiguation is prohibited to protect multi-tenant boundaries.
+* **Strict Data Sanitization (Privacy Invariant)**:
+  * **Allowed Public Fields:** Current Milestone Status (Booked $\rightarrow$ Dispatched $\rightarrow$ In Transit at City $\rightarrow$ Out for Delivery $\rightarrow$ Delivered), Origin Hub City, Destination Hub City, Estimated Delivery Date, Package Count, and Milestone Events timeline.
+  * **Strictly Redacted Internal Fields:** Driver personal phone number, driver full name/DL, vehicle chassis/engine numbers, raw GPS latitude/longitude coordinates, freight rate, invoice bill value, payment balances, and internal dispatch remarks.
 
 ### 1.2 Brute-Force & Enumeration Protection
-* Protected by strict IP-based rate limiting (`express-rate-limit`): maximum 15 tracking lookups per 10 minutes per IP address.
-* Non-existent LR numbers return uniform generic responses to prevent database enumeration.
+* Protected by strict IP-based rate limiting (`express-rate-limit`): maximum 20 tracking lookups per minute per IP address.
+* Non-existent tracking tokens or invalid verification details return uniform generic HTTP 404 responses to prevent database enumeration.
 
 ---
 
