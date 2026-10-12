@@ -16,6 +16,7 @@
  */
 
 import mongoose, { Document, Schema, Types } from 'mongoose';
+import { tenantPlugin } from '../plugins/tenantPlugin.js';
 
 export type AuditAction = 'CREATE' | 'UPDATE' | 'DELETE' | 'STATUS_CHANGE';
 export type AuditEntityType =
@@ -110,6 +111,7 @@ const AuditLogSchema = new Schema<IAuditLog>(
 
 // Compound indexes for rapid lookup by entity and company
 AuditLogSchema.index({ company_id: 1, entity_type: 1, entity_id: 1, created_at: -1 });
-AuditLogSchema.index({ company_id: 1, created_at: -1 });
+
+AuditLogSchema.plugin(tenantPlugin);
 
 export const AuditLog = mongoose.model<IAuditLog>('AuditLog', AuditLogSchema);

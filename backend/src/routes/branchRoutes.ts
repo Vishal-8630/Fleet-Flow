@@ -7,12 +7,12 @@
  */
 
 import { Router } from 'express';
-import { requireAuth, requireRole } from '../middleware/authMiddleware.js';
+import { requireAuth, resolveTenantContext, requireRole } from '../middleware/authMiddleware.js';
 import { listBranches, createBranch, updateBranch, deleteBranch } from '../controllers/branchController.js';
 
 const router = Router();
 
-router.use(requireAuth);
+router.use(requireAuth, resolveTenantContext);
 
 router.get('/', listBranches);
 router.post('/', requireRole(['admin']), createBranch);

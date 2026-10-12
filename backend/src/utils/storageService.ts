@@ -77,6 +77,8 @@ export interface UploadResult {
   sizeBytes: number;
 }
 
+const ALLOWED_EXTENSIONS = ['.pdf', '.jpeg', '.jpg', '.png', '.webp'];
+
 /**
  * Generates an isolated tenant storage key conforming to SaaS partition specs:
  * `tenants/{company_id}/{entity_type}/{YYYY_MM}/{uuid}.{ext}`
@@ -88,7 +90,10 @@ export function generateTenantKey(
 ): string {
   const date = new Date();
   const yearMonth = `${date.getFullYear()}_${String(date.getMonth() + 1).padStart(2, '0')}`;
-  const fileExt = path.extname(originalFilename).toLowerCase() || '.bin';
+  let fileExt = path.extname(originalFilename).toLowerCase();
+  if (!ALLOWED_EXTENSIONS.includes(fileExt)) {
+    fileExt = '.bin';
+  }
   const uniqueId = crypto.randomUUID();
 
   return `tenants/${companyId}/${entityType}/${yearMonth}/${uniqueId}${fileExt}`;
@@ -97,17 +102,34 @@ export function generateTenantKey(
 /**
  * Uploads a file buffer either directly to AWS S3 or to local disk storage.
  * 
+ * @param companyId - Verified tenant workspace identifier
  * @param buffer - File content buffer (from Multer memory storage)
  * @param key - The tenant-partitioned storage key
  * @param mimeType - Document MIME type (e.g. application/pdf, image/jpeg)
  * @param originalName - Original user-provided filename
  */
 export async function uploadTenantFile(
+  companyId: string,
   buffer: Buffer,
   key: string,
   mimeType: string,
   originalName: string
 ): Promise<UploadResult> {
+  if (!companyId || typeof companyId !== 'string') {
+    throw new Error('FORBIDDEN: Company ID is required for tenant upload.');
+  }
+
+  // Validate that key strictly begins with the authorized tenant prefix
+  const expectedPrefix = `tenants/${companyId}/`;
+  if (!key || typeof key !== 'string' || !key.startsWith(expectedPrefix)) {
+    throw new Error('FORBIDDEN: Storage key does not belong to the authorized tenant.');
+  }
+
+  // Reject path traversal attempts, null bytes, and Windows backslashes
+  if (key.includes('\0') || key.includes('..') || key.includes('\\')) {
+    throw new Error('FORBIDDEN: Illegal path traversal sequence detected in storage key.');
+  }
+
   const sizeBytes = buffer.length;
 
   if (IS_S3_CONFIGURED && s3Client) {
@@ -129,8 +151,14 @@ export async function uploadTenantFile(
     return { key, url, originalName, mimeType, sizeBytes };
   }
 
-  // Local filesystem fallback
-  const localFilePath = path.join(LOCAL_STORAGE_DIR, key);
+  // Local filesystem fallback — strict containment inside the specific tenant directory
+  const normalizedKey = path.normalize(key).replace(/^(\.\.(\/|\\|$))+/, '');
+  const localFilePath = path.resolve(LOCAL_STORAGE_DIR, normalizedKey);
+  const tenantBaseDir = path.resolve(LOCAL_STORAGE_DIR, 'tenants', companyId);
+  if (!localFilePath.startsWith(tenantBaseDir + path.sep)) {
+    throw new Error('FORBIDDEN: Storage key escapes tenant upload directory boundary.');
+  }
+
   const dirPath = path.dirname(localFilePath);
   if (!fs.existsSync(dirPath)) {
     fs.mkdirSync(dirPath, { recursive: true });
@@ -173,17 +201,39 @@ export async function getAuthorizedDownloadUrl(
 }
 
 /**
- * Retrieves the local file path on disk (used only in local storage fallback mode).
+ * Retrieves the local file path on disk with strict path containment checks.
+ * Enforces:
+ * 1. Key must begin with tenants/{companyId}/
+ * 2. Key must not contain null bytes (\0), backslashes, or directory traversal tokens (..)
+ * 3. Resolved absolute path must strictly start with the tenant's base directory
+ * 4. Target file must exist on disk
  */
 export function getLocalFilePath(companyId: string, key: string): string {
+  if (!key || typeof key !== 'string') {
+    throw new Error('FORBIDDEN: Invalid storage key.');
+  }
+
+  // Reject directory traversal attempts and null bytes
+  if (key.includes('\0') || key.includes('..') || key.includes('\\')) {
+    throw new Error('FORBIDDEN: Illegal path traversal sequence detected.');
+  }
+
   const expectedPrefix = `tenants/${companyId}/`;
   if (!key.startsWith(expectedPrefix)) {
     throw new Error('FORBIDDEN: Unauthorized tenant key access.');
   }
 
-  const filePath = path.join(LOCAL_STORAGE_DIR, key);
-  if (!fs.existsSync(filePath)) {
+  const normalizedKey = path.normalize(key).replace(/^(\.\.(\/|\\|$))+/, '');
+  const resolvedPath = path.resolve(LOCAL_STORAGE_DIR, normalizedKey);
+  const tenantBaseDir = path.resolve(LOCAL_STORAGE_DIR, 'tenants', companyId);
+
+  // Assert root containment: resolved path must reside strictly inside the tenant folder
+  if (!resolvedPath.startsWith(tenantBaseDir + path.sep)) {
+    throw new Error('FORBIDDEN: Access denied. Path escapes tenant storage boundary.');
+  }
+
+  if (!fs.existsSync(resolvedPath)) {
     throw new Error('File not found.');
   }
-  return filePath;
+  return resolvedPath;
 }

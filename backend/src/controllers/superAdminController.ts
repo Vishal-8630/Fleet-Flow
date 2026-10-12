@@ -50,8 +50,8 @@ export async function getPlatformKPIs(req: Request, res: Response): Promise<void
       Company.countDocuments({ subscription_status: 'active', is_deleted: false }),
       Company.countDocuments({ subscription_status: 'trialing', is_deleted: false }),
       Company.countDocuments({ subscription_status: { $in: ['suspended', 'expired'] }, is_deleted: false }),
-      Truck.countDocuments({ is_deleted: false }),
-      Driver.countDocuments({ is_deleted: false }),
+      Truck.countDocuments({ is_deleted: false }).setOptions({ skipTenantCheck: true }),
+      Driver.countDocuments({ is_deleted: false }).setOptions({ skipTenantCheck: true }),
       Subscription.find({ status: 'active' }).populate<{ plan_id: IPlan }>('plan_id'),
     ]);
 

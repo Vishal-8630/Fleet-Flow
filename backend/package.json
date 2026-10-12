@@ -3,10 +3,13 @@
   "version": "1.0.0",
   "description": "Multi-Tenant B2B Transport & Fleet Management SaaS Backend API",
   "main": "dist/server.js",
+  "type": "module",
   "scripts": {
     "build": "tsc",
     "start": "node dist/server.js",
     "dev": "tsx watch src/server.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "test:phase1": "tsx src/scripts/verifyPhase1.ts",
     "test:phase2": "tsx src/scripts/verifyPhase2.ts",
     "test:phase3": "tsx src/scripts/verifyPhase3.ts",
@@ -50,7 +53,11 @@
     "@types/morgan": "^1.9.9",
     "@types/multer": "^1.4.12",
     "@types/node": "^22.13.4",
+    "@types/supertest": "^7.2.1",
+    "mongodb-memory-server": "^11.3.0",
+    "supertest": "^7.3.1",
     "tsx": "^4.19.3",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "vitest": "^5.0.4"
   }
 }

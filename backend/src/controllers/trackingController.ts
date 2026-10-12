@@ -198,10 +198,12 @@ export async function publicTrackConsignment(req: Request, res: Response): Promi
 
     const cleanLr = (Array.isArray(lrParam) ? lrParam[0] : lrParam).toUpperCase().trim();
 
-    // Find the entry — no company_id scoping needed for public tracking
+    // Find the entry — explicitly privileged public tracking lookup
     const entry = await Entry.findOne({
       $or: [{ lr_no: cleanLr }, { bill_no: cleanLr }],
-    }).lean();
+    })
+      .setOptions({ skipTenantCheck: true })
+      .lean();
 
     if (!entry) {
       res.status(404).json({ error: 'Consignment not found. Please verify the LR number.' });
@@ -210,7 +212,8 @@ export async function publicTrackConsignment(req: Request, res: Response): Promi
 
     // Get the associated journey for milestone and vehicle data
     const journey = entry.journey_id
-      ? await TruckJourney.findById(entry.journey_id)
+      ? await TruckJourney.findOne({ _id: entry.journey_id })
+          .setOptions({ skipTenantCheck: true })
           .populate('truck_id', 'truck_no body_type')
           .select('status route_checkpoints from_location to_location start_date truck_id')
           .lean()
@@ -221,7 +224,11 @@ export async function publicTrackConsignment(req: Request, res: Response): Promi
     let truckObj = journey ? (journey.truck_id as any) : null;
 
     if (!truckObj && entry.vehicle_number) {
-      truckObj = await Truck.findOne({ truck_no: entry.vehicle_number.toUpperCase().trim() }).lean();
+      truckObj = await Truck.findOne({
+        truck_no: entry.vehicle_number.toUpperCase().trim(),
+      })
+        .setOptions({ skipTenantCheck: true })
+        .lean();
     }
 
     if (truckObj?._id) {
@@ -229,6 +236,7 @@ export async function publicTrackConsignment(req: Request, res: Response): Promi
         truck_id: truckObj._id,
         recorded_at: { $gte: new Date(Date.now() - 4 * 3600 * 1000) }, // within last 4 hours
       })
+        .setOptions({ skipTenantCheck: true })
         .sort({ recorded_at: -1 })
         .select('latitude longitude speed_kmh recorded_at landmark')
         .lean();

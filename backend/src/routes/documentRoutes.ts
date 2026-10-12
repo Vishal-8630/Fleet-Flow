@@ -20,14 +20,15 @@ import {
 } from '../controllers/documentController.js';
 import { requireAuth, resolveTenantContext, requireActiveSubscription } from '../middleware/authMiddleware.js';
 import { requireFeature } from '../middleware/entitlementMiddleware.js';
+import { fileSecurityMiddleware } from '../middleware/fileSecurityMiddleware.js';
 
 const router = Router();
 
 // Protect all document routes with authentication, tenant isolation, subscription status, and module entitlement
 router.use(requireAuth, resolveTenantContext, requireActiveSubscription, requireFeature('MOD_DOCUMENT_VAULT'));
 
-// Upload statutory compliance document
-router.post('/upload', documentUploadMiddleware, uploadDocument);
+// Upload statutory compliance document — validates mime type and binary magic bytes
+router.post('/upload', documentUploadMiddleware, fileSecurityMiddleware, uploadDocument);
 
 // Get presigned URL for secure document view
 router.get('/presigned-url', getPresignedUrl);

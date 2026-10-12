@@ -51,7 +51,25 @@ const upload = multer({
   },
 });
 
-export const documentUploadMiddleware = upload.single('file');
+export const documentUploadMiddleware = (req: Request, res: Response, next: any) => {
+  upload.single('file')(req, res, (err: any) => {
+    if (err) {
+      if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
+        res.status(413).json({
+          error: 'File too large. Maximum allowed size is 10MB.',
+          code: 'FILE_TOO_LARGE',
+        });
+        return;
+      }
+      res.status(415).json({
+        error: `🛡️ Upload Rejected: ${err.message}`,
+        code: 'INVALID_FILE_SIGNATURE',
+      });
+      return;
+    }
+    next();
+  });
+};
 
 /**
  * 1. uploadDocument
@@ -78,7 +96,7 @@ export async function uploadDocument(req: Request, res: Response): Promise<void>
     const buffer = req.file.buffer;
 
     const key = generateTenantKey(companyId, entityType, originalName);
-    const result = await uploadTenantFile(buffer, key, mimeType, originalName);
+    const result = await uploadTenantFile(companyId, buffer, key, mimeType, originalName);
 
     res.status(201).json({
       message: 'Document uploaded successfully.',

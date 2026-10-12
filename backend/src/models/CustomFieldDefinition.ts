@@ -17,6 +17,7 @@
  */
 
 import mongoose, { Document, Schema, Types } from 'mongoose';
+import { tenantPlugin } from '../plugins/tenantPlugin.js';
 
 export type CustomFieldTargetEntity =
   | 'Truck'
@@ -85,6 +86,8 @@ const CustomFieldDefinitionSchema = new Schema<ICustomFieldDefinition>(
 
 // Compound unique index ensuring field_key is unique per entity within each tenant
 CustomFieldDefinitionSchema.index({ company_id: 1, entity: 1, field_key: 1 }, { unique: true });
+
+CustomFieldDefinitionSchema.plugin(tenantPlugin);
 
 export const CustomFieldDefinition = mongoose.model<ICustomFieldDefinition>(
   'CustomFieldDefinition',

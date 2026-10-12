@@ -86,3 +86,44 @@
 - Converted **454 markdown links** across **62 documentation files** from Windows backslashes (`\`) to standard forward slashes (`/`), ensuring cross-platform markdown viewer and browser compatibility.
 - Fixed broken hyperlink in `docs/audit/CURRENT_STATE_AUDIT.md` line 99, removing reference to non-existent `operations/LRListPage.tsx` and directing to `frontend/src/pages/commercial/LRListPage.tsx`.
 - Automated test script confirmed **0 broken links** across the entire documentation library.
+
+---
+
+## Batch 1 Implementation & Quality Assurance Verification (October 2026)
+
+### 1. Specifications Verified & Resolved
+- **`TEST-001`**: Automated HTTP integration test infrastructure with Vitest, Supertest, and `mongodb-memory-server` instantiated (`backend/src/tests/setup.ts`, `backend/src/tests/helpers.ts`). Added `npm test` script.
+- **`ISS-001`**: Mounted `resolveTenantContext` across Express routers: `branchRoutes.ts`, `approvalRoutes.ts`, `commercialReportRoutes.ts`, `supportRoutes.ts`, and `trackingRoutes.ts`.
+- **`ISS-002`**: Enhanced Mongoose `tenantPlugin.ts` to intercept all query and mutation hooks (`updateOne`, `deleteOne`, `deleteMany`, `findOneAndDelete`, `distinct`, etc.) and prepended tenant match to `aggregate`. Added safe-fail query guard requiring explicit `{ skipTenantCheck: true }` for cross-tenant operations. Applied plugin to `CustomFieldDefinition`.
+- **`ISS-016`**: Mounted `fileSecurityMiddleware` (`validateFileMagicBytes`) on `POST /api/documents/upload` in `backend/src/routes/documentRoutes.ts`.
+- **`ISS-017`**: Hardened `backend/src/utils/storageService.ts` with strict path jailing (`getLocalFilePath`), rejection of traversal tokens (`..`, null bytes), file extension allowlisting, and tenant directory containment.
+- **`TEST-002`**: Implemented cross-tenant boundary verification suite (`backend/src/tests/integration/tenantIsolation.test.ts`) validating 100% rejection of unauthorized cross-tenant operations.
+
+### 2. Verification Outcomes
+- **Automated Tests**: 4 test files, 38 tests executed, 38 passed (100% pass rate).
+- **TypeScript Backend Build**: `tsc` completed with exit code 0 (zero compilation errors).
+- **Registers & Backlogs Updated**: `FLEET_FLOW_MASTER_REGISTER.md`, `IMPLEMENTATION_READINESS_BACKLOG.md`, individual issue specs in `docs/issues/` and `docs/testing/` marked `Verified`.
+- **Decision Gates**: `DEC-003` remains Pending Approval for production-only S3 enforcement, while local storage path containment and magic byte checks are fully implemented and verified.
+
+---
+
+## Batch 1.1 Security Hardening & Post-Review Findings Resolution (October 2026)
+
+### 1. Findings Resolved
+- **`H-01` — AuditLog Tenant Isolation**: Attached `tenantPlugin` to `AuditLogSchema` in `backend/src/models/AuditLog.ts`. Eliminated duplicate compound index definition. Added tests verifying that cross-tenant read/write attempts on audit logs are strictly prevented.
+- **`M-01` — Tenant-Specific Upload Containment**: Hardened `uploadTenantFile()` in `backend/src/utils/storageService.ts` to require `companyId`, enforce key prefixing (`tenants/${companyId}/`), and validate that resolved paths reside strictly within `LOCAL_STORAGE_DIR/tenants/${companyId}`. Updated `documentController.ts`. Added integration tests for legitimate uploads, cross-tenant keys, and directory escape attempts.
+- **`M-02` — Secure skipTenantCheck**: Updated `tenantPlugin.ts` to check query options (`this.getOptions().skipTenantCheck === true`) rather than query-filter parameters. Purged `filter.skipTenantCheck` from filters to prevent client filter manipulation. Updated privileged call sites in `superAdminController.ts` and `trackingController.ts` to `.setOptions({ skipTenantCheck: true })`. Added automated regression tests proving filter `{ skipTenantCheck: true }` cannot bypass isolation.
+- **`M-03` — Strict File-Signature Validation**: Hardened `cryptoService.ts` with complete 12-byte WebP validation (`RIFF` at 0–3, `WEBP` at 8–11). Replaced fail-open behavior with fail-closed rejection on unsupported or unmapped MIME types. Handled empty and truncated files. Wrapped Multer in `documentController.ts` to return HTTP 415 on rejected MIME types.
+- **`M-04` — Bulk Insert (insertMany) Tenant Protection**: Extended `tenantPlugin.ts` with `schema.pre('insertMany')` middleware to enforce active tenant scoping, block mismatched `company_id` overrides, and safe-fail when tenant context is missing unless explicit `skipTenantCheck` option is provided. Added comprehensive automated tests.
+
+### 2. Additional Review Tests Added
+- `$geoNear` aggregation preserving `$geoNear` at stage 0 and inserting `{ $match: { company_id } }` at stage 1.
+- Valid Tenant A JWT token combined with Tenant B `X-Company-ID` header returns HTTP 403 Forbidden.
+- Empty (0-byte) and truncated (< 12 bytes) file uploads rejected with HTTP 415.
+- Cross-tenant upload attempts blocked.
+
+### 3. Verification Outcomes
+- **Automated Tests**: 4 test files, 59 tests executed, 59 passed (100% pass rate).
+- **TypeScript Backend Build**: `tsc` completed with exit code 0 (zero errors).
+- **Decision Invariant**: `DEC-003` remains Pending Approval; production-only S3 migration was not prematurely enforced.
+

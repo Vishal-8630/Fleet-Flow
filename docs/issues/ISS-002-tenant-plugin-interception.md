@@ -5,7 +5,7 @@
 **Type:** Security / Data Isolation Defect  
 **Severity:** `P0` (Critical Blocker)  
 **Priority:** `P0` (Immediate)  
-**Status:** Confirmed Defect  
+**Status:** Verified (Resolved in Batch 1)  
 **Date:** October 2026  
 **Related Legacy Documents:** Preserves and supersedes [`docs/issues/ISSUE-01.md`](./ISSUE-01.md)  
 **Related Master Register Entry:** [`docs/FLEET_FLOW_MASTER_REGISTER.md`](../FLEET_FLOW_MASTER_REGISTER.md#2-issues--defects-register-iss-)
@@ -91,13 +91,14 @@ schema.pre('aggregate', function () {
 ---
 
 ## 6. Acceptance Criteria
-- [ ] Calling `Model.updateOne({ _id })` in Tenant A cannot update a document belonging to Tenant B.
-- [ ] Calling `Model.deleteOne({ _id })` in Tenant A cannot delete a document belonging to Tenant B.
-- [ ] Calling `Model.aggregate()` automatically scopes results to the active tenant without requiring manual `$match`.
-- [ ] Superadmin bypass queries (explicitly flagged) can query cross-tenant when intentionally configured.
+- [x] Calling `Model.updateOne({ _id })` in Tenant A cannot update a document belonging to Tenant B.
+- [x] Calling `Model.deleteOne({ _id })` in Tenant A cannot delete a document belonging to Tenant B.
+- [x] Calling `Model.aggregate()` automatically scopes results to the active tenant without requiring manual `$match`.
+- [x] Superadmin bypass queries (explicitly flagged with `{ skipTenantCheck: true }`) can query cross-tenant when intentionally configured.
+- [x] Missing tenant context safely rejects queries without silent bypass.
 
 ---
 
-## 7. Definition of Done
-1. `tenantPlugin.ts` updated with comprehensive hook list and aggregate hook.
-2. Cross-tenant mutation and aggregation tests passing in [`TEST-002`](../testing/TEST-002-cross-tenant-isolation-suite.md).
+## 7. Definition of Done & Verification Evidence
+1. [x] `tenantPlugin.ts` updated with comprehensive hook list, aggregate hook, safe-fail guard, option-based `skipTenantCheck` verification, bulk insert (`insertMany`) protection, and applied to all tenant models including `CustomFieldDefinition` and `AuditLog`.
+2. [x] Cross-tenant mutation, bulk insert, AuditLog isolation, `$geoNear`, and aggregation tests passing in [`TEST-002`](../testing/TEST-002-cross-tenant-isolation-suite.md) (`backend/src/tests/integration/tenantIsolation.test.ts` - 22/22 tests passing).

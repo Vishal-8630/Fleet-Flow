@@ -20,6 +20,7 @@
 | **Issue 03** | Harden Authentication and Account Recovery | ✅ Resolved | 100% |
 | **Issue 04** | Verify and Enforce Tenant Isolation Across the API | ✅ Resolved | 100% |
 | **Issue 05** | Make Financial Records Dependable & Accounting Sound | ✅ Resolved | 100% |
+| **Batch 1** | Tenant Boundary Enforcement, File Security & Automated Test Suite (`ISS-001`, `ISS-002`, `ISS-016`, `ISS-017`, `TEST-001`, `TEST-002`) | ✅ Verified | 100% |
 
 ---
 
@@ -774,6 +775,103 @@
 * **[TypeScript Strict Compilation]:**
   * `backend`: `npx tsc --noEmit` exited with code 0 (zero errors).
   * `frontend`: `npx tsc --noEmit` exited with code 0 (zero errors).
+
+---
+
+### Batch 1: Tenant Isolation Boundary, File Security & Test Infrastructure (P0 Launch Blocker)
+
+* **[Automated HTTP Integration Test Framework] (`TEST-001`, `TEST-002`):**
+  * Configured Vitest, Supertest, and `mongodb-memory-server` in `backend/` (`vitest.config.ts`, `backend/src/tests/setup.ts`, `backend/src/tests/helpers.ts`).
+  * Added npm test scripts: `"test": "vitest run"` and `"test:watch": "vitest"`.
+  * Built ephemeral in-memory MongoDB replica set lifecycle hooks ensuring clean state and automatic tear-down per test suite.
+
+* **[Tenant Context Resolution Enforcement] (`ISS-001`):**
+  * Mounted `resolveTenantContext` after `authenticate` across 5 Express route files previously omitting it:
+    * `backend/src/routes/branchRoutes.ts`
+    * `backend/src/routes/approvalRoutes.ts`
+    * `backend/src/routes/commercialReportRoutes.ts`
+    * `backend/src/routes/supportRoutes.ts`
+    * `backend/src/routes/trackingRoutes.ts` (authenticated telematics endpoints)
+  * Guaranteed `tenantStorage.run(companyId, next)` is initialized for downstream middleware and controllers.
+
+* **[Mongoose Tenant Plugin Interception & Safe-Fail] (`ISS-002`):**
+  * Expanded `backend/src/plugins/tenantPlugin.ts` to intercept all query, mutation, and deletion operations:
+    * `find`, `findOne`, `findOneAndUpdate`, `updateMany`, `updateOne`, `deleteOne`, `deleteMany`, `findOneAndDelete`, `findOneAndReplace`, `distinct`, `countDocuments`.
+  * Pre-aggregate hook automatically prepends `$match: { company_id: ObjectId(tenantId) }` (respecting `$geoNear` at index 0).
+  * Safe-Fail Enforcement: When tenant context is missing from `tenantStorage`, operations fail safely by throwing an error and scoping to null ObjectId unless explicitly flagged with `{ skipTenantCheck: true }`.
+  * Added explicit `{ skipTenantCheck: true }` to macro platform aggregation counters in `superAdminController.ts` and public tracking controllers.
+  * Attached `tenantPlugin` to `CustomFieldDefinition.ts`.
+
+* **[File Upload Security & MIME Spoofing Defense] (`ISS-016`):**
+  * Mounted `fileSecurityMiddleware` (`validateFileMagicBytes`) on `POST /upload` in `backend/src/routes/documentRoutes.ts`.
+  * Enforced binary buffer inspection against magic bytes for PDF (`%PDF`), PNG, JPEG, and WebP, rejecting MIME spoofing and masked scripts with HTTP 400.
+
+* **[Local Storage Path Traversal Defense & Jailing] (`ISS-017`):**
+  * Hardened `backend/src/utils/storageService.ts`:
+    * `generateTenantKey` enforces strict extension allowlist (`.pdf`, `.png`, `.jpg`, `.jpeg`, `.webp`), defaulting to `.bin`.
+    * `getLocalFilePath` validates path containment: rejects null bytes (`\0`), traversal sequences (`..`, `\\`), and asserts resolved path resides strictly within `LOCAL_STORAGE_DIR/tenants/{companyId}` with HTTP 403.
+    * Storage namespace strictly jailed to `tenants/{companyId}/{category}/{uuid}.ext`.
+
+* **[Automated Test Verification & Build Results]:**
+  * Ran `npm test` (`vitest run`) in `backend/`:
+    * ✅ `src/tests/smoke.test.ts` (1 test) — Passed
+    * ✅ `src/tests/integration/tenantRoutes.test.ts` (13 tests) — Passed
+    * ✅ `src/tests/integration/tenantIsolation.test.ts` (12 tests) — Passed
+    * ✅ `src/tests/integration/fileStorageSecurity.test.ts` (12 tests) — Passed
+    * **Summary: 4 test files passed, 38 tests passed, 0 failures (10.38s execution).**
+  * Ran `npm run build` (`tsc`) in `backend/`: **Exited code 0 (zero errors).**
+
+---
+
+### Batch 1.1: Security Hardening & Post-Review Findings (H-01 to M-04)
+
+* **[H-01 — AuditLog Tenant Isolation]:**
+  * Attached `tenantPlugin` to `AuditLogSchema` in `backend/src/models/AuditLog.ts`.
+  * Removed redundant duplicate schema compound index to eliminate Mongoose schema registration warnings.
+  * Added automated tests proving that Tenant A cannot retrieve Tenant B's operational audit records.
+  * Verified audit event ingestion and cross-tenant creation rejection under active tenant context.
+
+* **[M-01 — Tenant-Specific Upload Containment & Jailing]:**
+  * Updated `uploadTenantFile` in `backend/src/utils/storageService.ts` to receive `companyId: string` and enforce canonical path containment within `LOCAL_STORAGE_DIR/tenants/${companyId}`.
+  * Validated that key strictly starts with `tenants/${companyId}/` and rejects cross-tenant prefix attempts, null bytes, backslashes, and directory traversals.
+  * Updated callers (`documentController.ts:81`) and added integration tests for legitimate uploads, cross-tenant key attempts, and directory escape attempts.
+
+* **[M-02 — Secure skipTenantCheck Query Options]:**
+  * Updated `backend/src/plugins/tenantPlugin.ts` to inspect query options (`this.getOptions().skipTenantCheck === true`) rather than query-filter parameters.
+  * Stripped `filter.skipTenantCheck` from client query filters as defense-in-depth against filter manipulation.
+  * Updated legitimate bypass call sites in `superAdminController.ts` and `trackingController.ts` to use `.setOptions({ skipTenantCheck: true })`.
+  * Added automated regression tests proving that passing `{ skipTenantCheck: true }` in query filters cannot bypass tenant isolation either with or without active tenant context.
+
+* **[M-03 — Strict File-Signature Validation]:**
+  * Updated `backend/src/utils/cryptoService.ts` to strictly validate complete 12-byte WebP signatures (`RIFF` at bytes 0–3, 32-bit size at bytes 4–7, `WEBP` at bytes 8–11).
+  * Enforced fail-closed validation: rejects unmapped, unsupported MIME types (e.g., zip, sh) with HTTP 415.
+  * Handled empty buffers (0-byte) and truncated buffers (< 12 bytes for WebP, < signature length for others).
+  * Wrapped Multer middleware in `documentController.ts` to return HTTP 415 instead of unhandled 500 when disallowed MIME types are uploaded.
+  * Preserved full support for legitimate PDF, JPEG, JPG, and PNG uploads with comprehensive integration tests.
+
+* **[M-04 — Bulk Insert (insertMany) Tenant Protection]:**
+  * Extended `tenantPlugin.ts` with `schema.pre('insertMany')` hook:
+    * Injects active tenant `company_id` for documents missing tenant identifier.
+    * Rejects conflicting `company_id` when documents attempt cross-tenant injection.
+    * Rejects bulk inserts when tenant context is missing unless explicit `{ skipTenantCheck: true }` is provided in options.
+  * Preserved legitimate bulk-import and ledger operations.
+  * Added automated tests covering all insert scenarios (valid, matching, conflicting, missing context, privileged).
+
+* **[Additional Review-Requested Tests]:**
+  * Aggregation pipeline test with `$geoNear` at stage 0: verified MongoDB executes `$geoNear` at stage 0 and inserts `{ $match: { company_id } }` at stage 1 without pipeline failure.
+  * Cross-tenant header forgery test: verified valid Tenant A token combined with Tenant B `X-Company-ID` header returns HTTP 403 Forbidden.
+  * Empty file (0-byte) and truncated file upload rejection tests.
+
+* **[Automated Test Verification & Build Results]:**
+  * Ran `npm test` (`vitest run`) in `backend/`:
+    * ✅ `src/tests/smoke.test.ts` (1 test) — Passed
+    * ✅ `src/tests/integration/tenantRoutes.test.ts` (14 tests) — Passed
+    * ✅ `src/tests/integration/tenantIsolation.test.ts` (22 tests) — Passed
+    * ✅ `src/tests/integration/fileStorageSecurity.test.ts` (22 tests) — Passed
+    * **Summary: 4 test files passed, 59 tests passed, 0 failures.**
+  * Ran `npm run build` (`tsc`) in `backend/`: **Exited code 0 (zero errors).**
+
+
 
 
 

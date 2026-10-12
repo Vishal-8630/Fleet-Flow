@@ -75,8 +75,8 @@ This document serves as the **central, authoritative master register** for all t
 
 | ID | Title | Category | Severity / Priority | Release Target | Current Evidence Status | Dependencies | Decision Required? | Path to Detailed Spec |
 |---|---|---|---|---|---|---|---|---|
-| **ISS-001** | Tenant Context Middleware Bypass in Express Routes | Security / Multi-Tenancy | P0 / Blocker | Launch Blocker | Confirmed Defect | None | No | [`docs/issues/ISS-001-tenant-context-enforcement.md`](./issues/ISS-001-tenant-context-enforcement.md) |
-| **ISS-002** | Incomplete Mongoose Tenant Interception Plugin | Security / Data Isolation | P0 / Blocker | Launch Blocker | Confirmed Defect | `ISS-001` | No | [`docs/issues/ISS-002-tenant-plugin-interception.md`](./issues/ISS-002-tenant-plugin-interception.md) |
+| **ISS-001** | Tenant Context Middleware Bypass in Express Routes | Security / Multi-Tenancy | P0 / Blocker | Launch Blocker | Verified (Resolved in Batch 1) | None | No | [`docs/issues/ISS-001-tenant-context-enforcement.md`](./issues/ISS-001-tenant-context-enforcement.md) |
+| **ISS-002** | Incomplete Mongoose Tenant Interception Plugin | Security / Data Isolation | P0 / Blocker | Launch Blocker | Verified (Resolved in Batch 1) | `ISS-001` | No | [`docs/issues/ISS-002-tenant-plugin-interception.md`](./issues/ISS-002-tenant-plugin-interception.md) |
 | **ISS-003** | Credit Note Balance Reduction Failure & Schema Mismatch | Financial / Accounting | P0 / Blocker | Launch Blocker | Confirmed Defect | `ISS-001`, `ISS-002` | No | [`docs/issues/ISS-003-credit-note-balance-reduction.md`](./issues/ISS-003-credit-note-balance-reduction.md) |
 | **ISS-004** | One-Sided Vendor Payouts & Omission from Party Balances | Financial / General Ledger | P0 / Blocker | Launch Blocker | Confirmed Defect | `ISS-001`, `ISS-002` | No | [`docs/issues/ISS-004-vendor-payout-ledger-reconciliation.md`](./issues/ISS-004-vendor-payout-ledger-reconciliation.md) |
 | **ISS-005** | IDOR & Unauthenticated PII Exposure in Public Tracking | Security / Privacy | P0 / Blocker | Launch Blocker | Confirmed Security Risk | `ISS-001` | Reconciled | [`docs/issues/ISS-005-public-tracking-privacy-idor.md`](./issues/ISS-005-public-tracking-privacy-idor.md) |
@@ -90,8 +90,8 @@ This document serves as the **central, authoritative master register** for all t
 | **ISS-013** | Unsafe Payment Checkout Simulation Mode in Production | Security / Billing | P1 / High | Launch Blocker | Confirmed Security Risk | `ISS-001` | No | [`docs/issues/ISS-013-unsafe-payment-checkout-simulation.md`](./issues/ISS-013-unsafe-payment-checkout-simulation.md) |
 | **ISS-014** | MongoDB Aggregations Pass Raw String `companyId` into `$match` | Database / Operations | P1 / High | Launch Blocker | Confirmed Defect | None | No | [`docs/issues/ISS-014-mongodb-aggregation-string-companyid.md`](./issues/ISS-014-mongodb-aggregation-string-companyid.md) |
 | **ISS-015** | Dashboard Maintenance Counter Uses Non-Existent Enum | Dashboard / KPI | P1 / High | Launch Blocker | Confirmed Integration Mismatch | None | No | [`docs/issues/ISS-015-dashboard-maintenance-truck-counter.md`](./issues/ISS-015-dashboard-maintenance-truck-counter.md) |
-| **ISS-016** | Unmounted File Security Magic Byte Middleware on Uploads | Security / File Upload | P1 / High | Launch Blocker | Confirmed Security Risk | None | No | [`docs/issues/ISS-016-unmounted-file-security-middleware.md`](./issues/ISS-016-unmounted-file-security-middleware.md) |
-| **ISS-017** | Local Storage Service Lacks Path Normalization Check | Security / Storage | P1 / High | Launch Blocker | Suspected Risk Requiring Verification | `DEC-003` | Yes (`DEC-003`) | [`docs/issues/ISS-017-local-storage-path-traversal.md`](./issues/ISS-017-local-storage-path-traversal.md) |
+| **ISS-016** | Unmounted File Security Magic Byte Middleware on Uploads | Security / File Upload | P1 / High | Launch Blocker | Verified (Resolved in Batch 1) | None | No | [`docs/issues/ISS-016-unmounted-file-security-middleware.md`](./issues/ISS-016-unmounted-file-security-middleware.md) |
+| **ISS-017** | Local Storage Service Lacks Path Normalization Check | Security / Storage | P1 / High | Launch Blocker | Verified (Resolved in Batch 1; Prod S3 Pending DEC-003) | `DEC-003` | Yes (`DEC-003`) | [`docs/issues/ISS-017-local-storage-path-traversal.md`](./issues/ISS-017-local-storage-path-traversal.md) |
 | **ISS-018** | Multi-Document ACID Transactions Crash Standalone Mongo | Architecture / Database | P0 / Blocker | Launch Blocker | Confirmed Defect | `DEC-002` | Yes (`DEC-002`) | [`docs/issues/ISS-018-acid-transactions-standalone-mongo.md`](./issues/ISS-018-acid-transactions-standalone-mongo.md) |
 | **ISS-019** | Missing Client-Side Idempotency Key Generation | Security / Race Condition | P1 / High | Launch Blocker | Confirmed Defect | None | No | [`docs/issues/ISS-019-client-side-idempotency-key-omission.md`](./issues/ISS-019-client-side-idempotency-key-omission.md) |
 | **ISS-020** | Unthrottled Portal OTP Endpoints (SMS Flooding & Abuse) | Security / Abuse | P1 / High | Launch Blocker | Confirmed Security Risk | None | No | [`docs/issues/ISS-020-portal-otp-rate-limiting-sms-flooding.md`](./issues/ISS-020-portal-otp-rate-limiting-sms-flooding.md) |
@@ -147,12 +147,12 @@ This document serves as the **central, authoritative master register** for all t
 
 ## 6. Testing & Quality Assurance Register (`TEST-###`)
 
-| ID | Title | Scope & Framework | Priority | Release Target | Target Coverage | Path to Detailed Spec |
+| ID | Title | Scope & Framework | Priority | Release Target | Current Status | Path to Detailed Spec |
 |---|---|---|---|---|---|---|
-| **TEST-001** | Automated HTTP Integration Test Suite with Vitest & Supertest | Express API Routes | P0 | Launch Blocker (Batch 1) | 100% of API Route Files | [`docs/testing/TEST-001-automated-http-integration-suite.md`](./testing/TEST-001-automated-http-integration-suite.md) |
-| **TEST-002** | Cross-Tenant Data Isolation & Mutation Boundary Test Suite | Multi-Tenancy / Mongoose | P0 | Launch Blocker (Batch 1) | 100% of Mongoose Models | [`docs/testing/TEST-002-cross-tenant-isolation-suite.md`](./testing/TEST-002-cross-tenant-isolation-suite.md) |
-| **TEST-003** | Double-Entry Accounting & Ledger Balance Invariant Test Suite | Financial Math & Ledgers | P0 | Launch Blocker (Batch 3) | 100% Debit-Credit Equality | [`docs/testing/TEST-003-double-entry-ledger-invariants.md`](./testing/TEST-003-double-entry-ledger-invariants.md) |
-| **TEST-004** | Subscription Feature Gating, Quota Limits & Webhook Verification | Billing & Entitlements | P1 | Launch Blocker (Batch 5) | All Tiers & Webhook Signatures | [`docs/testing/TEST-004-subscription-feature-gating-quotas.md`](./testing/TEST-004-subscription-feature-gating-quotas.md) |
+| **TEST-001** | Automated HTTP Integration Test Suite with Vitest & Supertest | Express API Routes | P0 | Launch Blocker (Batch 1) | Verified (Operational in Batch 1; 38/38 passing) | [`docs/testing/TEST-001-automated-http-integration-suite.md`](./testing/TEST-001-automated-http-integration-suite.md) |
+| **TEST-002** | Cross-Tenant Data Isolation & Mutation Boundary Test Suite | Multi-Tenancy / Mongoose | P0 | Launch Blocker (Batch 1) | Verified (Operational in Batch 1; 12/12 passing) | [`docs/testing/TEST-002-cross-tenant-isolation-suite.md`](./testing/TEST-002-cross-tenant-isolation-suite.md) |
+| **TEST-003** | Double-Entry Accounting & Ledger Balance Invariant Test Suite | Financial Math & Ledgers | P0 | Launch Blocker (Batch 3) | Pending Batch 3 | [`docs/testing/TEST-003-double-entry-ledger-invariants.md`](./testing/TEST-003-double-entry-ledger-invariants.md) |
+| **TEST-004** | Subscription Feature Gating, Quota Limits & Webhook Verification | Billing & Entitlements | P1 | Launch Blocker (Batch 5) | Pending Batch 5 | [`docs/testing/TEST-004-subscription-feature-gating-quotas.md`](./testing/TEST-004-subscription-feature-gating-quotas.md) |
 
 ---
 
@@ -162,7 +162,7 @@ This document serves as the **central, authoritative master register** for all t
 |---|---|---|---|---|---|---|---|
 | **DEC-001** | Commercial Subscription Pricing, Truck Quotas & Starter Plan Inclusions | Product Owner / Commercial | P1 | Launch Blocker (Batch 5) | Pending Product Owner Approval | `ISS-011`, `ISS-012` | [`docs/decisions/DEC-001-subscription-pricing-and-entitlements.md`](./decisions/DEC-001-subscription-pricing-and-entitlements.md) |
 | **DEC-002** | Standalone MongoDB Fallback vs Mandatory Replica Set in Production | Lead Architect / DevOps | P0 | Launch Blocker (Batch 2) | Approved Architecture (Replica Sets Everywhere) | `ISS-018` | [`docs/decisions/DEC-002-mongodb-transactions-standalone-strategy.md`](./decisions/DEC-002-mongodb-transactions-standalone-strategy.md) |
-| **DEC-003** | File Storage Architecture: Cloud S3 Object Storage vs Secured Local Disk | Security / Infrastructure | P1 | Launch Blocker (Batch 1/6) | Approved Architecture (Cloud S3 in Prod; Sandboxed Dev) | `ISS-017` | [`docs/decisions/DEC-003-storage-architecture-s3-vs-local.md`](./decisions/DEC-003-storage-architecture-s3-vs-local.md) |
+| **DEC-003** | File Storage Architecture: Cloud S3 Object Storage vs Secured Local Disk | Security / Infrastructure | P1 | Launch Blocker (Batch 1/6) | Pending Approval (Prod S3 Policy Pending; Local Containment Verified) | `ISS-017` | [`docs/decisions/DEC-003-storage-architecture-s3-vs-local.md`](./decisions/DEC-003-storage-architecture-s3-vs-local.md) |
 
 ---
 

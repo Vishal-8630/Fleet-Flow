@@ -7,12 +7,12 @@
  */
 
 import { Router } from 'express';
-import { requireAuth } from '../middleware/authMiddleware.js';
+import { requireAuth, resolveTenantContext } from '../middleware/authMiddleware.js';
 import { createTicket, listTickets, getTicket, replyToTicket } from '../controllers/supportController.js';
 
 const router = Router();
 
-router.use(requireAuth);
+router.use(requireAuth, resolveTenantContext);
 
 router.get('/', listTickets);
 router.post('/', createTicket);

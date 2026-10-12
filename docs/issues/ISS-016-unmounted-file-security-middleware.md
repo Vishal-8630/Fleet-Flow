@@ -5,7 +5,7 @@
 **Type:** Security / File Upload Defect  
 **Severity:** `P1` (High)  
 **Priority:** `P1` (High)  
-**Status:** Confirmed Security Risk  
+**Status:** Verified (Resolved in Batch 1)  
 **Date:** October 2026  
 **Related Legacy Documents:** Preserves and supersedes [`docs/issues/ISSUE-09.md`](./ISSUE-09.md)  
 **Related Master Register Entry:** [`docs/FLEET_FLOW_MASTER_REGISTER.md`](../FLEET_FLOW_MASTER_REGISTER.md#2-issues--defects-register-iss-)
@@ -58,12 +58,12 @@ Ensure `validateFileMagicBytes` handles memory storage buffers and temporary dis
 ---
 
 ## 6. Acceptance Criteria
-- [ ] Uploading genuine PDFs and images succeeds.
-- [ ] Uploading executable scripts masked with `.pdf` or `.png` extensions is rejected with HTTP 400.
-- [ ] Empty or truncated file buffers are rejected.
+- [x] Uploading genuine PDFs and images succeeds.
+- [x] Uploading executable scripts masked with `.pdf` or `.png` extensions is rejected with HTTP 400.
+- [x] Empty or truncated file buffers are rejected.
 
 ---
 
-## 7. Definition of Done
-1. `fileSecurityMiddleware` mounted in all upload routes.
-2. Verified via automated security test.
+## 7. Definition of Done & Verification Evidence
+1. [x] `fileSecurityMiddleware` (`validateFileMagicBytes`) mounted in `backend/src/routes/documentRoutes.ts` with complete 12-byte WebP signature inspection, fail-closed handling on unmapped MIME types, and rejection of empty/truncated files.
+2. [x] Verified via automated security test suite `backend/src/tests/integration/fileStorageSecurity.test.ts` (22/22 tests passing).

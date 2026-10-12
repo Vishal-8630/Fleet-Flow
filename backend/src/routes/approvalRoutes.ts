@@ -7,7 +7,7 @@
  */
 
 import { Router } from 'express';
-import { requireAuth, requireRole } from '../middleware/authMiddleware.js';
+import { requireAuth, resolveTenantContext, requireRole } from '../middleware/authMiddleware.js';
 import {
   listApprovalRules,
   createApprovalRule,
@@ -17,7 +17,7 @@ import {
 
 const router = Router();
 
-router.use(requireAuth);
+router.use(requireAuth, resolveTenantContext);
 
 router.get('/rules', listApprovalRules);
 router.post('/rules', requireRole(['admin']), createApprovalRule);

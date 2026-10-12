@@ -7,7 +7,7 @@
  */
 
 import { Router } from 'express';
-import { requireAuth } from '../middleware/authMiddleware.js';
+import { requireAuth, resolveTenantContext } from '../middleware/authMiddleware.js';
 import {
   ingestGpsPing,
   getLiveTruckLocation,
@@ -22,9 +22,9 @@ const router = Router();
 router.get('/:lrNumber', publicTrackConsignment);
 
 // Authenticated telematics routes
-router.post('/ping', requireAuth, ingestGpsPing);
-router.get('/live/fleet', requireAuth, getFleetLiveMap);
-router.get('/live/:truckId', requireAuth, getLiveTruckLocation);
-router.post('/incident', requireAuth, reportTripIncident);
+router.post('/ping', requireAuth, resolveTenantContext, ingestGpsPing);
+router.get('/live/fleet', requireAuth, resolveTenantContext, getFleetLiveMap);
+router.get('/live/:truckId', requireAuth, resolveTenantContext, getLiveTruckLocation);
+router.post('/incident', requireAuth, resolveTenantContext, reportTripIncident);
 
 export default router;

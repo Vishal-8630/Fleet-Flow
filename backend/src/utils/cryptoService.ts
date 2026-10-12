@@ -98,27 +98,80 @@ export function validateFileMagicBytes(
   buffer: Buffer,
   declaredMimeType: string
 ): string | null {
-  if (!buffer || buffer.length < 8) {
-    return 'File buffer is empty or too small to validate.';
+  if (!declaredMimeType || typeof declaredMimeType !== 'string') {
+    return 'Declared MIME type is missing or invalid.';
   }
 
-  const SIGNATURES: Record<string, number[][]> = {
-    'application/pdf': [[0x25, 0x50, 0x44, 0x46]], // %PDF
-    'image/jpeg': [[0xFF, 0xD8, 0xFF]],
-    'image/jpg': [[0xFF, 0xD8, 0xFF]],
-    'image/png': [[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]],
-    'image/webp': [[0x52, 0x49, 0x46, 0x46]], // RIFF (WebP)
-    'image/gif': [[0x47, 0x49, 0x46, 0x38, 0x37, 0x61], [0x47, 0x49, 0x46, 0x38, 0x39, 0x61]], // GIF87a/GIF89a
-  };
+  const normalizedMime = declaredMimeType.toLowerCase().trim();
 
-  const expectedSignatures = SIGNATURES[declaredMimeType.toLowerCase()];
-  if (!expectedSignatures) {
-    // If MIME not in our list, allow through (unknown type) but warn
+  // Whitelist of supported MIME types
+  const SUPPORTED_MIMES = [
+    'application/pdf',
+    'image/jpeg',
+    'image/jpg',
+    'image/png',
+    'image/webp',
+    'image/gif',
+  ];
+
+  if (!SUPPORTED_MIMES.includes(normalizedMime)) {
+    return `Unsupported or unmapped MIME type (${declaredMimeType}). Upload rejected.`;
+  }
+
+  if (!buffer || buffer.length === 0) {
+    return 'File buffer is empty.';
+  }
+
+  // Handle WebP specifically because it has a composite signature:
+  // Bytes 0-3: 'RIFF' (0x52, 0x49, 0x46, 0x46)
+  // Bytes 4-7: File size (32-bit integer)
+  // Bytes 8-11: 'WEBP' (0x57, 0x45, 0x42, 0x50)
+  if (normalizedMime === 'image/webp') {
+    if (buffer.length < 12) {
+      return 'File buffer is too small or truncated for WebP format.';
+    }
+    const isRiff =
+      buffer[0] === 0x52 &&
+      buffer[1] === 0x49 &&
+      buffer[2] === 0x46 &&
+      buffer[3] === 0x46;
+    const isWebp =
+      buffer[8] === 0x57 &&
+      buffer[9] === 0x45 &&
+      buffer[10] === 0x42 &&
+      buffer[11] === 0x50;
+
+    if (!isRiff || !isWebp) {
+      return `File binary signature does not match declared type (${declaredMimeType}). Disguised or corrupted files are rejected.`;
+    }
     return null;
   }
 
-  const isValid = expectedSignatures.some((sig) =>
-    sig.every((byte, idx) => buffer[idx] === byte)
+  // Standard signature tables
+  const SIGNATURES: Record<string, number[][]> = {
+    'application/pdf': [[0x25, 0x50, 0x44, 0x46]], // %PDF (4 bytes)
+    'image/jpeg': [[0xff, 0xd8, 0xff]], // JPEG SOI (3 bytes)
+    'image/jpg': [[0xff, 0xd8, 0xff]],
+    'image/png': [[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]], // PNG header (8 bytes)
+    'image/gif': [
+      [0x47, 0x49, 0x46, 0x38, 0x37, 0x61], // GIF87a (6 bytes)
+      [0x47, 0x49, 0x46, 0x38, 0x39, 0x61], // GIF89a (6 bytes)
+    ],
+  };
+
+  const expectedSignatures = SIGNATURES[normalizedMime];
+  if (!expectedSignatures) {
+    return `Unsupported or unmapped MIME type (${declaredMimeType}). Upload rejected.`;
+  }
+
+  // Check if buffer is long enough for at least one signature
+  const minSigLength = Math.min(...expectedSignatures.map((s) => s.length));
+  if (buffer.length < minSigLength) {
+    return `File buffer is too small or truncated for declared type (${declaredMimeType}).`;
+  }
+
+  const isValid = expectedSignatures.some(
+    (sig) => buffer.length >= sig.length && sig.every((byte, idx) => buffer[idx] === byte)
   );
 
   if (!isValid) {

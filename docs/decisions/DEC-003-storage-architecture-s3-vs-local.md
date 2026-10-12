@@ -47,7 +47,7 @@ In [`backend/src/utils/storageService.ts`](../../backend/src/utils/storageServic
 ---
 
 ## 4. Sign-Off & Next Steps
-- [ ] Infrastructure & Security Architect approves production S3-only requirement and local development sandboxing.
-- [ ] MinIO service definition verified in `docker-compose.dev.yml` (`OPS-001`).
-- [ ] `storageService.ts` updated with path jailing (`ISS-017`) and pre-signed URL generation.
-- [ ] Pre-upload magic byte middleware mounted on all upload routes (`ISS-016`).
+- [ ] Infrastructure & Security Architect approves production S3-only requirement and local development sandboxing. *(Pending Decision Approval)*
+- [ ] MinIO service definition verified in `docker-compose.dev.yml` (`OPS-001`). *(Scheduled for Batch 6)*
+- [x] `storageService.ts` updated with path jailing (`ISS-017`), strict extension allowlist, null byte & traversal sequence rejection, and tenant directory containment (Implemented and verified in Batch 1).
+- [x] Pre-upload magic byte middleware mounted on upload routes (`ISS-016`) (Mounted in `documentRoutes.ts` and verified in Batch 1).

@@ -7,7 +7,7 @@
  */
 
 import { Router } from 'express';
-import { requireAuth } from '../middleware/authMiddleware.js';
+import { requireAuth, resolveTenantContext } from '../middleware/authMiddleware.js';
 import {
   getArAgingReport,
   getTripProfitabilityReport,
@@ -18,8 +18,8 @@ import {
 
 const router = Router();
 
-// All commercial report routes require authentication
-router.use(requireAuth);
+// All commercial report routes require authentication and tenant context
+router.use(requireAuth, resolveTenantContext);
 
 router.get('/aging', getArAgingReport);
 router.get('/profitability', getTripProfitabilityReport);

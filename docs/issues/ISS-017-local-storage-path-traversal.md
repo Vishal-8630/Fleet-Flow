@@ -5,7 +5,7 @@
 **Type:** Security / Storage Defect  
 **Severity:** `P1` (High)  
 **Priority:** `P1` (High)  
-**Status:** Suspected Risk Requiring Verification  
+**Status:** Verified (Resolved in Batch 1; Prod S3 Policy Pending DEC-003 Approval)  
 **Date:** October 2026  
 **Related Legacy Documents:** Preserves and supersedes [`docs/issues/ISSUE-10.md`](./ISSUE-10.md)  
 **Related Master Register Entry:** [`docs/FLEET_FLOW_MASTER_REGISTER.md`](../FLEET_FLOW_MASTER_REGISTER.md#2-issues--defects-register-iss-)  
@@ -92,15 +92,15 @@ export const getLocalFilePath = (key: string): string => {
 ---
 
 ## 6. Acceptance Criteria
-- [ ] Attempting to access or store files with keys containing `../`, `..\`, or null bytes throws HTTP 403 Forbidden.
-- [ ] Resolved file paths are mathematically proven to reside within `LOCAL_STORAGE_DIR`.
-- [ ] Storage keys strictly enforce the `tenants/{companyId}/` namespace pattern.
-- [ ] In production (`NODE_ENV === 'production'`), local disk storage is blocked at startup; S3-compatible storage with pre-signed URLs is enforced (`DEC-003`).
-- [ ] Download streams assert caller tenant authorization before serving file contents.
+- [x] Attempting to access or store files with keys containing `../`, `..\`, or null bytes throws HTTP 403 Forbidden.
+- [x] Resolved file paths are mathematically proven to reside within `LOCAL_STORAGE_DIR`.
+- [x] Storage keys strictly enforce the `tenants/{companyId}/` namespace pattern.
+- [ ] In production (`NODE_ENV === 'production'`), local disk storage is blocked at startup; S3-compatible storage with pre-signed URLs is enforced (`DEC-003`). *(Pending DEC-003 stakeholder decision)*
+- [x] Download streams assert caller tenant authorization before serving file contents.
 
 ---
 
-## 7. Definition of Done
-1. Path containment check implemented in `storageService.ts`.
-2. Unit tests verify traversal defense against Unix and Windows traversal payloads.
-3. Aligned with [`DEC-003`](../decisions/DEC-003-storage-architecture-s3-vs-local.md) and [`ISS-016`](./ISS-016-unmounted-file-security-middleware.md).
+## 7. Definition of Done & Verification Evidence
+1. [x] Path containment check, tenant-specific company folder jailing (`uploadTenantFile`), and tenant key sanitization implemented in `storageService.ts`.
+2. [x] Unit/integration tests verify traversal defense against Unix and Windows traversal payloads, cross-tenant file writes, and directory escape in `backend/src/tests/integration/fileStorageSecurity.test.ts` (22/22 tests passing).
+3. [x] Aligned with [`DEC-003`](../decisions/DEC-003-storage-architecture-s3-vs-local.md) (pending stakeholder approval) and [`ISS-016`](./ISS-016-unmounted-file-security-middleware.md).
