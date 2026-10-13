@@ -15,11 +15,13 @@
  */
 
 import { Request, Response } from 'express';
+import { Types } from 'mongoose';
 import { VehicleLocationLog } from '../models/VehicleLocationLog.js';
 import { TripIncident } from '../models/TripIncident.js';
 import { Entry } from '../models/Entry.js';
 import { Truck } from '../models/Truck.js';
 import { TruckJourney } from '../models/TruckJourney.js';
+import { Company } from '../models/Company.js';
 import { getTenantId } from '../plugins/tenantPlugin.js';
 import { isCorridorDeviation, haversineDistance } from '../utils/geofenceService.js';
 
@@ -105,8 +107,14 @@ export async function getFleetLiveMap(req: Request, res: Response): Promise<void
   try {
     const companyId = getTenantId(req);
 
-    // Get all trucks for this company
-    const trucks = await Truck.find({ company_id: companyId, is_active: true }).select('_id registration_number truck_type').lean();
+    // Get all active trucks for this company
+    const trucks = await Truck.find({
+      company_id: companyId,
+      status: { $in: ['active', 'available', 'on_trip'] },
+      is_deleted: false,
+    })
+      .select('_id truck_no body_type make model status')
+      .lean();
     
     // For each truck get its latest location
     const fleetPositions = await Promise.all(
@@ -119,19 +127,18 @@ export async function getFleetLiveMap(req: Request, res: Response): Promise<void
         return {
           truck_id: truck._id,
           registration_number: truck.truck_no,
+          truck_no: truck.truck_no,
           truck_type: truck.body_type,
+          body_type: truck.body_type,
+          make: truck.make,
+          model: truck.model,
+          status: truck.status,
           location: latest || null,
         };
       })
     );
 
-    // Filter to only trucks with recent location data (within last 24h)
-    const cutoff = new Date(Date.now() - 24 * 3600 * 1000);
-    const activeTrucks = fleetPositions.filter(
-      (t) => t.location && new Date(t.location.recorded_at) > cutoff
-    );
-
-    res.json({ trucks: activeTrucks, total: activeTrucks.length });
+    res.json({ trucks: fleetPositions, total: fleetPositions.length });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -183,30 +190,80 @@ export async function reportTripIncident(req: Request, res: Response): Promise<v
 }
 
 /**
- * GET /api/public/track/:lrNumber
+ * GET /api/public/track/:lrNumber (or /api/public/track?token=...)
  * PUBLIC endpoint — returns sanitized consignment tracking data.
+ * STRICTLY rejects unverified raw LR lookups (ISS-005).
  * STRICTLY strips: freight amounts, advance, margins, driver PII, Aadhaar, full phone numbers.
  */
 export async function publicTrackConsignment(req: Request, res: Response): Promise<void> {
   try {
-    const lrParam = req.params.lrNumber;
+    const rawParam = req.params.lrNumber || (req.params as any).identifier;
+    const tokenQuery = req.query.token as string | undefined;
+    const lrQuery = req.query.lr_no as string | undefined;
+    const companyCodeQuery = (req.query.company_code as string | undefined) || (req.query.company as string | undefined);
+    const phoneQuery = req.query.phone as string | undefined;
 
-    if (!lrParam) {
-      res.status(400).json({ error: 'LR Number is required.' });
-      return;
-    }
+    // Detect whether an unguessable tracking_token was supplied
+    const token = tokenQuery || (rawParam && rawParam.startsWith('trk_') ? rawParam : undefined);
+    const lrParam = lrQuery || (rawParam && !rawParam.startsWith('trk_') ? rawParam : undefined);
 
-    const cleanLr = (Array.isArray(lrParam) ? lrParam[0] : lrParam).toUpperCase().trim();
+    let entry: any = null;
+    let resolvedCompany: any = null;
 
-    // Find the entry — explicitly privileged public tracking lookup
-    const entry = await Entry.findOne({
-      $or: [{ lr_no: cleanLr }, { bill_no: cleanLr }],
-    })
-      .setOptions({ skipTenantCheck: true })
-      .lean();
+    if (token) {
+      // Primary workflow: Unguessable cryptographically secure token lookup
+      entry = await Entry.findOne({ tracking_token: token.trim() })
+        .setOptions({ skipTenantCheck: true })
+        .lean();
 
-    if (!entry) {
-      res.status(404).json({ error: 'Consignment not found. Please verify the LR number.' });
+      if (!entry) {
+        res.status(404).json({ error: 'Consignment tracking reference not found.' });
+        return;
+      }
+
+      resolvedCompany = await Company.findById(entry.company_id).lean();
+    } else if (companyCodeQuery && lrParam && phoneQuery) {
+      // Secondary fallback workflow: 3-factor verified lookup (Company Code + LR No + Phone)
+      const cleanCompanyCode = companyCodeQuery.trim();
+      const cleanPhone = phoneQuery.trim();
+      const cleanLr = lrParam.toUpperCase().trim();
+
+      resolvedCompany = await Company.findOne({
+        $or: [
+          { slug: cleanCompanyCode.toLowerCase() },
+          ...(Types.ObjectId.isValid(cleanCompanyCode) ? [{ _id: new Types.ObjectId(cleanCompanyCode) }] : [])
+        ]
+      }).lean();
+
+      if (!resolvedCompany) {
+        res.status(404).json({ error: 'Company tracking reference not found.' });
+        return;
+      }
+
+      entry = await Entry.findOne({
+        company_id: resolvedCompany._id,
+        $or: [{ lr_no: cleanLr }, { bill_no: cleanLr }],
+        $and: [
+          {
+            $or: [
+              { 'consignor.phone': cleanPhone },
+              { 'consignee.phone': cleanPhone }
+            ]
+          }
+        ]
+      })
+        .setOptions({ skipTenantCheck: true })
+        .lean();
+
+      if (!entry) {
+        res.status(404).json({ error: 'Consignment not found or phone number verification failed.' });
+        return;
+      }
+    } else {
+      // REJECT unverified raw sequential LR lookup to prevent cross-tenant enumeration and IDOR
+      res.status(400).json({
+        error: 'Valid tracking token or verified query credentials (company_code, lr_no, phone) are required.'
+      });
       return;
     }
 
@@ -219,8 +276,8 @@ export async function publicTrackConsignment(req: Request, res: Response): Promi
           .lean()
       : null;
 
-    // Get latest truck location if available
-    let liveLocation = null;
+    // Get latest truck location if available (sanitized landmark only)
+    let liveLocation: any = null;
     let truckObj = journey ? (journey.truck_id as any) : null;
 
     if (!truckObj && entry.vehicle_number) {
@@ -244,49 +301,109 @@ export async function publicTrackConsignment(req: Request, res: Response): Promi
     }
 
     // =========================================================
-    // STRICT PII SANITIZATION — ONLY THESE FIELDS ARE RETURNED
+    // STRICT PII & FINANCIAL SANITIZATION (ISS-005)
     // =========================================================
     const vehicleReg = truckObj?.truck_no || entry.vehicle_number;
     const maskedReg = vehicleReg
       ? vehicleReg.replace(/(.{4})(.+)(.{2})/, '$1****$3')
-      : undefined;
+      : 'Allocated Vehicle';
 
     const isDispatched = !!journey && ['active', 'completed', 'delayed'].includes(journey.status);
     const isDelivered = (journey && journey.status === 'completed') || entry.status === 'invoiced';
 
+    // Map status enum to frontend contract
+    let currentStatus: 'BOOKED' | 'DISPATCHED' | 'IN_TRANSIT' | 'OUT_FOR_DELIVERY' | 'DELIVERED' = 'BOOKED';
+    if (isDelivered) {
+      currentStatus = 'DELIVERED';
+    } else if (isDispatched) {
+      currentStatus = 'IN_TRANSIT';
+    }
+
+    const bookingDateStr = (entry.bill_date || entry.lr_date || (entry as any).created_at || new Date()).toISOString();
+
+    const originCity = typeof entry.from_location === 'object' ? (entry.from_location as any).city : entry.from_location || 'Origin Hub';
+    const destCity = typeof entry.to_location === 'object' ? (entry.to_location as any).city : entry.to_location || 'Destination Hub';
+
     const sanitizedResponse = {
+      tracking_reference: entry.tracking_token || entry.lr_no,
+      bill_reference: entry.bill_no,
+      booking_date: bookingDateStr,
+      carrier: {
+        company_name: resolvedCompany?.name || 'Authorized Logistics Partner',
+      },
+      transit: {
+        origin: originCity,
+        destination: destCity,
+        vehicle_number: maskedReg,
+        last_known_location: liveLocation?.landmark || (isDispatched ? 'In Transit Corridor' : originCity),
+        current_status: currentStatus,
+        is_delivered: isDelivered,
+      },
+      consignment: {
+        consignor_name: entry.consignor?.name || 'Authorized Shipper',
+        consignee_name: entry.consignee?.name || 'Authorized Receiver',
+        package_count: entry.package_count || 0,
+        packaging_type: entry.packaging_type || 'Standard Freight',
+        goods_description: entry.goods_description || 'Commercial Freight',
+        actual_weight_tonnes: entry.actual_weight_tonnes || 0,
+        has_pod: isDelivered,
+        pod_preview_url: null,
+      },
+      milestones: [
+        {
+          step: 1,
+          key: 'booked',
+          title: 'Consignment Booked',
+          description: `Consignment registered at origin hub`,
+          location: originCity,
+          timestamp: bookingDateStr,
+          status: 'completed' as const,
+        },
+        {
+          step: 2,
+          key: 'dispatched',
+          title: 'Dispatched from Hub',
+          description: isDispatched ? 'Vehicle departed origin terminal' : 'Awaiting departure schedule',
+          location: originCity,
+          status: isDispatched ? ('completed' as const) : ('upcoming' as const),
+        },
+        {
+          step: 3,
+          key: 'in_transit',
+          title: 'In Transit',
+          description: isDispatched && !isDelivered ? 'Moving through freight transit corridor' : (isDelivered ? 'Corridor transit completed' : 'Awaiting dispatch'),
+          location: liveLocation?.landmark || 'Transit Corridor',
+          status: isDelivered ? ('completed' as const) : (isDispatched ? ('current' as const) : ('upcoming' as const)),
+        },
+        {
+          step: 4,
+          key: 'out_for_delivery',
+          title: 'Out for Delivery',
+          description: isDelivered ? 'Arrived at destination hub for unloading' : 'Scheduled upon arrival',
+          location: destCity,
+          status: isDelivered ? ('completed' as const) : ('upcoming' as const),
+        },
+        {
+          step: 5,
+          key: 'delivered',
+          title: 'Consignment Delivered',
+          description: isDelivered ? 'Delivered successfully to consignee' : 'Pending final delivery milestone',
+          location: destCity,
+          status: isDelivered ? ('completed' as const) : ('upcoming' as const),
+        },
+      ],
+      last_updated_at: new Date().toISOString(),
+
+      // Backward-compatibility flat aliases
       lr_number: entry.lr_no,
-      booking_date: entry.bill_date || entry.lr_date || entry.created_at,
-      from_city: entry.from_location,
-      to_city: entry.to_location,
+      from_city: originCity,
+      to_city: destCity,
       consignment_description: entry.goods_description,
       package_count: entry.package_count,
       weight_kg: (entry.actual_weight_tonnes || 0) * 1000,
       status: entry.status,
-      vehicle_type: truckObj?.body_type,
       masked_vehicle_registration: maskedReg,
-      milestones: [
-        { label: 'Booked', completed: true },
-        { label: 'Dispatched', completed: isDispatched },
-        { label: 'In Transit', completed: isDispatched && !isDelivered },
-        { label: 'Delivered', completed: isDelivered },
-      ],
-      live_location: liveLocation
-        ? {
-            latitude: liveLocation.latitude,
-            longitude: liveLocation.longitude,
-            speed_kmh: liveLocation.speed_kmh,
-            landmark: liveLocation.landmark,
-            last_updated: liveLocation.recorded_at,
-          }
-        : null,
-      journey_route: journey
-        ? {
-            from: typeof journey.from_location === 'object' ? journey.from_location.city : journey.from_location,
-            to: typeof journey.to_location === 'object' ? journey.to_location.city : journey.to_location,
-          }
-        : null,
-      // FORBIDDEN: freight_amount, advance, balance, billing_party, driver_phone, aadhaar, margins
+      // STRICTLY EXCLUDED: freight_amount, advance, balance, driver_phone, aadhaar, license, raw GPS lat/lng
     };
 
     res.json(sanitizedResponse);

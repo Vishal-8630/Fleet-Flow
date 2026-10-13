@@ -115,3 +115,64 @@ export const invitationLimiter = rateLimit({
   },
 });
 
+/**
+ * Trusted IP Resolver for Rate Limiting:
+ * Resolves client IP via Express's validated req.ip (enforcing trust-proxy boundary).
+ * In test environment ONLY, checks x-test-client-ip for test isolation.
+ * Raw client-provided x-forwarded-for headers cannot spoof identity in production.
+ */
+export const getClientIpKey = (req: Request): string => {
+  if (process.env.NODE_ENV === 'test' && req.headers['x-test-client-ip']) {
+    return String(req.headers['x-test-client-ip']).trim();
+  }
+  return req.ip || req.socket?.remoteAddress || '127.0.0.1';
+};
+
+/**
+ * Stakeholder Portal OTP Send Guard (ISS-020):
+ * Max 5 OTP generation requests per 15 minutes per IP.
+ */
+export const portalOtpSendLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { trustProxy: false, xForwardedForHeader: false },
+  keyGenerator: getClientIpKey,
+  message: {
+    error: 'Too many OTP requests from this network. Please wait 15 minutes before trying again.',
+  },
+});
+
+/**
+ * Stakeholder Portal OTP Verification Guard (ISS-020):
+ * Max 5 verification attempts per 1 minute per IP.
+ */
+export const portalOtpVerifyLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { trustProxy: false, xForwardedForHeader: false },
+  keyGenerator: getClientIpKey,
+  message: {
+    error: 'Too many OTP verification attempts. Please wait 1 minute before trying again.',
+  },
+});
+
+/**
+ * Public Consignment Tracking Guard (ISS-005, ISS-020):
+ * Max 30 tracking requests per minute per IP to defend against automated scraping.
+ */
+export const publicTrackingLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { trustProxy: false, xForwardedForHeader: false },
+  keyGenerator: getClientIpKey,
+  message: {
+    error: 'Too many tracking requests from this network. Please wait a moment before trying again.',
+  },
+});
+

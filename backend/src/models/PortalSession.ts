@@ -21,6 +21,8 @@ export interface IPortalSession extends Document {
   otp_hash?: string;            // bcrypt hash of 6-digit OTP
   otp_expires_at?: Date;
   otp_attempts: number;
+  last_otp_sent_at?: Date;
+  lockout_until?: Date;
   is_verified: boolean;
   jwt_token?: string;
   expires_at: Date;
@@ -37,6 +39,8 @@ const PortalSessionSchema = new Schema<IPortalSession>(
     otp_hash: { type: String },
     otp_expires_at: { type: Date },
     otp_attempts: { type: Number, default: 0 },
+    last_otp_sent_at: { type: Date },
+    lockout_until: { type: Date },
     is_verified: { type: Boolean, default: false },
     jwt_token: { type: String },
     expires_at: { type: Date, required: true },
@@ -47,6 +51,6 @@ const PortalSessionSchema = new Schema<IPortalSession>(
 
 // TTL index: auto-expire sessions
 PortalSessionSchema.index({ expires_at: 1 }, { expireAfterSeconds: 0 });
-PortalSessionSchema.index({ entity_id: 1, portal_type: 1 });
+PortalSessionSchema.index({ entity_id: 1, portal_type: 1, company_id: 1 }, { unique: true });
 
 export const PortalSession = mongoose.model<IPortalSession>('PortalSession', PortalSessionSchema);

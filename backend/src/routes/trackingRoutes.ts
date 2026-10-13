@@ -8,6 +8,7 @@
 
 import { Router } from 'express';
 import { requireAuth, resolveTenantContext } from '../middleware/authMiddleware.js';
+import { publicTrackingLimiter } from '../middleware/securityMiddleware.js';
 import {
   ingestGpsPing,
   getLiveTruckLocation,
@@ -18,8 +19,9 @@ import {
 
 const router = Router();
 
-// Public tracking — no auth required
-router.get('/:lrNumber', publicTrackConsignment);
+// Public tracking — no auth required, rate-limited against scraping (ISS-005, ISS-020)
+router.get('/', publicTrackingLimiter, publicTrackConsignment);
+router.get('/:lrNumber', publicTrackingLimiter, publicTrackConsignment);
 
 // Authenticated telematics routes
 router.post('/ping', requireAuth, resolveTenantContext, ingestGpsPing);

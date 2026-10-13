@@ -25,7 +25,7 @@
 import mongoose, { Document, Schema, Types } from 'mongoose';
 import { tenantPlugin } from '../plugins/tenantPlugin.js';
 
-export type TruckStatus = 'available' | 'on_trip' | 'in_maintenance' | 'decommissioned';
+export type TruckStatus = 'available' | 'on_trip' | 'in_maintenance' | 'decommissioned' | 'active';
 export type BodyType = 'Open' | 'Container' | 'Trailer' | 'Tanker' | 'Flatbed' | 'Tipper';
 export type ComplianceStatus = 'COMPLIANT' | 'EXPIRING_SOON' | 'EXPIRED';
 
@@ -159,7 +159,7 @@ const TruckSchema = new Schema<ITruck>(
 
     status: {
       type: String,
-      enum: ['available', 'on_trip', 'in_maintenance', 'decommissioned'],
+      enum: ['available', 'on_trip', 'in_maintenance', 'decommissioned', 'active'],
       default: 'available',
     },
     is_deleted: { type: Boolean, default: false, index: true },

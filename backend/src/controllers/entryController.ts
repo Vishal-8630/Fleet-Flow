@@ -10,6 +10,7 @@
 
 import { Request, Response } from 'express';
 import { Types } from 'mongoose';
+import crypto from 'crypto';
 import { Entry } from '../models/Entry.js';
 import { Company } from '../models/Company.js';
 import { notifyLRGenerated } from '../utils/notificationService.js';
@@ -183,7 +184,23 @@ export const createEntry = async (req: Request, res: Response) => {
       status: 'active',
     });
 
-    await newEntry.save();
+    const maxRetries = 3;
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        await newEntry.save();
+        break;
+      } catch (saveErr: any) {
+        if (
+          saveErr.code === 11000 &&
+          (saveErr.keyPattern?.tracking_token || saveErr.message?.includes('tracking_token')) &&
+          attempt < maxRetries - 1
+        ) {
+          newEntry.tracking_token = `trk_${crypto.randomBytes(16).toString('hex')}`;
+          continue;
+        }
+        throw saveErr;
+      }
+    }
 
     if (company) {
       notifyLRGenerated(newEntry, company).catch((err) =>

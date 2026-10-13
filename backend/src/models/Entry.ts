@@ -21,6 +21,7 @@
  * ============================================================================
  */
 
+import crypto from 'crypto';
 import mongoose, { Document, Schema, Types } from 'mongoose';
 import { tenantPlugin } from '../plugins/tenantPlugin.js';
 
@@ -37,6 +38,7 @@ export interface ILREntity {
 
 export interface IEntry extends Document {
   company_id: Types.ObjectId;
+  tracking_token?: string;
   bill_no: string;
   bill_date: Date;
   lr_no: string;
@@ -99,6 +101,11 @@ const EntrySchema = new Schema<IEntry>(
       ref: 'Company',
       required: true,
       index: true,
+    },
+    tracking_token: {
+      type: String,
+      trim: true,
+      default: () => `trk_${crypto.randomBytes(16).toString('hex')}`,
     },
     bill_no: {
       type: String,
@@ -268,6 +275,7 @@ const EntrySchema = new Schema<IEntry>(
 
 // Compound unique indexes per tenant company
 EntrySchema.index({ company_id: 1, lr_no: 1 }, { unique: true });
+EntrySchema.index({ tracking_token: 1 }, { unique: true, sparse: true });
 EntrySchema.index({ company_id: 1, bill_no: 1 });
 EntrySchema.index({ company_id: 1, lr_date: -1 });
 EntrySchema.index({ company_id: 1, status: 1, lr_date: -1 });

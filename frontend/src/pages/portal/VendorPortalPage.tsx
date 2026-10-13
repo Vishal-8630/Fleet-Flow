@@ -39,31 +39,13 @@ export const VendorPortalPage: React.FC = () => {
     }
 
     try {
-      // Fetch balance party profile and entries
-      setTrips([
-        {
-          _id: '1',
-          vehicle_number: 'MH12RN4590',
-          trip_date: new Date(Date.now() - 3 * 86400000).toISOString(),
-          from_city: 'Mumbai',
-          to_city: 'Ahmedabad',
-          freight_amount: 42000,
-          advance_received: 30000,
-          balance_payable: 12000,
-          status: 'completed',
-        },
-        {
-          _id: '2',
-          vehicle_number: 'MH04AB8921',
-          trip_date: new Date(Date.now() - 1 * 86400000).toISOString(),
-          from_city: 'Pune',
-          to_city: 'Surat',
-          freight_amount: 35000,
-          advance_received: 25000,
-          balance_payable: 10000,
-          status: 'in_transit',
-        },
-      ]);
+      const res = await api.get('/portal/vendor/dashboard', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setTrips(res.data.trips || []);
+      if (res.data.vendor_name || res.data.vendor?.party_name) {
+        setVendorName(res.data.vendor_name || res.data.vendor?.party_name);
+      }
     } catch {
       toast.error('Session expired. Please log in again.');
       localStorage.removeItem('portal_token');

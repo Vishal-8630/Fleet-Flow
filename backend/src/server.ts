@@ -60,6 +60,7 @@ import { noSqlSanitizer } from './middleware/securityMiddleware.js';
 import { assertReplicaSetTopology } from './utils/transactionHelper.js';
 
 const app = express();
+app.set('trust proxy', 1); // Trust single reverse proxy (ALB / Nginx / Cloudflare)
 const PORT = process.env.PORT || 5000;
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/transport_saas';
 

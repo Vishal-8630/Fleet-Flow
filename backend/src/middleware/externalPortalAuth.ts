@@ -10,6 +10,7 @@
 
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import { tenantStorage } from '../plugins/tenantPlugin.js';
 
 export interface PortalTokenPayload {
   portalType: 'customer' | 'driver' | 'vendor';
@@ -52,7 +53,9 @@ export function externalPortalAuth(
       return;
     }
     req.portalUser = payload;
-    next();
+    tenantStorage.run({ companyId: payload.companyId }, () => {
+      next();
+    });
   } catch {
     res.status(401).json({ error: 'Portal session expired or invalid.', code: 'PORTAL_TOKEN_EXPIRED' });
   }
