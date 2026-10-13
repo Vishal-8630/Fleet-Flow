@@ -22,6 +22,7 @@
 import { Request, Response } from 'express';
 import { BillingParty, IBillingParty } from '../models/BillingParty.js';
 import { BalanceParty, IBalanceParty, BalancePartyType } from '../models/BalanceParty.js';
+import { validateGSTIN, validatePAN } from '../utils/gstinValidator.js';
 
 // ============================================================================
 // PART A: BILLING PARTIES (CUSTOMERS / SHIPPERS / CONSIGNEES)
@@ -139,7 +140,22 @@ export async function createBillingParty(req: Request, res: Response): Promise<v
     }
 
     const cleanGstin = gstin ? gstin.toUpperCase().trim() : undefined;
+    if (cleanGstin) {
+      const gstinValidation = validateGSTIN(cleanGstin);
+      if (!gstinValidation.isValid) {
+        res.status(400).json({ error: gstinValidation.error });
+        return;
+      }
+    }
+
     const cleanPan = pan_number ? pan_number.toUpperCase().trim() : undefined;
+    if (cleanPan) {
+      const panValidation = validatePAN(cleanPan);
+      if (!panValidation.isValid) {
+        res.status(400).json({ error: panValidation.error });
+        return;
+      }
+    }
 
     const party = await BillingParty.create({
       name: name.trim(),
@@ -195,8 +211,32 @@ export async function updateBillingParty(req: Request, res: Response): Promise<v
 
     if (name) party.name = name.trim();
     if (trade_name !== undefined) party.trade_name = trade_name?.trim();
-    if (gstin !== undefined) party.gstin = gstin ? gstin.toUpperCase().trim() : undefined;
-    if (pan_number !== undefined) party.pan_number = pan_number ? pan_number.toUpperCase().trim() : undefined;
+    if (gstin !== undefined) {
+      if (gstin && gstin.trim()) {
+        const cleanGstin = gstin.toUpperCase().trim();
+        const gstinValidation = validateGSTIN(cleanGstin);
+        if (!gstinValidation.isValid) {
+          res.status(400).json({ error: gstinValidation.error });
+          return;
+        }
+        party.gstin = cleanGstin;
+      } else {
+        party.gstin = undefined;
+      }
+    }
+    if (pan_number !== undefined) {
+      if (pan_number && pan_number.trim()) {
+        const cleanPan = pan_number.toUpperCase().trim();
+        const panValidation = validatePAN(cleanPan);
+        if (!panValidation.isValid) {
+          res.status(400).json({ error: panValidation.error });
+          return;
+        }
+        party.pan_number = cleanPan;
+      } else {
+        party.pan_number = undefined;
+      }
+    }
     if (contact_person !== undefined) party.contact_person = contact_person?.trim();
     if (email !== undefined) party.email = email?.toLowerCase().trim();
     if (phone !== undefined) party.phone = phone?.trim();
@@ -366,13 +406,22 @@ export async function createBalanceParty(req: Request, res: Response): Promise<v
       return;
     }
 
+    const cleanPan = pan_number ? pan_number.toUpperCase().trim() : undefined;
+    if (cleanPan) {
+      const panValidation = validatePAN(cleanPan);
+      if (!panValidation.isValid) {
+        res.status(400).json({ error: panValidation.error });
+        return;
+      }
+    }
+
     const party = await BalanceParty.create({
       party_name: party_name.trim(),
       party_type: party_type || 'supplier',
       contact_person: contact_person?.trim(),
       phone: phone.trim(),
       email: email?.toLowerCase().trim(),
-      pan_number: pan_number ? pan_number.toUpperCase().trim() : undefined,
+      pan_number: cleanPan,
       bank_details: bank_details || {},
       opening_balance: Number(opening_balance) || 0,
       current_balance: Number(opening_balance) || 0,
@@ -419,7 +468,19 @@ export async function updateBalanceParty(req: Request, res: Response): Promise<v
     if (contact_person !== undefined) party.contact_person = contact_person?.trim();
     if (phone) party.phone = phone.trim();
     if (email !== undefined) party.email = email?.toLowerCase().trim();
-    if (pan_number !== undefined) party.pan_number = pan_number ? pan_number.toUpperCase().trim() : undefined;
+    if (pan_number !== undefined) {
+      if (pan_number && pan_number.trim()) {
+        const cleanPan = pan_number.toUpperCase().trim();
+        const panValidation = validatePAN(cleanPan);
+        if (!panValidation.isValid) {
+          res.status(400).json({ error: panValidation.error });
+          return;
+        }
+        party.pan_number = cleanPan;
+      } else {
+        party.pan_number = undefined;
+      }
+    }
     if (bank_details) party.bank_details = bank_details;
     if (status) party.status = status;
 

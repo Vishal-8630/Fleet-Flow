@@ -371,3 +371,79 @@ export async function postInvoicePaymentJournal(params: {
     is_auto_generated: true,
   });
 }
+
+/**
+ * Posts paired double-entry journal for a sales return / credit note adjustment.
+ * Leg 1 (Debit): 'other_adjustment' (Sales Return / Allowance)
+ * Leg 2 (Credit): 'payment_received' (Receivable reduction for billing party)
+ */
+export async function postCreditNoteJournal(params: {
+  company_id: Types.ObjectId | string;
+  session: ClientSession;
+  credit_note_id: Types.ObjectId | string;
+  credit_note_no: string;
+  invoice_id: Types.ObjectId | string;
+  invoice_number: string;
+  billing_party_id: Types.ObjectId | string;
+  party_name: string;
+  credit_amount: number;
+  created_by?: any;
+}): Promise<{ journal_id: string; entries: ILedger[] }> {
+  const {
+    company_id,
+    session,
+    credit_note_id,
+    credit_note_no,
+    invoice_id,
+    invoice_number,
+    billing_party_id,
+    party_name,
+    credit_amount,
+    created_by,
+  } = params;
+
+  const validAmount = roundMoney(Number(credit_amount) || 0);
+  if (validAmount <= 0) {
+    throw new Error('Credit note adjustment amount must be greater than zero.');
+  }
+
+  const legs: IJournalLeg[] = [
+    {
+      category: 'other_adjustment',
+      balance_type: 'debit',
+      amount: validAmount,
+      payment_mode: 'system',
+      party_name,
+      reference_number: credit_note_no,
+      description: `Sales allowance / credit adjustment ${credit_note_no} against Invoice ${invoice_number}`,
+      invoice_id,
+      billing_party_id,
+    },
+    {
+      category: 'payment_received',
+      balance_type: 'credit',
+      amount: validAmount,
+      payment_mode: 'system',
+      party_name,
+      reference_number: credit_note_no,
+      description: `Receivable reduction via Credit Note ${credit_note_no} on Invoice ${invoice_number}`,
+      invoice_id,
+      billing_party_id,
+    },
+  ];
+
+  return postDoubleEntryJournal({
+    company_id,
+    session,
+    transaction_type: 'invoice_payment',
+    description: `Credit note ${credit_note_no} for Invoice ${invoice_number} (${party_name}) - ₹${validAmount}`,
+    reference_number: credit_note_no,
+    party_name,
+    legs,
+    invoice_id,
+    billing_party_id,
+    created_by,
+    is_auto_generated: true,
+  });
+}
+

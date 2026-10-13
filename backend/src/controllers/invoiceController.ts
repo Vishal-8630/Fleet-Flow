@@ -365,8 +365,15 @@ export const recordInvoicePayment = async (req: Request, res: Response) => {
       }
 
       const totalSettledInStep = roundMoney(paymentVal + tdsVal);
+      if (totalSettledInStep > existing.balance_amount) {
+        const err: any = new Error(
+          `Payment amount (₹${totalSettledInStep}) exceeds remaining invoice balance (₹${existing.balance_amount}).`
+        );
+        err.statusCode = 400;
+        throw err;
+      }
       existing.paid_amount = roundMoney(existing.paid_amount + totalSettledInStep);
-      existing.balance_amount = Math.max(0, roundMoney(existing.total_amount - existing.paid_amount));
+      existing.balance_amount = Math.max(0, roundMoney(existing.total_amount - existing.paid_amount - (existing.credited_amount || 0)));
       existing.status = existing.balance_amount <= 0 ? 'paid' : 'partially_paid';
 
       existing.payment_history.push({

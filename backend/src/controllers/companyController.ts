@@ -30,6 +30,7 @@ import mongoose from 'mongoose';
 import { Company } from '../models/Company.js';
 import { CompanyMember } from '../models/CompanyMember.js';
 import { User } from '../models/User.js';
+import { validateGSTIN } from '../utils/gstinValidator.js';
 
 /**
  * Returns the JWT signing secret dynamically from process.env to guarantee
@@ -95,7 +96,19 @@ export const updateCompanyProfile = async (req: Request, res: Response): Promise
     if (name && name.trim()) company.name = name.trim();
     if (phone && phone.trim()) company.phone = phone.trim();
     if (email && email.trim()) company.email = email.toLowerCase().trim();
-    if (gstin !== undefined) company.gstin = gstin && gstin.trim() ? gstin.toUpperCase().trim() : undefined;
+    if (gstin !== undefined) {
+      if (gstin && gstin.trim()) {
+        const cleanGstin = gstin.toUpperCase().trim();
+        const gstinVal = validateGSTIN(cleanGstin);
+        if (!gstinVal.isValid) {
+          res.status(400).json({ error: gstinVal.error });
+          return;
+        }
+        company.gstin = cleanGstin;
+      } else {
+        company.gstin = undefined;
+      }
+    }
 
     if (address) {
       company.address = {

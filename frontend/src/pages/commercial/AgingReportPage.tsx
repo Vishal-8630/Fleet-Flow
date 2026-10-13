@@ -18,7 +18,7 @@ interface AgingBucket {
   items: Array<{
     invoice_id: string;
     invoice_no: string;
-    party: { party_name: string };
+    party: string | { party_name?: string; name?: string };
     invoice_date: string;
     outstanding_paise: number;
     age_days: number;
@@ -230,7 +230,11 @@ export const AgingReportPage: React.FC = () => {
                     data.aging[activeTab].items.map((item) => (
                       <tr key={item.invoice_id} style={{ borderTop: '1px solid var(--border-subtle)' }}>
                         <td style={{ padding: '0.75rem 1rem', fontWeight: 600, fontSize: 'var(--font-size-sm)' }}>{item.invoice_no}</td>
-                        <td style={{ padding: '0.75rem 1rem', fontSize: 'var(--font-size-sm)' }}>{item.party?.party_name || '—'}</td>
+                        <td style={{ padding: '0.75rem 1rem', fontSize: 'var(--font-size-sm)' }}>
+                          {typeof item.party === 'object' && item.party !== null
+                            ? (item.party.party_name || item.party.name || '—')
+                            : (item.party || '—')}
+                        </td>
                         <td style={{ padding: '0.75rem 1rem', fontSize: 'var(--font-size-sm)', color: 'var(--text-muted)' }}>
                           {new Date(item.invoice_date).toLocaleDateString('en-IN')}
                         </td>

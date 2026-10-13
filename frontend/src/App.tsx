@@ -60,6 +60,7 @@ import { MaintenanceDashboardPage } from './pages/fleet/MaintenanceDashboardPage
 import { TyreManagementPage } from './pages/fleet/TyreManagementPage';
 import { LiveFleetMapPage } from './pages/operations/LiveFleetMapPage';
 import { AgingReportPage } from './pages/commercial/AgingReportPage';
+import { CreditNotesPage } from './pages/commercial/CreditNotesPage';
 import { ApprovalWorkflowPage } from './pages/settings/ApprovalWorkflowPage';
 import { BranchManagementPage } from './pages/settings/BranchManagementPage';
 import { SupportTicketsPage } from './pages/support/SupportTicketsPage';
@@ -234,6 +235,8 @@ export const App: React.FC = () => {
           <Route path="commercial/entries" element={<LRListPage />} />
           <Route path="invoices" element={<InvoiceListPage />} />
           <Route path="commercial/invoices" element={<InvoiceListPage />} />
+          <Route path="commercial/credit-notes" element={<CreditNotesPage />} />
+          <Route path="credit-notes" element={<Navigate to="/commercial/credit-notes" replace />} />
           <Route path="commercial/aging" element={<AgingReportPage />} />
           <Route path="financials/aging" element={<Navigate to="/commercial/aging" replace />} />
           <Route path="settlements" element={<SettlementListPage />} />

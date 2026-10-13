@@ -27,6 +27,9 @@ import {
   wrapInTallyEnvelope,
   TallyInvoiceData,
 } from '../utils/tallyExportService.js';
+import { roundMoney } from '../utils/settlementCalculator.js';
+import { postCreditNoteJournal } from '../utils/ledgerService.js';
+import { runInTransaction, ConfigurationError } from '../utils/transactionHelper.js';
 
 /**
  * GET /api/commercial/aging
@@ -61,10 +64,12 @@ export async function getArAgingReport(req: Request, res: Response): Promise<voi
       const invoiceDate = new Date(inv.invoice_date || inv.created_at);
       const ageDays = Math.floor((now.getTime() - invoiceDate.getTime()) / (1000 * 60 * 60 * 24));
 
+      const partyName = inv.billing_party_snapshot?.name || (inv.billing_party_id as any)?.party_name || (inv.billing_party_id as any)?.name || 'Customer';
       const summary = {
         invoice_id: inv._id,
         invoice_no: inv.invoice_number,
-        party: inv.billing_party_snapshot?.name || (inv.billing_party_id as any)?.party_name || 'Customer',
+        party: { party_name: partyName, name: partyName },
+        customer_name: partyName,
         invoice_date: inv.invoice_date || inv.created_at,
         outstanding_paise: outstanding,
         age_days: ageDays,
@@ -113,39 +118,53 @@ export async function getTripProfitabilityReport(req: Request, res: Response): P
     if (from) dateFilter.$gte = new Date(from as string);
     if (to) dateFilter.$lte = new Date(to as string);
 
-    const journeyQuery: any = { company_id: companyId };
+    const journeyQuery: any = { company_id: companyId, is_deleted: false };
     if (Object.keys(dateFilter).length > 0) {
-      journeyQuery.dispatch_date = dateFilter;
+      journeyQuery.start_date = dateFilter;
     }
 
     const journeys = await TruckJourney.find(journeyQuery)
-      .sort({ dispatch_date: -1 })
+      .sort({ start_date: -1 })
       .limit(Number(limit))
-      .populate('truck_id', 'registration_number')
+      .populate('truck_id', 'registration_number truck_no')
       .populate('driver_id', 'name')
       .lean();
 
     const profitReport = journeys.map((j) => {
-      const revenue_paise = (j as any).total_freight_paise || 0;
-      const expenses_paise =
-        ((j as any).diesel_expense_paise || 0) +
-        ((j as any).toll_expense_paise || 0) +
-        ((j as any).driver_allowance_paise || 0) +
-        ((j as any).other_expense_paise || 0);
+      const freightRupees = Number((j as any).freight_rate) || 0;
+      const dieselRupees = Number((j as any).total_diesel_cost) || 0;
+      const driverRupees = Number((j as any).total_driver_expenses) || 0;
+
+      const revenue_paise = Math.round(freightRupees * 100);
+      const diesel_expense_paise = Math.round(dieselRupees * 100);
+      const driver_expense_paise = Math.round(driverRupees * 100);
+      const expenses_paise = diesel_expense_paise + driver_expense_paise;
 
       const net_margin_paise = revenue_paise - expenses_paise;
       const margin_percent =
         revenue_paise > 0 ? ((net_margin_paise / revenue_paise) * 100).toFixed(2) : '0.00';
 
+      const fromLocation =
+        typeof j.from_location === 'object' && j.from_location !== null
+          ? ((j.from_location as any).city || (j.from_location as any).hub_name || 'Origin')
+          : (j.from_location || 'Origin');
+      const toLocation =
+        typeof j.to_location === 'object' && j.to_location !== null
+          ? ((j.to_location as any).city || (j.to_location as any).hub_name || 'Destination')
+          : (j.to_location || 'Destination');
+
       return {
         journey_id: j._id,
-        from: j.from_location,
-        to: j.to_location,
-        truck: (j.truck_id as any)?.truck_no,
-        driver: (j.driver_id as any)?.name,
-        dispatch_date: j.start_date,
+        journey_number: (j as any).journey_number,
+        from: fromLocation,
+        to: toLocation,
+        truck: (j.truck_id as any)?.registration_number || (j.truck_id as any)?.truck_no || 'Vehicle',
+        driver: (j.driver_id as any)?.name || 'Driver',
+        dispatch_date: (j as any).start_date || (j as any).createdAt,
         status: j.status,
         revenue_paise,
+        diesel_expense_paise,
+        driver_expense_paise,
         expenses_paise,
         net_margin_paise,
         margin_percent: parseFloat(margin_percent),
@@ -235,7 +254,7 @@ export async function createCreditNote(req: Request, res: Response): Promise<voi
     const user = (req as any).user;
     const {
       original_invoice_id,
-      type,
+      type = 'credit_note',
       reason,
       reason_description,
       adjustment_amount_paise,
@@ -243,66 +262,134 @@ export async function createCreditNote(req: Request, res: Response): Promise<voi
       gst_rate_percent = 5,
     } = req.body;
 
-    if (!original_invoice_id || !type || !reason || !adjustment_amount_paise) {
-      res.status(400).json({ error: 'original_invoice_id, type, reason, and adjustment_amount_paise are required.' });
+    if (!original_invoice_id || !reason || !adjustment_amount_paise) {
+      res.status(400).json({ error: 'original_invoice_id, reason, and adjustment_amount_paise are required.' });
       return;
     }
 
-    const invoice = await Invoice.findOne({ _id: original_invoice_id, company_id: companyId });
-    if (!invoice) {
-      res.status(404).json({ error: 'Invoice not found.' });
-      return;
-    }
+    const result = await runInTransaction(
+      async (session) => {
+        const invoice = await Invoice.findOne({
+          _id: original_invoice_id,
+          company_id: companyId,
+          is_deleted: false,
+        }).session(session);
 
-    // Calculate GST on adjustment
-    let cgst_paise = 0;
-    let sgst_paise = 0;
-    let igst_paise = 0;
-    const gstAmount = Math.round(adjustment_amount_paise * (gst_rate_percent / 100));
+        if (!invoice) {
+          const err: any = new Error('Invoice not found.');
+          err.statusCode = 404;
+          throw err;
+        }
 
-    if (is_interstate) {
-      igst_paise = gstAmount;
-    } else {
-      cgst_paise = Math.round(gstAmount / 2);
-      sgst_paise = gstAmount - cgst_paise;
-    }
+        if (invoice.status === 'paid' && invoice.balance_amount <= 0) {
+          const err: any = new Error('Invoice has already been settled in full.');
+          err.statusCode = 400;
+          throw err;
+        }
 
-    const total_adjustment_paise = adjustment_amount_paise + cgst_paise + sgst_paise + igst_paise;
+        // Calculate GST on adjustment
+        let cgst_paise = 0;
+        let sgst_paise = 0;
+        let igst_paise = 0;
+        const gstAmount = Math.round(Number(adjustment_amount_paise) * (Number(gst_rate_percent) / 100));
 
-    // Generate sequential credit note number
-    const count = await CreditNote.countDocuments({ company_id: companyId });
-    const year = new Date().getFullYear();
-    const credit_note_no = `CN-${year}-${String(count + 1).padStart(4, '0')}`;
+        if (is_interstate) {
+          igst_paise = gstAmount;
+        } else {
+          cgst_paise = Math.round(gstAmount / 2);
+          sgst_paise = gstAmount - cgst_paise;
+        }
 
-    const creditNote = await CreditNote.create({
-      company_id: companyId,
-      credit_note_no,
-      original_invoice_id,
-      party_id: invoice.billing_party_id,
-      type,
-      reason,
-      reason_description,
-      adjustment_amount_paise,
-      cgst_paise,
-      sgst_paise,
-      igst_paise,
-      total_adjustment_paise,
-      is_interstate,
-      gst_rate_percent,
-      status: 'issued',
-      issued_at: new Date(),
-      created_by: user._id,
-    });
+        const total_adjustment_paise = Number(adjustment_amount_paise) + cgst_paise + sgst_paise + igst_paise;
+        const creditAdjustmentRupees = roundMoney(total_adjustment_paise / 100);
 
-    // Reduce the invoice's outstanding balance
-    await Invoice.updateOne(
-      { _id: original_invoice_id },
-      { $inc: { amount_paid_paise: total_adjustment_paise } }
+        if (creditAdjustmentRupees <= 0) {
+          const err: any = new Error('Credit note adjustment amount must be greater than zero.');
+          err.statusCode = 400;
+          throw err;
+        }
+
+        if (creditAdjustmentRupees > invoice.balance_amount) {
+          const err: any = new Error(
+            `Credit note adjustment (₹${creditAdjustmentRupees}) exceeds eligible invoice balance (₹${invoice.balance_amount}).`
+          );
+          err.statusCode = 400;
+          throw err;
+        }
+
+        // Generate sequential credit note number
+        const count = await CreditNote.countDocuments({ company_id: companyId }).session(session);
+        const year = new Date().getFullYear();
+        const credit_note_no = `CN-${year}-${String(count + 1).padStart(4, '0')}`;
+
+        const [creditNote] = await CreditNote.create(
+          [
+            {
+              company_id: companyId,
+              credit_note_no,
+              original_invoice_id: invoice._id,
+              party_id: invoice.billing_party_id,
+              type,
+              reason,
+              reason_description,
+              adjustment_amount_paise: Number(adjustment_amount_paise),
+              cgst_paise,
+              sgst_paise,
+              igst_paise,
+              total_adjustment_paise,
+              is_interstate: Boolean(is_interstate),
+              gst_rate_percent: Number(gst_rate_percent),
+              status: 'issued',
+              issued_at: new Date(),
+              created_by: user?._id || user?.id,
+            },
+          ],
+          { session }
+        );
+
+        // Update invoice credited_amount and balance_amount (do NOT touch paid_amount)
+        invoice.credited_amount = roundMoney((invoice.credited_amount || 0) + creditAdjustmentRupees);
+        invoice.balance_amount = Math.max(
+          0,
+          roundMoney(invoice.total_amount - (invoice.paid_amount || 0) - invoice.credited_amount)
+        );
+        invoice.status = invoice.balance_amount <= 0 ? 'paid' : 'partially_paid';
+        await invoice.save({ session });
+
+        // Post balanced double-entry journal to General Ledger
+        await postCreditNoteJournal({
+          company_id: companyId!,
+          session,
+          credit_note_id: creditNote._id as any,
+          credit_note_no,
+          invoice_id: invoice._id as any,
+          invoice_number: invoice.invoice_number,
+          billing_party_id: invoice.billing_party_id as any,
+          party_name: invoice.billing_party_snapshot?.name || 'Customer',
+          credit_amount: creditAdjustmentRupees,
+          created_by: user?._id || user?.id,
+        });
+
+        return {
+          success: true,
+          credit_note: creditNote,
+          invoice,
+        };
+      },
+      { statusCode: 201 }
     );
 
-    res.status(201).json({ success: true, credit_note: creditNote });
+    res.status(201).json(result);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    if (err instanceof ConfigurationError) {
+      res.status(500).json({ error: err.message, code: 'CONFIGURATION_ERROR' });
+      return;
+    }
+    if (err.statusCode) {
+      res.status(err.statusCode).json({ error: err.message });
+      return;
+    }
+    res.status(500).json({ error: err.message || 'Failed to create credit note.' });
   }
 }
 

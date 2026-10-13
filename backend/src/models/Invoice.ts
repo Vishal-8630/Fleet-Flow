@@ -99,6 +99,7 @@ export interface IInvoice extends Document {
   total_amount: number;
 
   paid_amount: number;
+  credited_amount: number;
   balance_amount: number;
   status: InvoiceStatus;
 
@@ -231,6 +232,7 @@ const InvoiceSchema = new Schema<IInvoice>(
     total_amount: { type: Number, required: true, min: 0 },
 
     paid_amount: { type: Number, default: 0, min: 0 },
+    credited_amount: { type: Number, default: 0, min: 0 },
     balance_amount: { type: Number, required: true },
     status: {
       type: String,
