@@ -82,7 +82,7 @@ export const getDashboardSummary = async (req: Request, res: Response) => {
               $sum: { $cond: [{ $eq: ['$status', 'on_trip'] }, 1, 0] },
             },
             maintenance_trucks: {
-              $sum: { $cond: [{ $eq: ['$status', 'maintenance'] }, 1, 0] },
+              $sum: { $cond: [{ $eq: ['$status', 'in_maintenance'] }, 1, 0] },
             },
           },
         },
@@ -212,6 +212,7 @@ export const getDashboardSummary = async (req: Request, res: Response) => {
         total_trucks: trucks.total_trucks,
         available_trucks: trucks.available_trucks,
         on_trip_trucks: trucks.on_trip_trucks,
+        maintenance_trucks: trucks.maintenance_trucks,
         fleet_availability_ratio: trucks.total_trucks > 0 ? Math.round((trucks.available_trucks / trucks.total_trucks) * 100) : 0,
         unbilled_lrs: entries.unbilled_lrs,
         unbilled_freight_value: entries.unbilled_freight_value,

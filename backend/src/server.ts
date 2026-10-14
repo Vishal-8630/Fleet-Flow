@@ -131,6 +131,7 @@ app.get('/health', (_req, res) => {
 
 // Detailed health probes (liveness + readiness)
 app.use('/health', healthRoutes);
+app.use('/api/health', healthRoutes);
 
 // ----------------------------------------------------------------------------
 // 3. API Route Mounts

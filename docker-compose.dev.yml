@@ -5,6 +5,11 @@
 # Single-node MongoDB replica set (`rs0`) for local development only.
 # Staging and production deployments require a distributed multi-node Replica Set
 # or managed MongoDB Atlas cluster.
+#
+# Features:
+# - Live volume mounting for hot-reloading (backend tsx watch & frontend Vite HMR)
+# - Isolated anonymous volumes for container node_modules
+# - Single-node replica set for ACID transaction support
 # ==============================================================================
 
 version: '3.8'
@@ -31,7 +36,7 @@ services:
             try {
               const res = rs.initiate({
                 _id: "rs0",
-                members: [{ _id: 0, host: "localhost:27017" }]
+                members: [{ _id: 0, host: "mongo:27017" }]
               });
               if (res.ok === 1) quit(0);
               quit(1);
@@ -44,6 +49,58 @@ services:
       timeout: 10s
       retries: 5
       start_period: 5s
+
+  redis:
+    image: redis:7-alpine
+    container_name: fleetflow-redis-dev
+    command: redis-server --save "" --appendonly no
+    ports:
+      - '6379:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 3
+      start_period: 3s
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: builder
+    container_name: fleetflow-backend-dev
+    command: npm run dev
+    ports:
+      - '5000:5000'
+    environment:
+      - PORT=5000
+      - NODE_ENV=development
+      - MONGODB_URI=mongodb://mongo:27017/transport_saas_dev?replicaSet=rs0
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=dev_jwt_secret_key_fleetflow
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    image: node:22-alpine
+    container_name: fleetflow-frontend-dev
+    working_dir: /app
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    ports:
+      - '5173:5173'
+    environment:
+      - VITE_API_URL=http://localhost:5000
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
 
 volumes:
   mongo_data_dev:
