@@ -21,7 +21,7 @@ import { Company } from '../models/Company.js';
 import { CompanyMember } from '../models/CompanyMember.js';
 import { seedBillingCatalog } from '../utils/billingSeedService.js';
 
-const MONGODB_URI = process.env.MONGODB_URI;
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/transport_saas';
 
 if (!MONGODB_URI) {
   console.error('❌ MONGODB_URI environment variable is missing.');
