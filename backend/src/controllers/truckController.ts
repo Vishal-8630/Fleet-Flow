@@ -23,6 +23,7 @@ import { Request, Response } from 'express';
 import { Truck, ITruck, ComplianceStatus } from '../models/Truck.js';
 import { Driver } from '../models/Driver.js';
 import { validateCustomFieldsPayload } from '../utils/customFieldValidator.js';
+import { getTenantEntitlements } from '../utils/entitlementService.js';
 
 /**
  * 1. listTrucks
@@ -190,6 +191,23 @@ export async function createTruck(req: Request, res: Response): Promise<void> {
     // Validate dynamic custom fields if configured for this workspace
     let customFieldsData = req.body.custom_fields || {};
     if (req.company) {
+      // In-controller truck quota enforcement against concurrent bypass
+      const entitlements = await getTenantEntitlements(req.company);
+      const limit = entitlements.limits.max_trucks;
+      if (limit !== -1) {
+        const currentCount = await Truck.countDocuments({ company_id: req.company._id, is_deleted: false });
+        if (currentCount >= limit) {
+          res.status(403).json({
+            code: 'QUOTA_EXCEEDED',
+            resource: 'trucks',
+            limit,
+            current: currentCount,
+            error: `Truck quota exceeded (${currentCount}/${limit}). Upgrade your plan or purchase a fleet booster to register more vehicles.`,
+          });
+          return;
+        }
+      }
+
       const customValidation = await validateCustomFieldsPayload(req.company._id, 'Truck', customFieldsData);
       if (!customValidation.success) {
         res.status(400).json({ error: customValidation.errors?.[0] || 'Custom field validation failed.' });

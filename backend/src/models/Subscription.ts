@@ -56,6 +56,7 @@ export interface ISubscription extends Document {
     max_trucks?: number;
     max_drivers?: number;
     max_users?: number;
+    max_branches?: number;
     custom_feature_grants?: ModuleKey[];
     custom_feature_revocations?: ModuleKey[];
   };

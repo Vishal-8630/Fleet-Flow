@@ -30,6 +30,7 @@ export interface IPlan extends Document {
   max_trucks: number; // -1 represents unlimited
   max_drivers: number; // -1 represents unlimited
   max_users: number; // -1 represents unlimited
+  max_branches: number; // -1 represents unlimited
   is_active: boolean;
   is_public: boolean;
   created_at: Date;
@@ -53,6 +54,7 @@ const PlanSchema = new Schema<IPlan>(
     max_trucks: { type: Number, required: true, default: 5 },
     max_drivers: { type: Number, required: true, default: 5 },
     max_users: { type: Number, required: true, default: 2 },
+    max_branches: { type: Number, required: true, default: 1 },
     is_active: { type: Boolean, default: true, index: true },
     is_public: { type: Boolean, default: true },
   },

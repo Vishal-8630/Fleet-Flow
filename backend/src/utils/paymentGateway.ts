@@ -33,9 +33,23 @@ export interface CreatedOrder {
  * Returns active Razorpay API key credentials
  */
 export function getGatewayCredentials(): { keyId: string; keySecret: string; webhookSecret: string } {
-  const keyId = process.env.RAZORPAY_KEY_ID || 'rzp_test_placeholder_key';
-  const keySecret = process.env.RAZORPAY_KEY_SECRET || 'dev_secret_fallback_key';
-  const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET || 'dev_webhook_secret_fleetflow';
+  const isProd = process.env.NODE_ENV === 'production';
+  const keyId = process.env.RAZORPAY_KEY_ID || (isProd ? '' : 'rzp_test_placeholder_key');
+  const keySecret = process.env.RAZORPAY_KEY_SECRET || (isProd ? '' : 'dev_secret_fallback_key');
+  const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET || (isProd ? '' : 'dev_webhook_secret_fleetflow');
+
+  if (isProd) {
+    if (!keyId || keyId.includes('placeholder')) {
+      throw new Error('Production payment configuration error: RAZORPAY_KEY_ID is missing or invalid.');
+    }
+    if (!keySecret || keySecret.includes('fallback') || keySecret.includes('placeholder')) {
+      throw new Error('Production payment configuration error: RAZORPAY_KEY_SECRET is missing or invalid.');
+    }
+    if (!webhookSecret || webhookSecret.includes('dev_webhook_secret') || webhookSecret.includes('placeholder')) {
+      throw new Error('Production payment configuration error: RAZORPAY_WEBHOOK_SECRET is missing or invalid.');
+    }
+  }
+
   return { keyId, keySecret, webhookSecret };
 }
 
@@ -43,11 +57,12 @@ export function getGatewayCredentials(): { keyId: string; keySecret: string; web
  * Creates a server-authenticated order via Razorpay Orders API
  */
 export async function createPaymentOrder(options: OrderOptions): Promise<CreatedOrder> {
+  const isProd = process.env.NODE_ENV === 'production';
   const { keyId, keySecret } = getGatewayCredentials();
   const isConfigured = Boolean(
-    process.env.RAZORPAY_KEY_ID &&
-    process.env.RAZORPAY_KEY_SECRET &&
-    !process.env.RAZORPAY_KEY_ID.includes('placeholder')
+    keyId &&
+    keySecret &&
+    !keyId.includes('placeholder')
   );
 
   if (isConfigured) {
@@ -73,11 +88,16 @@ export async function createPaymentOrder(options: OrderOptions): Promise<Created
         is_live: true,
       };
     } catch (err: any) {
-      console.warn('Razorpay API order creation failed, falling back to secure simulated order:', err.message);
+      if (isProd) {
+        throw new Error(`Razorpay order creation failed in production: ${err.message}`);
+      }
+      console.warn('Razorpay API order creation failed, falling back to secure simulated order in non-production:', err.message);
     }
+  } else if (isProd) {
+    throw new Error('Cannot create payment order: Razorpay credentials are missing or unconfigured in production.');
   }
 
-  // Cryptographically secure test/development order identifier
+  // Cryptographically secure test/development order identifier (non-production only)
   const randomSuffix = crypto.randomBytes(6).toString('hex');
   const orderId = `order_${Date.now()}_${randomSuffix}`;
 
@@ -104,7 +124,13 @@ export function verifyPaymentSignature(
     return { valid: false, reason: 'Missing required order_id, payment_id, or signature.' };
   }
 
-  const { keySecret } = getGatewayCredentials();
+  let keySecret = '';
+  try {
+    const creds = getGatewayCredentials();
+    keySecret = creds.keySecret;
+  } catch (err: any) {
+    return { valid: false, reason: err.message || 'Payment gateway credentials invalid.' };
+  }
 
   // Test / simulated bypass only when explicit emulator signature is passed in test environment
   if (
@@ -146,7 +172,18 @@ export function verifyWebhookSignature(
     return false;
   }
 
-  const { webhookSecret } = getGatewayCredentials();
+  let webhookSecret = '';
+  try {
+    const creds = getGatewayCredentials();
+    webhookSecret = creds.webhookSecret;
+  } catch {
+    return false;
+  }
+
+  if (!webhookSecret) {
+    return false;
+  }
+
   const payloadBuffer = typeof rawBody === 'string' ? Buffer.from(rawBody, 'utf8') : rawBody;
 
   const expectedSignature = crypto

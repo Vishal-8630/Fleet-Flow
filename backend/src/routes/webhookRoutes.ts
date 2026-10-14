@@ -9,8 +9,12 @@
 
 import { Router } from 'express';
 import { verifyWhatsAppWebhook, handleWhatsAppWebhook } from '../controllers/webhookController.js';
+import { handleBillingWebhook } from '../controllers/billingController.js';
 
 const router = Router();
+
+// Razorpay billing webhooks
+router.post('/billing', handleBillingWebhook);
 
 // Meta WhatsApp Cloud API webhooks
 router.get('/whatsapp', verifyWhatsAppWebhook);

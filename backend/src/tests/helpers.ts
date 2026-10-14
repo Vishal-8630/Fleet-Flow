@@ -20,6 +20,7 @@ export async function createTestTenant(options?: {
   role?: UserRole;
   subscription_status?: string;
   is_deleted?: boolean;
+  plan_code?: string;
 }): Promise<TestTenantContext> {
   counter += 1;
   const uniqueId = `${Date.now()}-${counter}-${Math.random().toString(36).substring(2, 7)}`;
@@ -48,9 +49,10 @@ export async function createTestTenant(options?: {
     },
   });
 
-  let enterprisePlan = await Plan.findOne({ code: 'enterprise' });
-  if (!enterprisePlan) {
-    enterprisePlan = await Plan.create({
+  const planCode = options?.plan_code || 'enterprise';
+  let targetPlan = await Plan.findOne({ code: planCode });
+  if (!targetPlan && planCode === 'enterprise') {
+    targetPlan = await Plan.create({
       name: 'Enterprise Plan',
       code: 'enterprise',
       description: 'Full enterprise capabilities',
@@ -60,17 +62,20 @@ export async function createTestTenant(options?: {
       max_trucks: -1,
       max_drivers: -1,
       max_users: -1,
+      max_branches: -1,
       is_active: true,
       is_public: true,
     });
   }
 
-  await Subscription.create({
-    company_id: company._id,
-    plan_id: enterprisePlan._id,
-    status: subStatus,
-    billing_cycle: 'monthly',
-  });
+  if (targetPlan) {
+    await Subscription.create({
+      company_id: company._id,
+      plan_id: targetPlan._id,
+      status: subStatus,
+      billing_cycle: 'monthly',
+    });
+  }
 
   const user = await User.create({
     name: `User ${uniqueId}`,

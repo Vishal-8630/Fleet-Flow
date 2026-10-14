@@ -10,6 +10,7 @@
 import { Request, Response } from 'express';
 import { Branch } from '../models/Branch.js';
 import { getTenantId } from '../plugins/tenantPlugin.js';
+import { getTenantEntitlements } from '../utils/entitlementService.js';
 
 export async function listBranches(req: Request, res: Response): Promise<void> {
   try {
@@ -41,6 +42,25 @@ export async function createBranch(req: Request, res: Response): Promise<void> {
     if (!branch_name || !branch_code) {
       res.status(400).json({ error: 'branch_name and branch_code are required.' });
       return;
+    }
+
+    // Server-side quota check to protect against race conditions
+    if (req.company) {
+      const entitlements = await getTenantEntitlements(req.company);
+      const limit = entitlements.limits.max_branches;
+      if (limit !== -1) {
+        const currentCount = await Branch.countDocuments({ company_id: companyId });
+        if (currentCount >= limit) {
+          res.status(403).json({
+            code: 'QUOTA_EXCEEDED',
+            resource: 'branches',
+            limit,
+            current: currentCount,
+            error: `Branch quota exceeded (${currentCount}/${limit}). Upgrade your plan to manage more regional branch hubs.`,
+          });
+          return;
+        }
+      }
     }
 
     const exists = await Branch.findOne({ company_id: companyId, branch_code: branch_code.toUpperCase() });

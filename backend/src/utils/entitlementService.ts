@@ -32,6 +32,7 @@ export interface TenantEntitlementSummary {
     max_trucks: number;
     max_drivers: number;
     max_users: number;
+    max_branches: number;
   };
   is_read_only: boolean;
   days_remaining_in_trial?: number;
@@ -46,13 +47,23 @@ export async function getTenantEntitlements(company: ICompany): Promise<TenantEn
   // 1. Find active subscription
   let subscription = await Subscription.findOne({ company_id: companyId }).populate<{ plan_id: IPlan }>('plan_id');
 
-  // Fallback defaults for Starter trial if no subscription document exists yet
-  let planCode = 'standard';
-  let planName = 'Standard Plan (Trial)';
-  let includedFeatures: ModuleKey[] = [];
-  let maxTrucks = 20;
-  let maxDrivers = 25;
-  let maxUsers = 5;
+  // Fallback defaults for 7-day Trial (Starter-level feature access, 5 trucks, 1 branch, 2 users)
+  let planCode = 'starter';
+  let planName = 'Trial (Starter Features)';
+  let includedFeatures: ModuleKey[] = [
+    'MOD_FLEET',
+    'MOD_DRIVERS',
+    'MOD_TRIPS',
+    'MOD_MARKET_VEHICLES',
+    'MOD_PARTIES',
+    'MOD_DOCUMENT_VAULT',
+    'MOD_LR_ENGINE',
+    'MOD_BILLING_INVOICE',
+  ];
+  let maxTrucks = 5;
+  let maxDrivers = 5;
+  let maxUsers = 2;
+  let maxBranches = 1;
 
   if (subscription && subscription.plan_id) {
     const plan = subscription.plan_id;
@@ -62,29 +73,16 @@ export async function getTenantEntitlements(company: ICompany): Promise<TenantEn
     maxTrucks = plan.max_trucks;
     maxDrivers = plan.max_drivers;
     maxUsers = plan.max_users;
+    maxBranches = plan.max_branches ?? (plan.code === 'standard' ? 3 : plan.code === 'starter' ? 1 : -1);
   } else {
-    // If during 14-day trial without explicit subscription doc, standard tier features are unlocked
-    const standardPlan = await Plan.findOne({ code: 'standard' });
-    if (standardPlan) {
-      includedFeatures = [...standardPlan.included_features];
-      maxTrucks = standardPlan.max_trucks;
-      maxDrivers = standardPlan.max_drivers;
-      maxUsers = standardPlan.max_users;
-    } else {
-      // Default baseline standard modules if DB not yet seeded
-      includedFeatures = [
-        'MOD_FLEET',
-        'MOD_DRIVERS',
-        'MOD_TRIPS',
-        'MOD_MARKET_VEHICLES',
-        'MOD_PARTIES',
-        'MOD_DOCUMENT_VAULT',
-        'MOD_LR_ENGINE',
-        'MOD_BILLING_INVOICE',
-        'MOD_SETTLEMENTS',
-        'MOD_LEDGERS',
-        'MOD_REPORTS',
-      ];
+    // If during trial without explicit subscription doc, check if Starter plan exists in DB
+    const starterPlan = await Plan.findOne({ code: 'starter' });
+    if (starterPlan) {
+      includedFeatures = [...starterPlan.included_features];
+      maxTrucks = 5; // Trial truck limit is strictly 5 trucks
+      maxDrivers = 5;
+      maxUsers = 2;
+      maxBranches = 1;
     }
   }
 
@@ -112,6 +110,7 @@ export async function getTenantEntitlements(company: ICompany): Promise<TenantEn
     if (overrides.max_trucks !== undefined) maxTrucks = overrides.max_trucks;
     if (overrides.max_drivers !== undefined) maxDrivers = overrides.max_drivers;
     if (overrides.max_users !== undefined) maxUsers = overrides.max_users;
+    if (overrides.max_branches !== undefined) maxBranches = overrides.max_branches;
 
     if (overrides.custom_feature_grants) {
       overrides.custom_feature_grants.forEach((f) => enabledSet.add(f));
@@ -142,6 +141,7 @@ export async function getTenantEntitlements(company: ICompany): Promise<TenantEn
       max_trucks: maxTrucks,
       max_drivers: maxDrivers,
       max_users: maxUsers,
+      max_branches: maxBranches,
     },
     is_read_only: isReadOnly,
     days_remaining_in_trial: daysRemainingInTrial,

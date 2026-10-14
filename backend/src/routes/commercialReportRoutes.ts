@@ -7,7 +7,8 @@
  */
 
 import { Router } from 'express';
-import { requireAuth, resolveTenantContext } from '../middleware/authMiddleware.js';
+import { requireAuth, resolveTenantContext, requireActiveSubscription } from '../middleware/authMiddleware.js';
+import { requireFeature } from '../middleware/entitlementMiddleware.js';
 import { requireStrictIdempotency } from '../middleware/idempotencyMiddleware.js';
 import {
   getArAgingReport,
@@ -20,11 +21,11 @@ import {
 const router = Router();
 
 // All commercial report routes require authentication and tenant context
-router.use(requireAuth, resolveTenantContext);
+router.use(requireAuth, resolveTenantContext, requireActiveSubscription);
 
 router.get('/aging', getArAgingReport);
 router.get('/profitability', getTripProfitabilityReport);
-router.get('/export/tally', exportToTallyXml);
+router.get('/export/tally', requireFeature('MOD_TALLY_SYNC'), exportToTallyXml);
 router.get('/credit-notes', listCreditNotes);
 router.post('/credit-notes', requireStrictIdempotency, createCreditNote);
 

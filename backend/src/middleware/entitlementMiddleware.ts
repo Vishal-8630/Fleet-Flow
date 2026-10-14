@@ -19,6 +19,7 @@ import { hasFeatureAccess, getTenantEntitlements } from '../utils/entitlementSer
 import { Truck } from '../models/Truck.js';
 import { Driver } from '../models/Driver.js';
 import { CompanyMember } from '../models/CompanyMember.js';
+import { Branch } from '../models/Branch.js';
 
 /**
  * Ensures the tenant has access to a specific module before executing the route.
@@ -84,9 +85,9 @@ export function requireAllFeatures(moduleKeys: ModuleKey[]) {
 }
 
 /**
- * Ensures the tenant has not exceeded their plan quota for resources (trucks, drivers, user seats).
+ * Ensures the tenant has not exceeded their plan quota for resources (trucks, drivers, user seats, branches).
  */
-export function requireQuota(resource: 'trucks' | 'drivers' | 'users') {
+export function requireQuota(resource: 'trucks' | 'drivers' | 'users' | 'branches') {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       if (!req.company) {
@@ -139,6 +140,21 @@ export function requireQuota(resource: 'trucks' | 'drivers' | 'users') {
               limit,
               current: currentCount,
               error: `User seat quota exceeded (${currentCount}/${limit}). Upgrade your plan to invite more team members.`,
+            });
+            return;
+          }
+        }
+      } else if (resource === 'branches') {
+        const limit = limits.max_branches;
+        if (limit !== -1) {
+          const currentCount = await Branch.countDocuments({ company_id: companyId });
+          if (currentCount >= limit) {
+            res.status(403).json({
+              code: 'QUOTA_EXCEEDED',
+              resource: 'branches',
+              limit,
+              current: currentCount,
+              error: `Branch quota exceeded (${currentCount}/${limit}). Upgrade your plan to manage more regional branch hubs.`,
             });
             return;
           }

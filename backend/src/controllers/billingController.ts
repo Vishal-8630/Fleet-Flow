@@ -298,8 +298,6 @@ export async function verifyPayment(req: Request, res: Response): Promise<void> 
       razorpay_order_id,
       razorpay_payment_id,
       razorpay_signature,
-      plan_id,
-      billing_cycle = 'monthly',
       payment_method = 'card',
     } = req.body;
 
@@ -310,11 +308,33 @@ export async function verifyPayment(req: Request, res: Response): Promise<void> 
       return;
     }
 
-    const targetPlan = await Plan.findById(plan_id);
-    if (!targetPlan) {
-      res.status(404).json({ error: 'Plan not found.' });
+    const companyId = req.company._id;
+
+    // Secure server-side lookup asserting tenant ownership
+    const existingTxn = await PaymentTransaction.findOne({
+      order_id: razorpay_order_id,
+      company_id: companyId,
+    });
+
+    if (!existingTxn) {
+      res.status(404).json({ error: 'Payment transaction or order not found for this tenant.' });
       return;
     }
+
+    // Idempotency check: prevent duplicate verification of already successful transactions
+    if (existingTxn.status === 'success') {
+      res.status(400).json({ error: 'This payment transaction has already been verified and processed.' });
+      return;
+    }
+
+    // Never trust client-supplied plan_id or price: use trusted server-side transaction data
+    const targetPlan = await Plan.findById(existingTxn.plan_id);
+    if (!targetPlan) {
+      res.status(404).json({ error: 'Target subscription plan not found.' });
+      return;
+    }
+
+    const safeBillingCycle = existingTxn.billing_cycle || 'monthly';
 
     // Fail-closed HMAC signature verification
     const verification = verifyPaymentSignature(
@@ -326,7 +346,7 @@ export async function verifyPayment(req: Request, res: Response): Promise<void> 
     if (!verification.valid) {
       // Record failed transaction attempt
       await PaymentTransaction.findOneAndUpdate(
-        { order_id: razorpay_order_id },
+        { order_id: razorpay_order_id, company_id: companyId },
         {
           payment_id: razorpay_payment_id,
           status: 'failed',
@@ -340,9 +360,8 @@ export async function verifyPayment(req: Request, res: Response): Promise<void> 
       return;
     }
 
-    const companyId = req.company._id;
     const now = new Date();
-    const periodDurationDays = billing_cycle === 'annual' ? 365 : 30;
+    const periodDurationDays = safeBillingCycle === 'annual' ? 365 : 30;
     const periodEnd = new Date(now.getTime() + periodDurationDays * 24 * 60 * 60 * 1000);
 
     // Update Subscription, Company, and PaymentTransaction atomically in a single transaction
@@ -351,7 +370,7 @@ export async function verifyPayment(req: Request, res: Response): Promise<void> 
         { company_id: companyId },
         {
           plan_id: targetPlan._id,
-          billing_cycle,
+          billing_cycle: safeBillingCycle,
           status: 'active',
           current_period_start: now,
           current_period_end: periodEnd,
@@ -368,7 +387,7 @@ export async function verifyPayment(req: Request, res: Response): Promise<void> 
       );
 
       const txn = await PaymentTransaction.findOneAndUpdate(
-        { order_id: razorpay_order_id },
+        { order_id: razorpay_order_id, company_id: companyId },
         {
           payment_id: razorpay_payment_id,
           payment_method,
@@ -672,7 +691,12 @@ export async function handleBillingWebhook(req: Request, res: Response): Promise
     }
 
     const event = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
-    const eventId = event.event_id || event.id || `evt_${Date.now()}`;
+    const eventId = event.event_id || event.id;
+
+    if (!eventId) {
+      res.status(400).json({ error: 'Missing required webhook event identifier.' });
+      return;
+    }
 
     // IDEMPOTENCY CHECK: Ensure event has not already been processed
     const alreadyProcessed = await ProcessedWebhook.findOne({ event_id: eventId });
@@ -682,95 +706,180 @@ export async function handleBillingWebhook(req: Request, res: Response): Promise
       return;
     }
 
-    // Record webhook processing start
-    await ProcessedWebhook.create({
-      event_id: eventId,
-      source: 'razorpay',
-      event_type: event.event || 'payment.captured',
-      payload: event,
-      status: 'success',
-    });
-
     const eventType = event.event;
     const entity = event.payload?.payment?.entity || event.payload?.subscription?.entity || {};
     const orderId = entity.order_id;
     const paymentId = entity.id;
     const notes = entity.notes || {};
-    const companyId = notes.company_id;
 
-    // Update persistent PaymentTransaction ledger if order_id exists
+    let existingTxn: any = null;
     if (orderId) {
-      if (eventType === 'payment.captured' || eventType === 'payment.authorized') {
-        await PaymentTransaction.findOneAndUpdate(
-          { order_id: orderId },
-          {
-            payment_id: paymentId,
-            status: 'success',
-            payment_method: entity.method || 'card',
-          }
-        );
-      } else if (eventType === 'payment.failed') {
-        await PaymentTransaction.findOneAndUpdate(
-          { order_id: orderId },
-          {
-            payment_id: paymentId,
-            status: 'failed',
-            failure_reason: entity.error_description || 'Payment failed via webhook',
-          }
-        );
-      } else if (eventType === 'refund.processed') {
-        await PaymentTransaction.findOneAndUpdate(
-          { order_id: orderId },
-          {
-            status: 'refunded',
-          }
-        );
+      existingTxn = await PaymentTransaction.findOne({ order_id: orderId });
+    }
+
+    // Validate payment amount against trusted server-side transaction data
+    if (existingTxn && entity.amount !== undefined) {
+      const webhookAmountPaise = Number(entity.amount);
+      if (webhookAmountPaise !== existingTxn.amount_paise) {
+        res.status(400).json({
+          error: `Webhook payment amount mismatch: received ${webhookAmountPaise} paise, but server-side transaction record expects ${existingTxn.amount_paise} paise.`,
+        });
+        return;
       }
     }
 
-    if (companyId) {
-      if (eventType === 'payment.captured' || eventType === 'subscription.charged') {
-        // Renewal / payment succeeded: clear dunning and extend period
-        const periodEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-        await Subscription.findOneAndUpdate(
-          { company_id: companyId },
-          {
-            status: 'active',
-            current_period_end: periodEnd,
-            'dunning.attempt_count': 0,
-            'dunning.last_attempt_at': new Date(),
-          }
-        );
-        await Company.findByIdAndUpdate(companyId, { subscription_status: 'active' });
-      } else if (eventType === 'payment.failed') {
-        // Renewal failed: advance 7-day dunning lifecycle
-        const sub = await Subscription.findOne({ company_id: companyId });
-        if (sub) {
-          const attempt = (sub.dunning.attempt_count || 0) + 1;
-          const graceEnd = sub.dunning.grace_period_ends_at || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    const companyId = notes.company_id || existingTxn?.company_id;
 
-          if (attempt >= 3 && Date.now() > graceEnd.getTime()) {
-            // Day 7+: Transition to read-only SUSPENDED mode
-            sub.status = 'suspended';
-            await Company.findByIdAndUpdate(companyId, { subscription_status: 'suspended' });
-          } else {
-            // In grace period: set to past_due
-            sub.status = 'past_due';
-            await Company.findByIdAndUpdate(companyId, { subscription_status: 'past_due' });
-          }
+    try {
+      await runInTransaction(async (session) => {
+        // Record webhook processing atomically in the same transaction
+        await new ProcessedWebhook({
+          event_id: eventId,
+          source: 'razorpay',
+          event_type: event.event || 'payment.captured',
+          payload: event,
+          status: 'success',
+        }).save({ session });
 
-          sub.dunning.attempt_count = attempt;
-          sub.dunning.last_attempt_at = new Date();
-          sub.dunning.grace_period_ends_at = graceEnd;
-          await sub.save();
+        // Update persistent PaymentTransaction ledger if order_id exists
+        if (orderId) {
+          const txnInSession = await PaymentTransaction.findOne({ order_id: orderId }).session(session);
+          if (txnInSession) {
+            if (eventType === 'payment.captured' || eventType === 'payment.authorized') {
+              if (txnInSession.status !== 'success') {
+                await PaymentTransaction.findByIdAndUpdate(
+                  txnInSession._id,
+                  {
+                    payment_id: paymentId,
+                    status: 'success',
+                    payment_method: entity.method || 'card',
+                  },
+                  { session }
+                );
+              }
+            } else if (eventType === 'payment.failed') {
+              if (txnInSession.status !== 'success') {
+                await PaymentTransaction.findByIdAndUpdate(
+                  txnInSession._id,
+                  {
+                    payment_id: paymentId,
+                    status: 'failed',
+                    failure_reason: entity.error_description || 'Payment failed via webhook',
+                  },
+                  { session }
+                );
+              }
+            } else if (eventType === 'refund.processed') {
+              if (txnInSession.status === 'success') {
+                await PaymentTransaction.findByIdAndUpdate(
+                  txnInSession._id,
+                  {
+                    status: 'refunded',
+                  },
+                  { session }
+                );
+              }
+            }
+          }
         }
-      } else if (eventType === 'subscription.halted' || eventType === 'subscription.cancelled') {
-        await Subscription.findOneAndUpdate(
-          { company_id: companyId },
-          { status: 'suspended' }
-        );
-        await Company.findByIdAndUpdate(companyId, { subscription_status: 'suspended' });
+
+        if (companyId) {
+          if (eventType === 'payment.captured' || eventType === 'subscription.charged') {
+            // Renewal / payment succeeded: clear dunning and extend period
+            // Do not double-extend if existing transaction was already 'success' prior to this webhook
+            const alreadySucceededBeforeWebhook = existingTxn && existingTxn.status === 'success';
+
+            if (!alreadySucceededBeforeWebhook) {
+              const periodDurationDays = existingTxn?.billing_cycle === 'annual' ? 365 : 30;
+              const periodEnd = new Date(Date.now() + periodDurationDays * 24 * 60 * 60 * 1000);
+
+              const updateFields: any = {
+                status: 'active',
+                current_period_end: periodEnd,
+                'dunning.attempt_count': 0,
+                'dunning.last_attempt_at': new Date(),
+              };
+              if (existingTxn?.plan_id) {
+                updateFields.plan_id = existingTxn.plan_id;
+              }
+              if (existingTxn?.billing_cycle) {
+                updateFields.billing_cycle = existingTxn.billing_cycle;
+              }
+
+              await Subscription.findOneAndUpdate(
+                { company_id: companyId },
+                updateFields,
+                { session }
+              );
+              await Company.findByIdAndUpdate(companyId, { subscription_status: 'active' }, { session });
+            }
+          } else if (eventType === 'payment.failed') {
+            // Renewal failed: advance 7-day dunning lifecycle
+            const sub = await Subscription.findOne({ company_id: companyId }).session(session);
+            if (sub) {
+              const attempt = (sub.dunning.attempt_count || 0) + 1;
+              const graceEnd = sub.dunning.grace_period_ends_at || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+              if (attempt >= 3 && Date.now() > graceEnd.getTime()) {
+                // Day 7+: Transition to read-only SUSPENDED mode
+                sub.status = 'suspended';
+                await Company.findByIdAndUpdate(companyId, { subscription_status: 'suspended' }, { session });
+              } else {
+                // In grace period: set to past_due
+                sub.status = 'past_due';
+                await Company.findByIdAndUpdate(companyId, { subscription_status: 'past_due' }, { session });
+              }
+
+              sub.dunning.attempt_count = attempt;
+              sub.dunning.last_attempt_at = new Date();
+              sub.dunning.grace_period_ends_at = graceEnd;
+              await sub.save({ session });
+            }
+          } else if (eventType === 'subscription.halted' || eventType === 'subscription.cancelled') {
+            await Subscription.findOneAndUpdate(
+              { company_id: companyId },
+              { status: 'suspended' },
+              { session }
+            );
+            await Company.findByIdAndUpdate(companyId, { subscription_status: 'suspended' }, { session });
+          }
+        }
+      });
+    } catch (txError: any) {
+      if (txError instanceof ConfigurationError) {
+        res.status(500).json({ error: txError.message, code: 'CONFIGURATION_ERROR' });
+        return;
       }
+
+      // Handle duplicate-key races safely:
+      const isDuplicateKey =
+        txError?.code === 11000 ||
+        (txError?.name === 'MongoServerError' && txError?.code === 11000) ||
+        (typeof txError?.message === 'string' && txError.message.includes('E11000'));
+
+      if (isDuplicateKey) {
+        // Another concurrent request attempted to process this event.
+        // Return 200 OK only when it is established that the other delivery successfully claimed and processed that event.
+        // Poll briefly in case the other delivery is currently completing commit.
+        for (let attempt = 0; attempt < 5; attempt++) {
+          const verifiedEvent = await ProcessedWebhook.findOne({ event_id: eventId, status: 'success' });
+          if (verifiedEvent) {
+            res.status(200).json({ status: 'idempotent_duplicate_ignored', event_id: eventId });
+            return;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+
+        // If outcome is still unknown or the concurrent transaction did not commit, do NOT silently acknowledge.
+        res.status(500).json({
+          error: 'Webhook event processing conflict; outcome not verified. Provider retry required.',
+          event_id: eventId,
+        });
+        return;
+      }
+
+      res.status(500).json({ error: txError.message || 'Webhook processing failed.' });
+      return;
     }
 
     res.status(200).json({ status: 'success', event_id: eventId });

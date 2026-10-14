@@ -192,17 +192,24 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
  * Strict Environment Verification Guard
  * Enforces that critical production secrets are defined before accepting traffic.
  */
-function assertProductionEnvironment(): void {
+export function assertProductionEnvironment(): void {
   if (process.env.NODE_ENV === 'production') {
-    const requiredVars = ['JWT_SECRET', 'MONGODB_URI', 'RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET'];
+    const requiredVars = ['JWT_SECRET', 'MONGODB_URI', 'RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET', 'RAZORPAY_WEBHOOK_SECRET'];
     const missing = requiredVars.filter((v) => !process.env[v]);
     if (missing.length > 0) {
-      console.error(`❌ FATAL: Missing mandatory production environment variables: ${missing.join(', ')}`);
-      process.exit(1);
+      const msg = `Missing mandatory production environment variables: ${missing.join(', ')}`;
+      console.error(`❌ FATAL: ${msg}`);
+      throw new Error(msg);
     }
     if (process.env.JWT_SECRET === 'dev_secret_fallback_key') {
-      console.error('❌ FATAL: JWT_SECRET cannot use insecure default fallback in production mode.');
-      process.exit(1);
+      const msg = 'JWT_SECRET cannot use insecure default fallback in production mode.';
+      console.error(`❌ FATAL: ${msg}`);
+      throw new Error(msg);
+    }
+    if (process.env.RAZORPAY_WEBHOOK_SECRET === 'dev_webhook_secret_fleetflow') {
+      const msg = 'RAZORPAY_WEBHOOK_SECRET cannot use insecure default fallback in production mode.';
+      console.error(`❌ FATAL: ${msg}`);
+      throw new Error(msg);
     }
   }
 }
