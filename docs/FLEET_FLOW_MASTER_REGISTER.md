@@ -1,6 +1,6 @@
 # Fleet Flow — Authoritative Master Issue, Improvement & Feature Register
 
-**Document Version:** 2.0.0  
+**Document Version:** 2.1.0  
 **Audit & Specification Date:** October 2026  
 **Auditor & Principal Architect:** Independent Systems Reviewer & Principal Architect  
 **Repository:** `Vishal-8630/Fleet-Flow`  
@@ -16,37 +16,74 @@
 
 ## 1. Executive Summary & Authoritative Index Overview
 
-This document serves as the **central, authoritative master register** for all technical and functional specifications in the Fleet Flow SaaS platform. Every item listed here corresponds to a dedicated, individually actionable specification file in `docs/issues/`, `docs/improvements/`, `docs/features/`, `docs/operations/`, `docs/testing/`, or `docs/decisions/`.
+This document serves as the **central, authoritative master register** for all technical and functional specifications in the Fleet Flow SaaS platform. Every item listed here corresponds to a dedicated, individually actionable specification file in `docs/issues/`, `docs/improvements/`, `docs/features/`, `docs/operations/`, `docs/testing/`, `docs/audit/`, `docs/plans/`, or `docs/decisions/`.
 
 ### 1.1 Complete Documentation Library Sitemap
-- **Authoritative Register**: [`docs/FLEET_FLOW_MASTER_REGISTER.md`](./FLEET_FLOW_MASTER_REGISTER.md)
-- **Implementation Readiness Backlog**: [`docs/IMPLEMENTATION_READINESS_BACKLOG.md`](./IMPLEMENTATION_READINESS_BACKLOG.md)
-- **Implementation Batches Blueprint**: [`docs/IMPLEMENTATION_BATCHES.md`](./IMPLEMENTATION_BATCHES.md)
-- **Documentation Changelog**: [`docs/audit/DOCUMENTATION_CHANGELOG.md`](./audit/DOCUMENTATION_CHANGELOG.md)
-- **Documentation Reconciliation Report**: [`docs/audit/DOCUMENTATION_RECONCILIATION_REPORT.md`](./audit/DOCUMENTATION_RECONCILIATION_REPORT.md)
-- **Legacy Issue Reconciliation**: [`docs/audit/EXISTING_DOCUMENTATION_RECONCILIATION.md`](./audit/EXISTING_DOCUMENTATION_RECONCILIATION.md)
-- **Audit Baseline Reports (9 Documents)**:
-  - [`CURRENT_STATE_AUDIT.md`](./audit/CURRENT_STATE_AUDIT.md) — Feature-by-feature code audit
-  - [`DOCUMENTATION_COMPLETENESS_REVIEW.md`](./audit/DOCUMENTATION_COMPLETENESS_REVIEW.md) — Gap & workflow verification
-  - [`EXISTING_DOCUMENTATION_RECONCILIATION.md`](./audit/EXISTING_DOCUMENTATION_RECONCILIATION.md) — Legacy issue status forensic review
-  - [`FINANCE_AND_SUBSCRIPTION_AUDIT.md`](./audit/FINANCE_AND_SUBSCRIPTION_AUDIT.md) — Double-entry & billing audit
-  - [`PRODUCTION_AND_OPERATIONS_AUDIT.md`](./audit/PRODUCTION_AND_OPERATIONS_AUDIT.md) — SRE, infra & deployment audit
-  - [`PRODUCT_GAP_CANDIDATES.md`](./audit/PRODUCT_GAP_CANDIDATES.md) — Missing transport features catalog
-  - [`REPOSITORY_INVENTORY.md`](./audit/REPOSITORY_INVENTORY.md) — Codebase inventory & routes/models catalog
-  - [`SECURITY_AND_DATA_ISOLATION_AUDIT.md`](./audit/SECURITY_AND_DATA_ISOLATION_AUDIT.md) — Multi-tenancy & IDOR security audit
-  - [`UX_AND_WORKFLOW_AUDIT.md`](./audit/UX_AND_WORKFLOW_AUDIT.md) — User interface & navigation audit
-- **Master Implementation Plans (6 Documents)**:
-  - [`PHASE_1_FOUNDATION_AND_TENANCY.md`](./plans/PHASE_1_FOUNDATION_AND_TENANCY.md) — Multi-tenancy & design system
-  - [`PHASE_2_MASTER_REGISTRIES.md`](./plans/PHASE_2_MASTER_REGISTRIES.md) — Asset registries & compliance vault
-  - [`PHASE_3_OPERATIONS_AND_DISPATCH.md`](./plans/PHASE_3_OPERATIONS_AND_DISPATCH.md) — Dispatch, expenses & trip sheets
-  - [`PHASE_4_COMMERCIAL_FINANCE_SETTLEMENTS.md`](./plans/PHASE_4_COMMERCIAL_FINANCE_SETTLEMENTS.md) — 3-part LRs, invoices & ledger
-  - [`PHASE_5_SAAS_BILLING_ENTITLEMENTS_CUSTOMIZATION.md`](./plans/PHASE_5_SAAS_BILLING_ENTITLEMENTS_CUSTOMIZATION.md) — Subscription engine
-  - [`PHASE_6_HARDENING_VERIFICATION_RELEASE.md`](./plans/PHASE_6_HARDENING_VERIFICATION_RELEASE.md) — Hardening & release runbooks
-- **Historical Work Preserved (17 Documents)**:
-  - Root Issue Tracker: [`ISSUES.md`](../ISSUES.md)
-  - Master Implementation Plan: [`MASTER_IMPLEMENTATION_PLAN.md`](../MASTER_IMPLEMENTATION_PLAN.md)
-  - Historical Changelog: [`IMPLEMENTATION_CHANGELOG.md`](../IMPLEMENTATION_CHANGELOG.md)
-  - Legacy Issue Specs: [`docs/issues/ISSUE-01.md`](./issues/ISSUE-01.md) through [`ISSUE-14.md`](./issues/ISSUE-14.md)
+
+#### A. Core Governance & Architecture Blueprints
+- **Authoritative Master Register**: [`docs/FLEET_FLOW_MASTER_REGISTER.md`](./FLEET_FLOW_MASTER_REGISTER.md) — Central source of truth for all requirements, defects, and specifications.
+- **Implementation Readiness Backlog**: [`docs/IMPLEMENTATION_READINESS_BACKLOG.md`](./IMPLEMENTATION_READINESS_BACKLOG.md) — Risk-adjusted priority ranking (P0 through P3) across all canonical items.
+- **Implementation Batches Blueprint**: [`docs/IMPLEMENTATION_BATCHES.md`](./IMPLEMENTATION_BATCHES.md) — Engineering delivery roadmap sequencing Batches 1 to 11.
+- **Documentation Changelog**: [`docs/audit/DOCUMENTATION_CHANGELOG.md`](./audit/DOCUMENTATION_CHANGELOG.md) — Comprehensive audit log of all documentation modifications.
+- **Documentation Reconciliation Report**: [`docs/audit/DOCUMENTATION_RECONCILIATION_REPORT.md`](./audit/DOCUMENTATION_RECONCILIATION_REPORT.md) — Formal readiness gate sign-off report.
+- **Legacy Issue Reconciliation**: [`docs/audit/EXISTING_DOCUMENTATION_RECONCILIATION.md`](./audit/EXISTING_DOCUMENTATION_RECONCILIATION.md) — Forensic reconciliation of legacy claims vs code reality.
+
+#### B. Commercial MVP Readiness & Manual QA Test Workbooks
+- **Website Feature Completeness Audit**: [`docs/audit/WEBSITE_FEATURE_COMPLETENESS_AUDIT.md`](./audit/WEBSITE_FEATURE_COMPLETENESS_AUDIT.md) — Exhaustive pre-launch commercial readiness evaluation across UI, API, DB, and SRE.
+- **Complete Website Manual QA Checklist**: [`docs/testing/FLEET_FLOW_COMPLETE_WEBSITE_TEST_CHECKLIST.md`](./testing/FLEET_FLOW_COMPLETE_WEBSITE_TEST_CHECKLIST.md) — 2,300+ line master manual QA test workbook, execution sequence, defect register & retest tracker.
+- **Manual QA Evidence Directory Guide**: [`docs/testing/evidence/README.md`](./testing/evidence/README.md) — Standards and naming rules for visual screenshots, network captures, and console logs.
+
+#### C. Engineering Batch Execution & Milestone Verification Reports (Batches 1–6)
+- **Batch 1 Preflight Report**: [`docs/audit/BATCH_1_PREFLIGHT_REPORT.md`](./audit/BATCH_1_PREFLIGHT_REPORT.md) — Tenant isolation boundary, file upload security & HTTP test framework preflight.
+- **Batch 2 Preflight Report**: [`docs/audit/BATCH_2_PREFLIGHT_REPORT.md`](./audit/BATCH_2_PREFLIGHT_REPORT.md) — MongoDB replica set topology, aggregation typing & ACID concurrency preflight.
+- **Batch 3 Preflight Report**: [`docs/audit/BATCH_3_PREFLIGHT_REPORT.md`](./audit/BATCH_3_PREFLIGHT_REPORT.md) — Double-entry general ledger, credit notes, vendor payouts & GSTIN validation preflight.
+- **Batch 4 Preflight Report**: [`docs/audit/BATCH_4_PREFLIGHT_REPORT.md`](./audit/BATCH_4_PREFLIGHT_REPORT.md) — Public tracking IDOR defense, customer/vendor portals & OTP rate limiting preflight.
+- **Batch 5 Preflight Report**: [`docs/audit/BATCH_5_PREFLIGHT_REPORT.md`](./audit/BATCH_5_PREFLIGHT_REPORT.md) — Subscription plan entitlements, truck quota enforcement & Razorpay checkout preflight.
+- **Batch 5 Implementation Report**: [`docs/audit/BATCH_5_IMPLEMENTATION_REPORT.md`](./audit/BATCH_5_IMPLEMENTATION_REPORT.md) — Dynamic billing catalog, quota enforcement & webhook idempotency verification.
+- **Batch 6 Preflight Report**: [`docs/audit/BATCH_6_PREFLIGHT_REPORT.md`](./audit/BATCH_6_PREFLIGHT_REPORT.md) — Docker containerization, deep health probes & backup/recovery preflight.
+- **Batch 6A Implementation Report**: [`docs/audit/BATCH_6A_IMPLEMENTATION_REPORT.md`](./audit/BATCH_6A_IMPLEMENTATION_REPORT.md) — Deep readiness & liveness health probes implementation verification.
+- **Batch 6B Implementation Report**: [`docs/audit/BATCH_6B_IMPLEMENTATION_REPORT.md`](./audit/BATCH_6B_IMPLEMENTATION_REPORT.md) — Production Docker containerization & multi-environment compose architecture verification.
+- **Batch 6C Implementation Report**: [`docs/audit/BATCH_6C_IMPLEMENTATION_REPORT.md`](./audit/BATCH_6C_IMPLEMENTATION_REPORT.md) — Automated database backup, retention policy & disaster recovery verification.
+
+#### D. Architectural Baseline & Domain Audit Reports (9 Documents)
+- [`CURRENT_STATE_AUDIT.md`](./audit/CURRENT_STATE_AUDIT.md) — Feature-by-feature codebase verification report.
+- [`DOCUMENTATION_COMPLETENESS_REVIEW.md`](./audit/DOCUMENTATION_COMPLETENESS_REVIEW.md) — Requirement completeness and workflow validation.
+- [`EXISTING_DOCUMENTATION_RECONCILIATION.md`](./audit/EXISTING_DOCUMENTATION_RECONCILIATION.md) — Historical issue status forensic review.
+- [`FINANCE_AND_SUBSCRIPTION_AUDIT.md`](./audit/FINANCE_AND_SUBSCRIPTION_AUDIT.md) — Double-entry bookkeeping & subscription billing audit.
+- [`PRODUCTION_AND_OPERATIONS_AUDIT.md`](./audit/PRODUCTION_AND_OPERATIONS_AUDIT.md) — SRE, Docker, MongoDB topology & deployment audit.
+- [`PRODUCT_GAP_CANDIDATES.md`](./audit/PRODUCT_GAP_CANDIDATES.md) — Catalog of candidate enterprise transport features.
+- [`REPOSITORY_INVENTORY.md`](./audit/REPOSITORY_INVENTORY.md) — Complete codebase inventory, routes, middleware, and models catalog.
+- [`SECURITY_AND_DATA_ISOLATION_AUDIT.md`](./audit/SECURITY_AND_DATA_ISOLATION_AUDIT.md) — Multi-tenancy boundaries, JWT auth & IDOR audit.
+- [`UX_AND_WORKFLOW_AUDIT.md`](./audit/UX_AND_WORKFLOW_AUDIT.md) — Frontend navigation, layout, forms, and usability audit.
+
+#### E. Master Architecture Phase Implementation Plans (6 Documents)
+- [`PHASE_1_FOUNDATION_AND_TENANCY.md`](./plans/PHASE_1_FOUNDATION_AND_TENANCY.md) — Multi-tenancy architecture, auth & design system foundation.
+- [`PHASE_2_MASTER_REGISTRIES.md`](./plans/PHASE_2_MASTER_REGISTRIES.md) — Truck, driver, party master registries & compliance document vault.
+- [`PHASE_3_OPERATIONS_AND_DISPATCH.md`](./plans/PHASE_3_OPERATIONS_AND_DISPATCH.md) — Dispatch, journey lifecycle, trip sheets & driver cash advances.
+- [`PHASE_4_COMMERCIAL_FINANCE_SETTLEMENTS.md`](./plans/PHASE_4_COMMERCIAL_FINANCE_SETTLEMENTS.md) — 3-part LRs, invoices, trip settlements & ledger.
+- [`PHASE_5_SAAS_BILLING_ENTITLEMENTS_CUSTOMIZATION.md`](./plans/PHASE_5_SAAS_BILLING_ENTITLEMENTS_CUSTOMIZATION.md) — Dynamic billing engine, feature flags & quotas.
+- [`PHASE_6_HARDENING_VERIFICATION_RELEASE.md`](./plans/PHASE_6_HARDENING_VERIFICATION_RELEASE.md) — Security hardening, telemetry, containerization & launch runbooks.
+
+#### F. Foundational & Historical Documentation Preserved (Root & Legacy)
+- **Foundational Master Specification**: [`TRUCK_MANAGEMENT_SAAS_COMPLETE_SPEC.md`](../TRUCK_MANAGEMENT_SAAS_COMPLETE_SPEC.md) — The 200KB original foundational multi-tenant SaaS architecture specification.
+- **Master Implementation Plan**: [`MASTER_IMPLEMENTATION_PLAN.md`](../MASTER_IMPLEMENTATION_PLAN.md) — Original multi-phase architecture blueprint.
+- **Root Issue Tracker**: [`ISSUES.md`](../ISSUES.md) — Legacy issue ledger.
+- **Historical Implementation Changelog**: [`IMPLEMENTATION_CHANGELOG.md`](../IMPLEMENTATION_CHANGELOG.md) — Historical development logs.
+- **Legacy Issue Specifications (14 Files)**:
+  - [`ISSUE-01.md`](./issues/ISSUE-01.md) — Enforce Subscription Status and Plan Permissions
+  - [`ISSUE-02.md`](./issues/ISSUE-02.md) — Complete and Secure Real Subscription Payments
+  - [`ISSUE-03.md`](./issues/ISSUE-03.md) — Harden Authentication and Account Recovery
+  - [`ISSUE-04.md`](./issues/ISSUE-04.md) — Verify and Enforce Tenant Isolation Across the Entire API
+  - [`ISSUE-05.md`](./issues/ISSUE-05.md) — Make Financial Records Dependable & Accounting Sound
+  - [`ISSUE-06.md`](./issues/ISSUE-06.md) — Real Notifications and Background Jobs
+  - [`ISSUE-07.md`](./issues/ISSUE-07.md) — Complete Fleet Maintenance Management
+  - [`ISSUE-08.md`](./issues/ISSUE-08.md) — Advanced Trip Tracking and Driver Workflows
+  - [`ISSUE-09.md`](./issues/ISSUE-09.md) — Complete Commercial and Accounting Operations
+  - [`ISSUE-10.md`](./issues/ISSUE-10.md) — Customer, Driver, and Vendor Self-Service Portals
+  - [`ISSUE-11.md`](./issues/ISSUE-11.md) — Finish Configurable Company Features
+  - [`ISSUE-12.md`](./issues/ISSUE-12.md) — Support, Customer Onboarding & Offboarding Lifecycle
+  - [`ISSUE-13.md`](./issues/ISSUE-13.md) — Security, Privacy, and Production Operations
+  - [`ISSUE-14.md`](./issues/ISSUE-14.md) — Public-Facing Marketing Website, Documentation & Legal Compliance
 
 ### 1.2 Quantitative Document File Inventory
 ```
@@ -56,16 +93,19 @@ This document serves as the **central, authoritative master register** for all t
 | docs/issues/ (Canonical) | ISS-001 through ISS-021             | 21         | Canonical Defects  |
 | docs/improvements/       | IMP-001 through IMP-009             | 9          | Canonical Improv.  |
 | docs/features/           | FEAT-001 through FEAT-011           | 11         | Canonical Features |
-| docs/operations/         | OPS-001 through OPS-005             | 5          | Canonical Ops      |
-| docs/testing/            | TEST-001 through TEST-004           | 4          | Canonical Testing  |
+| docs/operations/         | OPS-001..005 + DR Runbook           | 6          | Canonical Ops & DR |
+| docs/testing/            | TEST-001..004 + QA Checklist + Evid | 6          | Canonical Testing  |
 | docs/decisions/          | DEC-001 through DEC-003             | 3          | Canonical Decis.   |
-| SUBTOTAL ACTIVE SPECS    | Independently Actionable Files      | 53         | 100% Indexed       |
+| SUBTOTAL ACTIVE SPECS    | Independently Actionable Files      | 56         | 100% Indexed       |
 +---------------------------------------------------------------------------------------------------+
 | docs/issues/ (Legacy)    | ISSUE-01.md through ISSUE-14.md     | 14         | Preserved Legacy   |
-| docs/audit/              | Baselines, Changelog, Reports       | 11         | System Audits      |
+| docs/audit/              | Baselines, Batches 1-6 & MVP Audits | 22         | System Audits      |
 | docs/plans/              | Phase 1 through Phase 6 Plans       | 6          | Arch. Blueprints   |
 | docs/ root               | Master Register, Backlog, Batches   | 3          | Central Governance |
-| TOTAL DOCUMENTATION SET  | All Files in docs/                  | 84 Files   | Complete & Audited |
+| TOTAL DOCUMENTATION SET  | All Files in docs/                  | 101 Files  | Complete & Audited |
++---------------------------------------------------------------------------------------------------+
+| Workspace Root           | Foundational Spec, Tracker & Logs   | 4 Files    | Root Archives      |
+| GRAND TOTAL REPOSITORY   | All Markdown Documentation Files    | 105 Files  | 100% Reconciled    |
 +---------------------------------------------------------------------------------------------------+
 ```
 
@@ -142,6 +182,7 @@ This document serves as the **central, authoritative master register** for all t
 | **OPS-003** | Automated Database Backup, Retention Policy & Disaster Recovery | Database / SRE | P1 | Commercial Launch (Batch 6) | Proposed | S3 Backup Bucket | [`docs/operations/OPS-003-backup-retention-disaster-recovery.md`](./operations/OPS-003-backup-retention-disaster-recovery.md) |
 | **OPS-004** | Structured JSON Telemetry, Correlated Logging & Sentry APM | Observability / APM | P2 | Post-Launch (Batch 8) | Proposed | Sentry DSN | [`docs/operations/OPS-004-observability-sentry-apm.md`](./operations/OPS-004-observability-sentry-apm.md) |
 | **OPS-005** | Deep Readiness & Liveness Probes with Dependency Connectivity | Monitoring / Health | P1 | Commercial Launch (Batch 6) | Proposed | None | [`docs/operations/OPS-005-deep-health-check-probes.md`](./operations/OPS-005-deep-health-check-probes.md) |
+| **OPS-RUNBOOK** | Multi-Tier Database & Infrastructure Disaster Recovery Runbook | SRE / Disaster Recovery | P1 | Commercial Launch (Batch 6) | Verified (Operational in Batch 6C) | `OPS-003` | [`docs/operations/DISASTER_RECOVERY_RUNBOOK.md`](./operations/DISASTER_RECOVERY_RUNBOOK.md) |
 
 ---
 
@@ -153,6 +194,8 @@ This document serves as the **central, authoritative master register** for all t
 | **TEST-002** | Cross-Tenant Data Isolation & Mutation Boundary Test Suite | Multi-Tenancy / Mongoose | P0 | Launch Blocker (Batch 1) | Verified (Operational in Batch 1; 12/12 passing) | [`docs/testing/TEST-002-cross-tenant-isolation-suite.md`](./testing/TEST-002-cross-tenant-isolation-suite.md) |
 | **TEST-003** | Double-Entry Accounting & Ledger Balance Invariant Test Suite | Financial Math & Ledgers | P0 | Launch Blocker (Batch 3) | Pending Batch 3 | [`docs/testing/TEST-003-double-entry-ledger-invariants.md`](./testing/TEST-003-double-entry-ledger-invariants.md) |
 | **TEST-004** | Subscription Feature Gating, Quota Limits & Webhook Verification | Billing & Entitlements | P1 | Launch Blocker (Batch 5) | Pending Batch 5 | [`docs/testing/TEST-004-subscription-feature-gating-quotas.md`](./testing/TEST-004-subscription-feature-gating-quotas.md) |
+| **TEST-MANUAL** | Complete Website Manual QA & Feature Testing Checklist Workbook | All Pages / E2E Manual QA | P0 | Commercial Launch Gate | Active Master QA Workbook (23 Suites) | [`docs/testing/FLEET_FLOW_COMPLETE_WEBSITE_TEST_CHECKLIST.md`](./testing/FLEET_FLOW_COMPLETE_WEBSITE_TEST_CHECKLIST.md) |
+| **TEST-EVID** | Manual QA Visual, Network HAR & Audit Evidence Guidelines | QA Evidence Archive | P1 | Commercial Launch Gate | Active Evidence Conventions & Structure | [`docs/testing/evidence/README.md`](./testing/evidence/README.md) |
 
 ---
 
@@ -172,17 +215,17 @@ All 14 legacy issue documents from `docs/issues/` and the root tracker (`ISSUES.
 
 | Legacy ID | True Historical Document Title | Historical Status Claimed | Actual Implementation Reality | Canonical Specifications Superseding Legacy Work |
 |---|---|---|---|---|
-| **ISSUE-01** | Enforce Subscription Status and Plan Permissions on the Backend | **Resolved** | Gating omitted on operational routes; pricing cards contradict database seed; Starter plan blocked from LR and Invoices. | [`ISS-011`](./issues/ISS-011-pricing-page-seed-discrepancy.md), [`ISS-012`](./issues/ISS-012-starter-plan-entitlement-trap.md), [`DEC-001`](./decisions/DEC-001-subscription-pricing-and-entitlements.md), [`TEST-004`](./testing/TEST-004-subscription-feature-gating-quotas.md) |
-| **ISSUE-02** | Complete and Secure Real Subscription Payments | **Resolved** | Test simulation checkout bypass mode remains active; webhook verification lacks automated regression suite. | [`ISS-013`](./issues/ISS-013-unsafe-payment-checkout-simulation.md), [`DEC-001`](./decisions/DEC-001-subscription-pricing-and-entitlements.md), [`TEST-004`](./testing/TEST-004-subscription-feature-gating-quotas.md) |
-| **ISSUE-03** | Harden Authentication and Account Recovery | **Resolved** | Portal OTP login broken by phone schema mismatches; endpoints lack rate limiting against SMS abuse. | [`ISS-006`](./issues/ISS-006-stakeholder-portals-auth-breakdown.md), [`ISS-020`](./issues/ISS-020-portal-otp-rate-limiting-sms-flooding.md), [`IMP-002`](./improvements/IMP-002-granular-rbac-permission-matrix.md), [`TEST-001`](./testing/TEST-001-automated-http-integration-suite.md) |
-| **ISSUE-04** | Verify and Enforce Tenant Isolation Across the Entire API | **Resolved** | Five Express route files completely bypass `resolveTenantContext`; Mongoose plugin misses `updateOne`/`deleteMany`/`aggregate`. | [`ISS-001`](./issues/ISS-001-tenant-context-enforcement.md), [`ISS-002`](./issues/ISS-002-tenant-plugin-interception.md), [`ISS-014`](./issues/ISS-014-mongodb-aggregation-string-companyid.md), [`TEST-002`](./testing/TEST-002-cross-tenant-isolation-suite.md) |
-| **ISSUE-05** | Make Financial Records Dependable & Accounting Sound | **Resolved** | Vendor payouts are one-sided debits; party balances omit payouts; credit notes update wrong field; aggregations zero out profit. | [`ISS-003`](./issues/ISS-003-credit-note-balance-reduction.md), [`ISS-004`](./issues/ISS-004-vendor-payout-ledger-reconciliation.md), [`ISS-010`](./issues/ISS-010-trip-profitability-zero-calculation.md), [`ISS-018`](./issues/ISS-018-acid-transactions-standalone-mongo.md), [`ISS-019`](./issues/ISS-019-client-side-idempotency-key-omission.md), [`TEST-003`](./testing/TEST-003-double-entry-ledger-invariants.md) |
-| **ISSUE-06** | Real Notifications and Background Jobs | **Resolved** | Workers lack distributed multi-node coordination and automated fallback cascade (WhatsApp -> SMS -> Email). | [`IMP-008`](./improvements/IMP-008-notification-multi-channel-failover.md), [`OPS-002`](./operations/OPS-002-distributed-task-processing-bullmq.md) |
-| **ISSUE-07** | Complete Fleet Maintenance Management | **Resolved** | Dashboard counter references non-existent enum `'maintenance'` instead of `'in_maintenance'`, reporting 0. | [`ISS-015`](./issues/ISS-015-dashboard-maintenance-truck-counter.md), [`FEAT-009`](./features/FEAT-009-tyre-lifecycle-management.md) |
-| **ISSUE-08** | Advanced Trip Tracking and Driver Workflows | **Resolved** | Live fleet map query projects wrong field names (`registration_number`), rendering empty telematics markers. | [`ISS-007`](./issues/ISS-007-live-fleet-map-projection-mismatch.md), [`IMP-007`](./improvements/IMP-007-telematics-map-fallback.md), [`FEAT-007`](./features/FEAT-007-driver-mobile-pwa-workflow.md) |
-| **ISSUE-09** | Complete Commercial and Accounting Operations | **Resolved** | UI credit notes sidebar route is dead link; AR aging customer name displays `"—"`; missing GSTIN/PAN regex checks. | [`ISS-008`](./issues/ISS-008-missing-credit-notes-page.md), [`ISS-009`](./issues/ISS-009-ar-aging-customer-name-display.md), [`IMP-001`](./improvements/IMP-001-gstin-pan-validation.md), [`IMP-005`](./improvements/IMP-005-dynamic-tax-recalculation.md), [`FEAT-002`](./features/FEAT-002-gst-einvoicing-irn-qr.md), [`FEAT-008`](./features/FEAT-008-section-194c-tds-engine.md) |
-| **ISSUE-10** | Customer, Driver, and Vendor Self-Service Portals | **Resolved** | Customer login queries non-existent `contact_phone`; vendor login disabled; vendor dashboard is hardcoded mock data. | [`ISS-006`](./issues/ISS-006-stakeholder-portals-auth-breakdown.md), [`ISS-020`](./issues/ISS-020-portal-otp-rate-limiting-sms-flooding.md), [`FEAT-010`](./features/FEAT-010-vendor-portal-end-to-end.md) |
-| **ISSUE-11** | Finish Configurable Company Features | **Resolved** | `branchRoutes` and `approvalRoutes` omit tenant context; custom fields accept prototype pollution and `$where`. | [`ISS-001`](./issues/ISS-001-tenant-context-enforcement.md), [`ISS-021`](./issues/ISS-021-custom-field-key-injection-defense.md), [`IMP-002`](./improvements/IMP-002-granular-rbac-permission-matrix.md) |
-| **ISSUE-12** | Support, Customer Onboarding & Offboarding Lifecycle | **Resolved** | `supportRoutes` omits tenant context; no tenant export engine; member invitations lack expiry state machine. | [`ISS-001`](./issues/ISS-001-tenant-context-enforcement.md), [`FEAT-011`](./features/FEAT-011-tenant-data-export-offboarding.md), [`IMP-003`](./improvements/IMP-003-expiring-member-invitations.md) |
-| **ISSUE-13** | Security, Privacy, and Production Operations | **Resolved** | Public tracking query leaks PII via IDOR; magic byte middleware is unmounted; local storage lacks path jailing. | [`ISS-005`](./issues/ISS-005-public-tracking-privacy-idor.md), [`ISS-016`](./issues/ISS-016-unmounted-file-security-middleware.md), [`ISS-017`](./issues/ISS-017-local-storage-path-traversal.md), [`DEC-003`](./decisions/DEC-003-storage-architecture-s3-vs-local.md), [`OPS-001`](./operations/OPS-001-docker-compose-architecture.md), [`OPS-003`](./operations/OPS-003-backup-retention-disaster-recovery.md), [`OPS-004`](./operations/OPS-004-observability-sentry-apm.md), [`OPS-005`](./operations/OPS-005-deep-health-check-probes.md) |
-| **ISSUE-14** | Public-Facing Marketing Website, Documentation & Legal Compliance | **Resolved** | Marketing pricing page advertises prices and unlimited quotas contradictory to backend billing seeds. | [`ISS-011`](./issues/ISS-011-pricing-page-seed-discrepancy.md), [`ISS-012`](./issues/ISS-012-starter-plan-entitlement-trap.md), [`DEC-001`](./decisions/DEC-001-subscription-pricing-and-entitlements.md) |
+| [`**ISSUE-01**`](./issues/ISSUE-01.md) | Enforce Subscription Status and Plan Permissions on the Backend | **Resolved** | Gating omitted on operational routes; pricing cards contradict database seed; Starter plan blocked from LR and Invoices. | [`ISS-011`](./issues/ISS-011-pricing-page-seed-discrepancy.md), [`ISS-012`](./issues/ISS-012-starter-plan-entitlement-trap.md), [`DEC-001`](./decisions/DEC-001-subscription-pricing-and-entitlements.md), [`TEST-004`](./testing/TEST-004-subscription-feature-gating-quotas.md) |
+| [`**ISSUE-02**`](./issues/ISSUE-02.md) | Complete and Secure Real Subscription Payments | **Resolved** | Test simulation checkout bypass mode remains active; webhook verification lacks automated regression suite. | [`ISS-013`](./issues/ISS-013-unsafe-payment-checkout-simulation.md), [`DEC-001`](./decisions/DEC-001-subscription-pricing-and-entitlements.md), [`TEST-004`](./testing/TEST-004-subscription-feature-gating-quotas.md) |
+| [`**ISSUE-03**`](./issues/ISSUE-03.md) | Harden Authentication and Account Recovery | **Resolved** | Portal OTP login broken by phone schema mismatches; endpoints lack rate limiting against SMS abuse. | [`ISS-006`](./issues/ISS-006-stakeholder-portals-auth-breakdown.md), [`ISS-020`](./issues/ISS-020-portal-otp-rate-limiting-sms-flooding.md), [`IMP-002`](./improvements/IMP-002-granular-rbac-permission-matrix.md), [`TEST-001`](./testing/TEST-001-automated-http-integration-suite.md) |
+| [`**ISSUE-04**`](./issues/ISSUE-04.md) | Verify and Enforce Tenant Isolation Across the Entire API | **Resolved** | Five Express route files completely bypass `resolveTenantContext`; Mongoose plugin misses `updateOne`/`deleteMany`/`aggregate`. | [`ISS-001`](./issues/ISS-001-tenant-context-enforcement.md), [`ISS-002`](./issues/ISS-002-tenant-plugin-interception.md), [`ISS-014`](./issues/ISS-014-mongodb-aggregation-string-companyid.md), [`TEST-002`](./testing/TEST-002-cross-tenant-isolation-suite.md) |
+| [`**ISSUE-05**`](./issues/ISSUE-05.md) | Make Financial Records Dependable & Accounting Sound | **Resolved** | Vendor payouts are one-sided debits; party balances omit payouts; credit notes update wrong field; aggregations zero out profit. | [`ISS-003`](./issues/ISS-003-credit-note-balance-reduction.md), [`ISS-004`](./issues/ISS-004-vendor-payout-ledger-reconciliation.md), [`ISS-010`](./issues/ISS-010-trip-profitability-zero-calculation.md), [`ISS-018`](./issues/ISS-018-acid-transactions-standalone-mongo.md), [`ISS-019`](./issues/ISS-019-client-side-idempotency-key-omission.md), [`TEST-003`](./testing/TEST-003-double-entry-ledger-invariants.md) |
+| [`**ISSUE-06**`](./issues/ISSUE-06.md) | Real Notifications and Background Jobs | **Resolved** | Workers lack distributed multi-node coordination and automated fallback cascade (WhatsApp -> SMS -> Email). | [`IMP-008`](./improvements/IMP-008-notification-multi-channel-failover.md), [`OPS-002`](./operations/OPS-002-distributed-task-processing-bullmq.md) |
+| [`**ISSUE-07**`](./issues/ISSUE-07.md) | Complete Fleet Maintenance Management | **Resolved** | Dashboard counter references non-existent enum `'maintenance'` instead of `'in_maintenance'`, reporting 0. | [`ISS-015`](./issues/ISS-015-dashboard-maintenance-truck-counter.md), [`FEAT-009`](./features/FEAT-009-tyre-lifecycle-management.md) |
+| [`**ISSUE-08**`](./issues/ISSUE-08.md) | Advanced Trip Tracking and Driver Workflows | **Resolved** | Live fleet map query projects wrong field names (`registration_number`), rendering empty telematics markers. | [`ISS-007`](./issues/ISS-007-live-fleet-map-projection-mismatch.md), [`IMP-007`](./improvements/IMP-007-telematics-map-fallback.md), [`FEAT-007`](./features/FEAT-007-driver-mobile-pwa-workflow.md) |
+| [`**ISSUE-09**`](./issues/ISSUE-09.md) | Complete Commercial and Accounting Operations | **Resolved** | UI credit notes sidebar route is dead link; AR aging customer name displays `"—"`; missing GSTIN/PAN regex checks. | [`ISS-008`](./issues/ISS-008-missing-credit-notes-page.md), [`ISS-009`](./issues/ISS-009-ar-aging-customer-name-display.md), [`IMP-001`](./improvements/IMP-001-gstin-pan-validation.md), [`IMP-005`](./improvements/IMP-005-dynamic-tax-recalculation.md), [`FEAT-002`](./features/FEAT-002-gst-einvoicing-irn-qr.md), [`FEAT-008`](./features/FEAT-008-section-194c-tds-engine.md) |
+| [`**ISSUE-10**`](./issues/ISSUE-10.md) | Customer, Driver, and Vendor Self-Service Portals | **Resolved** | Customer login queries non-existent `contact_phone`; vendor login disabled; vendor dashboard is hardcoded mock data. | [`ISS-006`](./issues/ISS-006-stakeholder-portals-auth-breakdown.md), [`ISS-020`](./issues/ISS-020-portal-otp-rate-limiting-sms-flooding.md), [`FEAT-010`](./features/FEAT-010-vendor-portal-end-to-end.md) |
+| [`**ISSUE-11**`](./issues/ISSUE-11.md) | Finish Configurable Company Features | **Resolved** | `branchRoutes` and `approvalRoutes` omit tenant context; custom fields accept prototype pollution and `$where`. | [`ISS-001`](./issues/ISS-001-tenant-context-enforcement.md), [`ISS-021`](./issues/ISS-021-custom-field-key-injection-defense.md), [`IMP-002`](./improvements/IMP-002-granular-rbac-permission-matrix.md) |
+| [`**ISSUE-12**`](./issues/ISSUE-12.md) | Support, Customer Onboarding & Offboarding Lifecycle | **Resolved** | `supportRoutes` omits tenant context; no tenant export engine; member invitations lack expiry state machine. | [`ISS-001`](./issues/ISS-001-tenant-context-enforcement.md), [`FEAT-011`](./features/FEAT-011-tenant-data-export-offboarding.md), [`IMP-003`](./improvements/IMP-003-expiring-member-invitations.md) |
+| [`**ISSUE-13**`](./issues/ISSUE-13.md) | Security, Privacy, and Production Operations | **Resolved** | Public tracking query leaks PII via IDOR; magic byte middleware is unmounted; local storage lacks path jailing. | [`ISS-005`](./issues/ISS-005-public-tracking-privacy-idor.md), [`ISS-016`](./issues/ISS-016-unmounted-file-security-middleware.md), [`ISS-017`](./issues/ISS-017-local-storage-path-traversal.md), [`DEC-003`](./decisions/DEC-003-storage-architecture-s3-vs-local.md), [`OPS-001`](./operations/OPS-001-docker-compose-architecture.md), [`OPS-003`](./operations/OPS-003-backup-retention-disaster-recovery.md), [`OPS-004`](./operations/OPS-004-observability-sentry-apm.md), [`OPS-005`](./operations/OPS-005-deep-health-check-probes.md) |
+| [`**ISSUE-14**`](./issues/ISSUE-14.md) | Public-Facing Marketing Website, Documentation & Legal Compliance | **Resolved** | Marketing pricing page advertises prices and unlimited quotas contradictory to backend billing seeds. | [`ISS-011`](./issues/ISS-011-pricing-page-seed-discrepancy.md), [`ISS-012`](./issues/ISS-012-starter-plan-entitlement-trap.md), [`DEC-001`](./decisions/DEC-001-subscription-pricing-and-entitlements.md) |
