@@ -31,6 +31,14 @@ import {
   createPromoCode,
   togglePromoCode,
 } from '../controllers/superAdminController.js';
+import {
+  requestSupportAccess,
+  activateSupportAccess,
+  emergencySupportAccess,
+  listPlatformSupportSessions,
+  createLockoutTicket,
+  revokeSupportAccess,
+} from '../controllers/supportAccessController.js';
 
 const router = Router();
 
@@ -47,6 +55,14 @@ router.patch('/tenants/:id/plan', assignTenantPlan);
 router.post('/tenants/:id/impersonate', impersonateTenant);
 router.post('/exit-impersonation', exitImpersonation);
 router.get('/audit-logs', getAuditLogs);
+
+// Batch A: Controlled Support Access Lifecycle & Out-of-Band Lockout Intake
+router.post('/support-access/request', requestSupportAccess);
+router.post('/support-access/:id/activate', activateSupportAccess);
+router.post('/support-access/emergency-access', emergencySupportAccess);
+router.get('/support-access', listPlatformSupportSessions);
+router.post('/support-access/:id/revoke', revokeSupportAccess);
+router.post('/support-tickets/lockout-intake', createLockoutTicket);
 
 // Catalog, Tier Entitlements & Commercial Settings
 router.get('/plans-catalog', getPlatformPlansCatalog);

@@ -79,13 +79,24 @@ export interface UploadResult {
 
 const ALLOWED_EXTENSIONS = ['.pdf', '.jpeg', '.jpg', '.png', '.webp'];
 
+export type TenantDocumentEntityType =
+  | 'trucks'
+  | 'drivers'
+  | 'parties'
+  | 'general'
+  | 'receipts'
+  | 'expenses'
+  | 'slips'
+  | 'invoices'
+  | 'pod';
+
 /**
  * Generates an isolated tenant storage key conforming to SaaS partition specs:
  * `tenants/{company_id}/{entity_type}/{YYYY_MM}/{uuid}.{ext}`
  */
 export function generateTenantKey(
   companyId: string,
-  entityType: 'trucks' | 'drivers' | 'parties' | 'general',
+  entityType: TenantDocumentEntityType | string,
   originalFilename: string
 ): string {
   const date = new Date();

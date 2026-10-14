@@ -23,7 +23,14 @@ export interface IPlatformAuditLog extends Document {
     | 'trial_extension'
     | 'subscription_status_override'
     | 'plan_modified'
-    | 'addon_modified';
+    | 'addon_modified'
+    | 'support_access_requested'
+    | 'support_access_approved'
+    | 'support_access_activated'
+    | 'emergency_support_activated'
+    | 'support_access_revoked'
+    | 'support_access_expired'
+    | 'support_ticket_lockout_created';
   target_company_id?: Types.ObjectId;
   target_company_name?: string;
   ip_address?: string;
@@ -47,6 +54,13 @@ const PlatformAuditLogSchema = new Schema<IPlatformAuditLog>(
         'subscription_status_override',
         'plan_modified',
         'addon_modified',
+        'support_access_requested',
+        'support_access_approved',
+        'support_access_activated',
+        'emergency_support_activated',
+        'support_access_revoked',
+        'support_access_expired',
+        'support_ticket_lockout_created',
       ],
       index: true,
     },

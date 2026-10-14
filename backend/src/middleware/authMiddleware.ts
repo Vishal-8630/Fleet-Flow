@@ -44,6 +44,7 @@ import { User, IUser } from '../models/User.js';
 import { Company, ICompany } from '../models/Company.js';
 import { CompanyMember, ICompanyMember, UserRole } from '../models/CompanyMember.js';
 import { tenantStorage } from '../plugins/tenantPlugin.js';
+import { supportSecurityMiddleware } from './supportSecurityMiddleware.js';
 
 // ----------------------------------------------------------------------------
 // TypeScript Global Request Augmentation
@@ -63,6 +64,8 @@ declare global {
       isImpersonation?: boolean;
       impersonationActorEmail?: string;
       requestedCompanyId?: string;
+      supportSessionId?: string;
+      supportScope?: 'diagnostics_readonly' | 'config_write';
     }
   }
 }
@@ -74,6 +77,9 @@ interface JWTPayload {
   isImpersonation?: boolean;
   actorEmail?: string;
   token_version?: number;
+  supportSessionId?: string;
+  supportScope?: 'diagnostics_readonly' | 'config_write';
+  isEmergency?: boolean;
 }
 
 /**
@@ -120,6 +126,8 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     if (decoded.isImpersonation) {
       req.isImpersonation = true;
       req.impersonationActorEmail = decoded.actorEmail;
+      req.supportSessionId = decoded.supportSessionId;
+      req.supportScope = decoded.supportScope;
     }
 
     next();
@@ -152,28 +160,41 @@ export async function resolveTenantContext(req: Request, res: Response, next: Ne
 
     // 1. Handle Platform Super-Admin Impersonation Mode
     if (req.isImpersonation && req.requestedCompanyId) {
-      const company = await Company.findById(req.requestedCompanyId);
-      if (!company || company.is_deleted) {
-        res.status(404).json({ error: 'Impersonated workspace not found or decommissioned.' });
-        return;
-      }
+      // Run through supportSecurityMiddleware for fail-closed DB checks, route/export/receipt locks, and PII masking
+      return supportSecurityMiddleware(req, res, async () => {
+        let company;
+        try {
+          company = await Company.findById(req.requestedCompanyId);
+        } catch (dbErr) {
+          res.status(503).json({
+            code: 'SESSION_VERIFICATION_FAILED',
+            error: 'Workspace verification unavailable. Failing closed.',
+          });
+          return;
+        }
 
-      req.company = company;
-      req.tenant = {
-        id: company._id.toString(),
-        role: 'admin',
-        status: company.subscription_status,
-      };
+        if (!company || company.is_deleted) {
+          res.status(404).json({ error: 'Impersonated workspace not found or decommissioned.' });
+          return;
+        }
 
-      req.member = {
-        user_id: req.user._id,
-        company_id: company._id,
-        role: 'admin',
-        status: 'active',
-      } as any;
+        req.company = company;
+        req.tenant = {
+          id: company._id.toString(),
+          role: 'admin',
+          status: company.subscription_status,
+        };
 
-      return tenantStorage.run({ companyId: company._id.toString() }, () => {
-        next();
+        req.member = {
+          user_id: req.user!._id,
+          company_id: company._id,
+          role: 'admin',
+          status: 'active',
+        } as any;
+
+        return tenantStorage.run({ companyId: company._id.toString() }, () => {
+          next();
+        });
       });
     }
 

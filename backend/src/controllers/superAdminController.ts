@@ -14,6 +14,7 @@
  */
 
 import { Request, Response } from 'express';
+import mongoose from 'mongoose';
 import jwt from 'jsonwebtoken';
 import { Company, ICompany } from '../models/Company.js';
 import { Subscription, ISubscription } from '../models/Subscription.js';
@@ -383,12 +384,21 @@ export async function assignTenantPlan(req: Request, res: Response): Promise<voi
 
 /**
  * POST /api/super-admin/tenants/:id/impersonate
- * Issues a 1-hour secure audited support session into the tenant workspace.
+ * Reconciled under DEC-012: Unconstrained impersonation is strictly disabled.
+ * Requires a valid, approved SupportAccessRequest ID.
  */
 export async function impersonateTenant(req: Request, res: Response): Promise<void> {
   try {
     const { id } = req.params;
-    const { reason } = req.body;
+    const { reason, support_request_id } = req.body;
+
+    if (!support_request_id) {
+      res.status(403).json({
+        code: 'SUPPORT_ACCESS_REQUEST_REQUIRED',
+        error: 'Unconstrained impersonation is disabled by DEC-012 policy. A valid, approved SupportAccessRequest is required. Use /api/super-admin/support-access/request or emergency-access.',
+      });
+      return;
+    }
 
     if (!reason || !reason.trim()) {
       res.status(400).json({ error: 'Support justification reason is strictly required to initiate an impersonation session.' });
@@ -401,7 +411,66 @@ export async function impersonateTenant(req: Request, res: Response): Promise<vo
       return;
     }
 
-    // Generate 1-hour support JWT
+    const { SupportAccessRequest } = await import('../models/SupportAccessRequest.js');
+    const accessRequest = await SupportAccessRequest.findOne({
+      _id: support_request_id,
+      company_id: company._id,
+    });
+
+    if (!accessRequest || !['approved', 'active'].includes(accessRequest.status)) {
+      res.status(403).json({
+        code: 'SUPPORT_SESSION_INVALID',
+        error: 'SupportAccessRequest must be in approved or active state to enter workspace.',
+      });
+      return;
+    }
+
+    if (accessRequest.is_emergency) {
+      res.status(400).json({
+        code: 'EMERGENCY_ROUTE_REQUIRED',
+        error: 'Emergency break-glass requests must use /api/super-admin/support-access/emergency-access.',
+      });
+      return;
+    }
+
+    const durationMinutes = accessRequest.duration_minutes || 30;
+
+    // Wrap session activation and audit log creation atomically in a MongoDB transaction
+    const mongoSession = await mongoose.startSession();
+    try {
+      await mongoSession.withTransaction(async () => {
+        if (accessRequest.status === 'approved') {
+          accessRequest.status = 'active';
+          accessRequest.started_at = new Date();
+          accessRequest.expires_at = new Date(Date.now() + durationMinutes * 60 * 1000);
+          await accessRequest.save({ session: mongoSession });
+        }
+
+        await PlatformAuditLog.create(
+          [
+            {
+              actor_user_id: req.user!._id,
+              actor_email: req.user!.email,
+              action: 'impersonate_tenant',
+              target_company_id: company._id,
+              target_company_name: company.name,
+              ip_address: req.ip,
+              user_agent: req.headers['user-agent'],
+              details: {
+                reason: reason.trim(),
+                support_session_id: accessRequest._id.toString(),
+                token_expires_in: `${durationMinutes}m`,
+              },
+            },
+          ],
+          { session: mongoSession }
+        );
+      });
+    } finally {
+      await mongoSession.endSession();
+    }
+
+    // Generate constrained support JWT with supportSessionId
     const secret = process.env.JWT_SECRET || 'dev_secret_fallback_key';
     const supportToken = jwt.sign(
       {
@@ -409,30 +478,21 @@ export async function impersonateTenant(req: Request, res: Response): Promise<vo
         companyId: company._id.toString(),
         impersonatedCompanyId: company._id.toString(),
         isImpersonation: true,
+        supportSessionId: accessRequest._id.toString(),
+        supportScope: accessRequest.scope,
+        isEmergency: accessRequest.is_emergency,
         actorEmail: req.user!.email,
       },
       secret,
-      { expiresIn: '1h' }
+      { expiresIn: `${durationMinutes}m` }
     );
 
     // Set HttpOnly session cookie
     res.cookie('token', supportToken, getCookieOptions());
 
-    // Audit log
-    await PlatformAuditLog.create({
-      actor_user_id: req.user!._id,
-      actor_email: req.user!.email,
-      action: 'impersonate_tenant',
-      target_company_id: company._id,
-      target_company_name: company.name,
-      ip_address: req.ip,
-      user_agent: req.headers['user-agent'],
-      details: { reason: reason.trim(), token_expires_in: '1h' },
-    });
-
     res.json({
       success: true,
-      message: `Support impersonation session granted for ${company.name} (Valid 1 hour).`,
+      message: `Support impersonation session granted for ${company.name} (Valid ${durationMinutes}m).`,
       impersonation_token: supportToken,
       target_company: {
         id: company._id,

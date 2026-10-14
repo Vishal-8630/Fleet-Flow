@@ -14,7 +14,7 @@
 import mongoose, { Document, Schema, Types } from 'mongoose';
 import { NotificationChannel, NotificationEvent } from './NotificationLog.js';
 
-export type JobStatus = 'pending' | 'processing' | 'delivered' | 'failed' | 'dead_letter' | 'skipped';
+export type JobStatus = 'pending' | 'processing' | 'delivered' | 'failed' | 'dead_letter' | 'skipped' | 'cancelled' | 'staged';
 
 export interface INotificationJob extends Document {
   company_id: Types.ObjectId;
@@ -68,6 +68,7 @@ const NotificationJobSchema = new Schema<INotificationJob>(
         'SETTLEMENT_PAYOUT',
         'INVITATION',
         'INVOICE_ISSUED',
+        'EMERGENCY_ACCESS_GRANTED',
       ],
       required: true,
       index: true,
@@ -83,7 +84,7 @@ const NotificationJobSchema = new Schema<INotificationJob>(
     next_run_at: { type: Date, default: Date.now, index: true },
     status: {
       type: String,
-      enum: ['pending', 'processing', 'delivered', 'failed', 'dead_letter', 'skipped'],
+      enum: ['pending', 'processing', 'delivered', 'failed', 'dead_letter', 'skipped', 'cancelled', 'staged'],
       default: 'pending',
       index: true,
     },
@@ -98,6 +99,7 @@ const NotificationJobSchema = new Schema<INotificationJob>(
   },
   {
     timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
+    writeConcern: { w: 'majority', j: true },
   }
 );
 

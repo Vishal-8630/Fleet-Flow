@@ -53,6 +53,7 @@ import portalRoutes from './routes/portalRoutes.js';
 import branchRoutes from './routes/branchRoutes.js';
 import approvalRoutes from './routes/approvalRoutes.js';
 import supportRoutes from './routes/supportRoutes.js';
+import supportSessionRoutes from './routes/supportSessionRoutes.js';
 import healthRoutes from './routes/healthRoutes.js';
 import publicMarketingRoutes from './routes/publicRoutes.js';
 import { startNotificationWorker } from './workers/notificationWorker.js';
@@ -172,8 +173,9 @@ app.use('/api/portal', portalRoutes);
 app.use('/api/company/branches', branchRoutes);
 app.use('/api/approvals', approvalRoutes);
 
-// Issue 12: Support Desk
+// Issue 12: Support Desk & Batch A Controlled Support Sessions
 app.use('/api/support/tickets', supportRoutes);
+app.use('/api/support/sessions', supportSessionRoutes);
 
 // Issue 14: Public Marketing Endpoints (demo requests, system status)
 app.use('/api/public', publicMarketingRoutes);

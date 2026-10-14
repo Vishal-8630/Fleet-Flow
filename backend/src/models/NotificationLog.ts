@@ -19,7 +19,8 @@ export type NotificationEvent =
   | 'DELIVERY_COMPLETED'
   | 'SETTLEMENT_PAYOUT'
   | 'INVITATION'
-  | 'INVOICE_ISSUED';
+  | 'INVOICE_ISSUED'
+  | 'EMERGENCY_ACCESS_GRANTED';
 export type NotificationStatus = 'queued' | 'sent' | 'delivered' | 'read' | 'failed' | 'skipped';
 
 export interface INotificationLog extends Document {
@@ -64,6 +65,7 @@ const NotificationLogSchema = new Schema<INotificationLog>(
         'SETTLEMENT_PAYOUT',
         'INVITATION',
         'INVOICE_ISSUED',
+        'EMERGENCY_ACCESS_GRANTED',
       ],
       required: true,
       index: true,

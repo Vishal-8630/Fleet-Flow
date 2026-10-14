@@ -31,6 +31,14 @@ export interface ISupportTicket extends Document {
   attachment_urls: string[];
   resolved_at?: Date;
   assigned_to?: Types.ObjectId;
+  intake_channel?: 'in_app' | 'out_of_band_phone_verified' | 'email';
+  out_of_band_verification?: {
+    verification_method: string;
+    operator_id: Types.ObjectId;
+    verified_at: Date;
+    contact_phone?: string;
+    notes?: string;
+  };
   created_at: Date;
   updated_at: Date;
 }
@@ -68,6 +76,19 @@ const SupportTicketSchema = new Schema<ISupportTicket>(
     attachment_urls: [{ type: String }],
     resolved_at: { type: Date },
     assigned_to: { type: Schema.Types.ObjectId, ref: 'User' },
+    intake_channel: {
+      type: String,
+      enum: ['in_app', 'out_of_band_phone_verified', 'email'],
+      default: 'in_app',
+      index: true,
+    },
+    out_of_band_verification: {
+      verification_method: { type: String },
+      operator_id: { type: Schema.Types.ObjectId, ref: 'User' },
+      verified_at: { type: Date },
+      contact_phone: { type: String },
+      notes: { type: String },
+    },
   },
   { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' }, collection: 'support_tickets' }
 );

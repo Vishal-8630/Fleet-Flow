@@ -90,7 +90,30 @@ export async function uploadDocument(req: Request, res: Response): Promise<void>
       return;
     }
 
-    const entityType = (req.body.entityType || 'general') as 'trucks' | 'drivers' | 'parties' | 'general';
+    const rawEntityType = (
+      req.body.entityType ||
+      req.body.entity_type ||
+      req.body.docType ||
+      req.body.doc_type ||
+      'general'
+    ).toString().toLowerCase().trim();
+
+    // Reliably classify document types covering upload through download
+    let entityType: string = 'general';
+    if (['expenses', 'expense', 'diesel', 'slip', 'slips', 'receipt', 'receipts'].includes(rawEntityType)) {
+      entityType = 'receipts';
+    } else if (['invoices', 'invoice', 'bill', 'bills'].includes(rawEntityType)) {
+      entityType = 'invoices';
+    } else if (['pod', 'pods'].includes(rawEntityType)) {
+      entityType = 'pod';
+    } else if (['trucks', 'truck', 'compliance'].includes(rawEntityType)) {
+      entityType = 'trucks';
+    } else if (['drivers', 'driver'].includes(rawEntityType)) {
+      entityType = 'drivers';
+    } else if (['parties', 'party'].includes(rawEntityType)) {
+      entityType = 'parties';
+    }
+
     const originalName = req.file.originalname;
     const mimeType = req.file.mimetype;
     const buffer = req.file.buffer;
