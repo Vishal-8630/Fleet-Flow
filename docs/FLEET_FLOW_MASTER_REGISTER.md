@@ -31,6 +31,8 @@ This document serves as the **central, authoritative master register** for all t
 #### B. Commercial MVP Readiness & Manual QA Test Workbooks
 - **Website Feature Completeness Audit**: [`docs/audit/WEBSITE_FEATURE_COMPLETENESS_AUDIT.md`](./audit/WEBSITE_FEATURE_COMPLETENESS_AUDIT.md) — Exhaustive pre-launch commercial readiness evaluation across UI, API, DB, and SRE.
 - **Complete Website Manual QA Checklist**: [`docs/testing/FLEET_FLOW_COMPLETE_WEBSITE_TEST_CHECKLIST.md`](./testing/FLEET_FLOW_COMPLETE_WEBSITE_TEST_CHECKLIST.md) — 2,300+ line master manual QA test workbook, execution sequence, defect register & retest tracker.
+- **Manual Testing & Decision Handoff**: [`docs/testing/FLEET_FLOW_MANUAL_TESTING_AND_DECISION_HANDOFF.md`](./testing/FLEET_FLOW_MANUAL_TESTING_AND_DECISION_HANDOFF.md) — Master testing observations, findings, decisions & handoff specification.
+- **Central Issue & Decision Index**: [`docs/testing/ISSUE_INDEX.md`](./testing/ISSUE_INDEX.md) — Canonical index for 60 manual testing issues (`FF-ISSUE-001`..`060`), 12 design decisions (`DEC-001`..`012`), and 14 unresolved questions (`QST-001`..`014`).
 - **Manual QA Evidence Directory Guide**: [`docs/testing/evidence/README.md`](./testing/evidence/README.md) — Standards and naming rules for visual screenshots, network captures, and console logs.
 
 #### C. Engineering Batch Execution & Milestone Verification Reports (Batches 1–6)
