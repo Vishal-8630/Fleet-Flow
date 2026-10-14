@@ -4,8 +4,8 @@
 
 - **Decision ID:** DEC-008
 - **Title:** Completed Trip Operational Locks and Reason-Audited Late Corrections
-- **Status:** Approved
-- **Date:** Approved design direction
+- **Status:** Proposed — Pending Review
+- **Date:** October 2026
 - **Source:** `docs/testing/FLEET_FLOW_MANUAL_TESTING_AND_DECISION_HANDOFF.md`
 - **Related Issues:** [FF-ISSUE-035](../issues/trip-lifecycle/FF-ISSUE-035-draft-trip-ineligible-operational-actions.md), [FF-ISSUE-037](../issues/trip-lifecycle/FF-ISSUE-037-completed-trip-operational-actions-editable.md), [FF-ISSUE-038](../issues/trip-lifecycle/FF-ISSUE-038-fuel-stops-milestones-edit-missing.md), [FF-ISSUE-039](../issues/trip-lifecycle/FF-ISSUE-039-cash-expenses-edit-voucher-missing.md)
 
@@ -13,45 +13,83 @@
 
 ## 1. Context and Problem Statement
 
-Completed trips with verified PODs and closed settlements are frequently subjected to unauthorized modifications, corrupting historical freight billing and driver payroll calculations.
+Completed trips with verified Proof of Delivery (POD) and finalized driver payroll settlements are currently exposed to unauthorized modifications in the UI and API. Unrestricted edits corrupt historical freight billing, double-entry general ledgers, and tax compliance records.
 
-## 2. Decision Statement
+---
 
-1. Once a trip achieves `COMPLETED` status (or signed POD is verified), all routine operational action buttons (Add Check-In, Add Fuel Stop, Record Expense, Swap Driver) become read-only and locked.
-2. Any post-completion modification, late entry, or financial correction requires an Authorized Correction workflow:
-   - Restricted to authorized roles (Admin or Operations Manager).
-   - Requires a mandatory justification reason.
-   - Generates an immutable audit trail capturing user ID, timestamp, field changed, previous value, new value, and justification.
-   - If the trip has already been invoiced or settled, adjustment journal entries must be generated rather than directly mutating finalized records.
+## 2. Decision Statement & Proposed Policy
+
+> [!IMPORTANT]
+> **Current Status: PROPOSED — PENDING REVIEW**  
+> **Proposed Policy:** Company Admin approval is required for every post-completion trip correction, regardless of amount.  
+> - **Routine Operational Actions Locked:** Routine operational actions (Add Check-In, Add Fuel Stop, Record Driver Expense, Swap Driver) remain restricted and read-only once a trip achieves `completed` status.  
+> - **Company Admin Approval Required:** Every post-completion modification, late entry, or financial correction requires explicit **Company Admin** approval, regardless of transaction amount.  
+> - **No Threshold or Role Exceptions:** Do **NOT** introduce an Accountant exception or an amount-based threshold (e.g., no autonomous approvals under ₹2,000 or ₹5,000).  
+> - **Mandatory Reason & Immutable Audit Trail:** Every late correction must capture a mandatory justification reason, user ID, timestamp, before/after values, and an auditable record.  
+> - **DO NOT IMPLEMENT THIS POLICY YET.** This policy represents the product owner's proposed position and is awaiting formal implementation authorization.
+
+### Proposed Workflow Rules
+1. **Routine Action Immutability:** When a trip achieves `completed` status (or verified delivery closeout), all routine operational buttons become disabled/read-only on the frontend, and backend endpoints reject routine PUT/POST operational requests with HTTP 409 Conflict.
+2. **Authorized Late Correction Workflow:**
+   - Any late fuel slip, toll receipt, en-route expense, or odometer correction must be submitted as a **Late Trip Adjustment Request**.
+   - Requires explicit approval by a user holding the **Company Admin** role.
+   - Requires a mandatory textual justification reason.
+   - Produces an immutable audit trail entry capturing user identity, timestamp, field altered, previous value, new value, and justification.
+   - If the trip has already been invoiced or included in a finalized driver settlement, adjusting journal entries must be generated rather than directly mutating closed ledger entries.
+
+---
 
 ## 3. Alternatives Considered and Trade-Offs
 
-Completely locking trips with zero adjustment capability was rejected because real-world fuel slips or toll receipts frequently arrive days after trip completion.
+1. **Complete Lock Without Adjustment Capability:** Rejected because real-world freight slips (highway tolls, delayed fuel receipts) frequently arrive days after a vehicle returns to depot.
+2. **Accountant Autonomous Approval Below Threshold:** Evaluated in audit planning (e.g., permitting accountants to approve small adjustments under ₹5,000). **REJECTED BY PRODUCT OWNER.** All adjustments, regardless of amount, modify closed operational records and must require Company Admin approval to prevent payroll leakages.
+3. **Company Admin Approval for All Adjustments (Proposed Policy):** Selected because it enforces strict governance, ensures management oversight over completed contracts, and maintains accounting integrity.
+
+---
 
 ## 4. Consequences
 
-Backend must reject routine PUT/POST operational endpoints when trip is COMPLETED. An adjustment endpoint (`POST /api/trips/:id/adjustments`) must be provided for audited late entries.
+- Routine mutation endpoints (`addMilestone`, `addDieselStop`, `addDriverExpense`) must assert `journey.status !== 'completed'`.
+- A dedicated late adjustment endpoint (`POST /api/operations/journeys/:id/adjustments`) and approval mechanism must be developed.
+- Audit logging must record complete diffs with reason codes.
 
-## 5. Implementation Implications
+---
 
-State machine enforcement on all trip sub-resources. Audit log collection stores structured diffs with reason codes.
+## 5. Implementation Implications (When Authorized)
+
+- Add state machine precondition check in `journeyController.ts`.
+- Build Late Adjustment Request schema and UI modal requiring Company Admin credentials and justification text.
+- Integrate with `ApprovalRequest` workflow or dedicated adjustment audit trail.
+
+---
 
 ## 6. Acceptance Criteria and Verification Requirements
 
-- [ ] Trip detail page locks routine operational inputs when trip status is Completed.
-- [ ] Backend endpoints reject routine operational mutations on Completed trips with HTTP 409 Conflict.
-- [ ] Authorized Late Entry modal requires justification reason and authorization credentials.
-- [ ] Audit log records all post-completion edits with complete before/after snapshots.
+- [ ] Decision status is documented as **PROPOSED — PENDING REVIEW**.
+- [ ] Trip detail page displays completed trips as read-only for routine operational actions.
+- [ ] Backend rejects routine operational mutations on completed trips with HTTP 409 Conflict.
+- [ ] Post-completion corrections require Company Admin approval, regardless of amount.
+- [ ] No Accountant autonomous threshold is permitted.
+- [ ] All adjustments require a mandatory reason and are logged to the audit trail.
+- [ ] No application code changes are made until explicit implementation authorization is granted.
+
+---
 
 ## 7. Explicit Scope Boundaries
 
-Applies to completed trips and verified market movements.
+Applies to completed trips and verified commercial dispatches. Does not restrict active trips in transit or draft journeys prior to departure.
+
+---
 
 ## 8. What is Not Yet Implemented or Verified
 
-Backend lock enforcement on completed trips (FF-ISSUE-037) and late entry audit workflow are not yet implemented.
+This policy is **NOT YET IMPLEMENTED**. Currently, backend controllers omit `journey.status` guards, allowing routine operational actions on completed trips ([FF-ISSUE-037](../issues/trip-lifecycle/FF-ISSUE-037-completed-trip-operational-actions-editable.md)).
+
+---
 
 ## 9. Related Issues and Artifacts
 
 - Related Issues: [FF-ISSUE-035](../issues/trip-lifecycle/FF-ISSUE-035-draft-trip-ineligible-operational-actions.md), [FF-ISSUE-037](../issues/trip-lifecycle/FF-ISSUE-037-completed-trip-operational-actions-editable.md), [FF-ISSUE-038](../issues/trip-lifecycle/FF-ISSUE-038-fuel-stops-milestones-edit-missing.md), [FF-ISSUE-039](../issues/trip-lifecycle/FF-ISSUE-039-cash-expenses-edit-voucher-missing.md)
+- Audit Question: [OPN-008](../audit/AUDIT_OPEN_QUESTIONS.md#opn-008-authorization-threshold-for-completed-trip-corrections-dec-008-qst-013)
+- Implementation Batch: [Batch C](../audit/IMPLEMENTATION_BATCH_PLAN.md#batch-c-core-fleet-assignments-driver-handover--trip-state-machine-locks)
 - Source Document: `docs/testing/FLEET_FLOW_MANUAL_TESTING_AND_DECISION_HANDOFF.md`

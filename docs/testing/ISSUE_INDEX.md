@@ -18,6 +18,12 @@ This document provides a single, authoritative, navigable index linking to every
 3. **Execution Invariant:** Do not implement fixes in ad-hoc batches. All development must follow the governance rules outlined in Section 7 of the handoff.
 4. **Special Retest Constraint:** **`FF-ISSUE-058` / `QST-014` (Incognito authentication/session bug)** must be retested strictly **LAST** after all other fixes are completed, as requested by the user.
 
+### Comprehensive Audit & Implementation Planning Artifacts:
+- **[Comprehensive Issue & Question Audit Report](audit/ISSUE_AUDIT_REPORT.md)**: Full line-by-line evidence audit across all 60 issues and 14 questions.
+- **[Prioritized Implementation Batch Plan](audit/IMPLEMENTATION_BATCH_PLAN.md)**: Sequenced Batches A through G plus final Incognito retest.
+- **[Architectural Dependency Map](audit/DEPENDENCY_MAP.md)**: Mermaid topology and cross-cutting component cluster analysis.
+- **[Audit Open Questions & Product Decisions](audit/AUDIT_OPEN_QUESTIONS.md)**: Catalog of items requiring product owner sign-off.
+
 ---
 
 ## 2. Summary Statistics
@@ -132,16 +138,16 @@ This document provides a single, authoritative, navigable index linking to every
 | :--- | :--- | :--- | :--- | :--- |
 | **DEC-001** | DEC-001 — Fleet Flow Pricing, Tiering, and Quota Matrix | **Approved** | Core Architecture / Governance | [View Decision](decisions/DEC-001-pricing-quota-matrix.md) |
 | **DEC-002** | DEC-002 — Mandatory MongoDB Replica Sets Across Environments | **Approved** | Core Architecture / Governance | [View Decision](decisions/DEC-002-mongodb-replica-sets.md) |
-| **DEC-003** | DEC-003 — Production S3 and Object Storage Enforcement | **Pending Approval** | Core Architecture / Governance | [View Decision](decisions/DEC-003-production-s3-object-storage.md) |
+| **DEC-003** | DEC-003 — Production S3 and Object Storage Enforcement | **Pending Review** | Core Architecture / Governance | [View Decision](decisions/DEC-003-production-s3-object-storage.md) |
 | **DEC-004** | DEC-004 — Freight Invoice Eligibility Post Delivery and POD by Default | **Approved** | Core Architecture / Governance | [View Decision](decisions/DEC-004-freight-invoice-eligibility.md) |
 | **DEC-005** | DEC-005 — Freight Invoice Creation Dual Access Paths | **Approved** | Core Architecture / Governance | [View Decision](decisions/DEC-005-invoice-creation-dual-paths.md) |
 | **DEC-006** | DEC-006 — Manual and Automatic Payment Allocation to Invoices | **Approved** | Core Architecture / Governance | [View Decision](decisions/DEC-006-payment-allocation-methods.md) |
-| **DEC-007** | DEC-007 — Customer Credit Limit Exceeded Warning and Authorized Override | **Approved** | Core Architecture / Governance | [View Decision](decisions/DEC-007-credit-limit-warning-and-override.md) |
-| **DEC-008** | DEC-008 — Completed Trip Operational Locks and Reason-Audited Late Corrections | **Approved** | Core Architecture / Governance | [View Decision](decisions/DEC-008-completed-trip-operational-locks.md) |
+| **DEC-007** | DEC-007 — Customer Credit Limit Exceeded Warning and Authorized Override | **Proposed — Pending Review** | Core Architecture / Governance | [View Decision](decisions/DEC-007-credit-limit-warning-and-override.md) |
+| **DEC-008** | DEC-008 — Completed Trip Operational Locks and Reason-Audited Late Corrections | **Proposed — Pending Review** | Core Architecture / Governance | [View Decision](decisions/DEC-008-completed-trip-operational-locks.md) |
 | **DEC-009** | DEC-009 — Decoupled Lorry Receipt (LR) and Trip Workflow Architecture | **Approved** | Core Architecture / Governance | [View Decision](decisions/DEC-009-lr-trip-workflow-architecture.md) |
 | **DEC-010** | DEC-010 — Branches and Regional Hubs Organizational and Operational Model | **Agreed** | Core Architecture / Governance | [View Decision](decisions/DEC-010-branches-hubs-operational-model.md) |
 | **DEC-011** | DEC-011 — Notification Delivery Tracking, Webhook Reliability, and Audit Architecture | **Scope Locked** | Core Architecture / Governance | [View Decision](decisions/DEC-011-notification-delivery-reliability-scope.md) |
-| **DEC-012** | DEC-012 — Tenant Privacy Architecture and Controlled Support Impersonation Access | **Scope Locked** | Core Architecture / Governance | [View Decision](decisions/DEC-012-tenant-privacy-controlled-support-access.md) |
+| **DEC-012** | DEC-012 — Tenant Privacy Architecture and Controlled Support Impersonation Access | **Scope Locked (Policies A–D Proposed — Pending Review)** | Core Architecture / Governance | [View Decision](decisions/DEC-012-tenant-privacy-controlled-support-access.md) |
 
 ---
 

@@ -33,6 +33,10 @@ This document serves as the **central, authoritative master register** for all t
 - **Complete Website Manual QA Checklist**: [`docs/testing/FLEET_FLOW_COMPLETE_WEBSITE_TEST_CHECKLIST.md`](./testing/FLEET_FLOW_COMPLETE_WEBSITE_TEST_CHECKLIST.md) — 2,300+ line master manual QA test workbook, execution sequence, defect register & retest tracker.
 - **Manual Testing & Decision Handoff**: [`docs/testing/FLEET_FLOW_MANUAL_TESTING_AND_DECISION_HANDOFF.md`](./testing/FLEET_FLOW_MANUAL_TESTING_AND_DECISION_HANDOFF.md) — Master testing observations, findings, decisions & handoff specification.
 - **Central Issue & Decision Index**: [`docs/testing/ISSUE_INDEX.md`](./testing/ISSUE_INDEX.md) — Canonical index for 60 manual testing issues (`FF-ISSUE-001`..`060`), 12 design decisions (`DEC-001`..`012`), and 14 unresolved questions (`QST-001`..`014`).
+- **Comprehensive Issue & Question Audit Report**: [`docs/testing/audit/ISSUE_AUDIT_REPORT.md`](./testing/audit/ISSUE_AUDIT_REPORT.md) — Exhaustive line-by-line evidence audit across all 60 issues and 14 questions.
+- **Prioritized Implementation Batch Plan**: [`docs/testing/audit/IMPLEMENTATION_BATCH_PLAN.md`](./testing/audit/IMPLEMENTATION_BATCH_PLAN.md) — Sequenced Batches A through G plus final Incognito retest.
+- **Architectural Dependency Map**: [`docs/testing/audit/DEPENDENCY_MAP.md`](./testing/audit/DEPENDENCY_MAP.md) — Mermaid topology and cross-cutting component cluster analysis.
+- **Audit Open Questions & Product Decisions**: [`docs/testing/audit/AUDIT_OPEN_QUESTIONS.md`](./testing/audit/AUDIT_OPEN_QUESTIONS.md) — Catalog of technical and business questions requiring product owner sign-off.
 - **Manual QA Evidence Directory Guide**: [`docs/testing/evidence/README.md`](./testing/evidence/README.md) — Standards and naming rules for visual screenshots, network captures, and console logs.
 
 #### C. Engineering Batch Execution & Milestone Verification Reports (Batches 1–6)
