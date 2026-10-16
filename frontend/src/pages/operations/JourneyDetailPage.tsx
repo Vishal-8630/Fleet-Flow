@@ -143,6 +143,12 @@ export const JourneyDetailPage: React.FC = () => {
       setIsCreditWarningOpen(false);
       setCreditExposureData(null);
       queryClient.invalidateQueries({ queryKey: ['journey-detail', id] });
+      queryClient.invalidateQueries({ queryKey: ['journeys'] });
+      queryClient.invalidateQueries({ queryKey: ['journey-metrics'] });
+      queryClient.invalidateQueries({ queryKey: ['available-trucks'] });
+      queryClient.invalidateQueries({ queryKey: ['trucks'] });
+      queryClient.invalidateQueries({ queryKey: ['drivers'] });
+      queryClient.invalidateQueries({ queryKey: ['active-drivers'] });
     },
     onError: (err: any) => {
       if (err.response?.status === 409 && err.response?.data?.code === 'CREDIT_LIMIT_EXCEEDED') {
@@ -169,6 +175,8 @@ export const JourneyDetailPage: React.FC = () => {
       setIsMilestoneModalOpen(false);
       setMilestoneForm({ location: '', notes: '' });
       queryClient.invalidateQueries({ queryKey: ['journey-detail', id] });
+      queryClient.invalidateQueries({ queryKey: ['journeys'] });
+      queryClient.invalidateQueries({ queryKey: ['journey-metrics'] });
     },
     onError: (err: any) => {
       toast.error(err.response?.data?.error || err.message || 'Failed to log milestone.');
@@ -202,6 +210,7 @@ export const JourneyDetailPage: React.FC = () => {
         slip_url: '',
       });
       queryClient.invalidateQueries({ queryKey: ['journey-detail', id] });
+      queryClient.invalidateQueries({ queryKey: ['journeys'] });
     },
     onError: (err: any) => {
       toast.error(err.response?.data?.error || err.message || 'Failed to record fuel stop.');
@@ -224,6 +233,7 @@ export const JourneyDetailPage: React.FC = () => {
       setIsExpenseModalOpen(false);
       setExpenseForm({ expense_type: 'toll', amount: '', notes: '', receipt_url: '' });
       queryClient.invalidateQueries({ queryKey: ['journey-detail', id] });
+      queryClient.invalidateQueries({ queryKey: ['journeys'] });
     },
     onError: (err: any) => {
       toast.error(err.response?.data?.error || err.message || 'Failed to log expense.');
@@ -246,6 +256,8 @@ export const JourneyDetailPage: React.FC = () => {
       setIsDelayModalOpen(false);
       setDelayForm({ location: '', delay_hours: '2', reason: 'traffic', notes: '' });
       queryClient.invalidateQueries({ queryKey: ['journey-detail', id] });
+      queryClient.invalidateQueries({ queryKey: ['journeys'] });
+      queryClient.invalidateQueries({ queryKey: ['journey-metrics'] });
     },
     onError: (err: any) => {
       toast.error(err.response?.data?.error || err.message || 'Failed to record delay.');
@@ -268,6 +280,12 @@ export const JourneyDetailPage: React.FC = () => {
       setIsPodModalOpen(false);
       setPodForm({ contact_name: '', end_odometer_kms: '', pod_slip_url: '', notes: '' });
       queryClient.invalidateQueries({ queryKey: ['journey-detail', id] });
+      queryClient.invalidateQueries({ queryKey: ['journeys'] });
+      queryClient.invalidateQueries({ queryKey: ['journey-metrics'] });
+      queryClient.invalidateQueries({ queryKey: ['available-trucks'] });
+      queryClient.invalidateQueries({ queryKey: ['trucks'] });
+      queryClient.invalidateQueries({ queryKey: ['drivers'] });
+      queryClient.invalidateQueries({ queryKey: ['active-drivers'] });
     },
     onError: (err: any) => {
       toast.error(err.response?.data?.error || err.message || 'Failed to close out journey.');

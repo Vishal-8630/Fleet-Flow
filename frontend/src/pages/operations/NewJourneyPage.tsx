@@ -22,7 +22,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import api from '../../api/client';
 import { PageHeader } from '../../components/common/PageHeader';
@@ -45,6 +45,7 @@ import {
 
 export const NewJourneyPage: React.FC = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   // Form State
   const [formData, setFormData] = useState({
@@ -159,6 +160,12 @@ export const NewJourneyPage: React.FC = () => {
     },
     onSuccess: (data) => {
       toast.success(data.message || 'Journey created successfully.');
+      queryClient.invalidateQueries({ queryKey: ['journeys'] });
+      queryClient.invalidateQueries({ queryKey: ['journey-metrics'] });
+      queryClient.invalidateQueries({ queryKey: ['available-trucks'] });
+      queryClient.invalidateQueries({ queryKey: ['trucks'] });
+      queryClient.invalidateQueries({ queryKey: ['drivers'] });
+      queryClient.invalidateQueries({ queryKey: ['active-drivers'] });
       navigate(`/operations/journeys/${data.journey._id}`);
     },
     onError: (err: any) => {

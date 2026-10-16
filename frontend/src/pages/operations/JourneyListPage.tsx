@@ -97,6 +97,10 @@ export const JourneyListPage: React.FC = () => {
       toast.success(data.message || 'Vehicle dispatched successfully.');
       queryClient.invalidateQueries({ queryKey: ['journeys'] });
       queryClient.invalidateQueries({ queryKey: ['journey-metrics'] });
+      queryClient.invalidateQueries({ queryKey: ['available-trucks'] });
+      queryClient.invalidateQueries({ queryKey: ['trucks'] });
+      queryClient.invalidateQueries({ queryKey: ['drivers'] });
+      queryClient.invalidateQueries({ queryKey: ['active-drivers'] });
     },
     onError: (err: any) => {
       toast.error(err.response?.data?.error || err.message || 'Dispatch failed.');
@@ -119,6 +123,10 @@ export const JourneyListPage: React.FC = () => {
       setMilestoneLocation('');
       setMilestoneNotes('');
       queryClient.invalidateQueries({ queryKey: ['journeys'] });
+      queryClient.invalidateQueries({ queryKey: ['journey-metrics'] });
+      if (selectedJourneyId) {
+        queryClient.invalidateQueries({ queryKey: ['journey-detail', selectedJourneyId] });
+      }
     },
     onError: (err: any) => {
       toast.error(err.response?.data?.error || err.message || 'Failed to log milestone.');

@@ -59,6 +59,19 @@ export interface IStatusHistoryEntry {
 }
 
 /**
+ * Mid-trip driver handover entry (OPN-003)
+ */
+export interface IDriverHandover {
+  outgoing_driver_id: Types.ObjectId;
+  incoming_driver_id: Types.ObjectId;
+  handover_odometer: number;
+  reason: string;
+  notes?: string;
+  timestamp: Date;
+  authorized_by?: Types.ObjectId;
+}
+
+/**
  * Route checkpoint for intermediate stops between origin and destination
  */
 export interface IRouteCheckpoint {
@@ -131,6 +144,27 @@ export interface IDriverExpense {
 }
 
 /**
+ * DEC-008 Audited Completed-Trip Adjustment Record
+ */
+export interface IJourneyAdjustment {
+  _id?: Types.ObjectId;
+  adjustment_id: string;
+  adjustment_type: 'driver_expense' | 'fuel_stop' | 'non_financial';
+  action: 'create' | 'update' | 'delete';
+  target_id?: Types.ObjectId;
+  target_field?: string;
+  previous_snapshot?: Record<string, any>;
+  new_snapshot?: Record<string, any>;
+  justification: string;
+  actor_id?: Types.ObjectId;
+  actor_name?: string;
+  actor_role?: string;
+  applied_at: Date;
+  journal_id?: string;
+  financial_impact?: number;
+}
+
+/**
  * Main TruckJourney interface
  */
 export interface ITruckJourney extends Document {
@@ -142,6 +176,7 @@ export interface ITruckJourney extends Document {
   // Resource allocations
   truck_id: Types.ObjectId;
   driver_id: Types.ObjectId;
+  driver_handover_history?: IDriverHandover[];
   billing_party_id?: Types.ObjectId; // Optional customer for commercial linkage
 
   // Route & Schedule
@@ -204,6 +239,7 @@ export interface ITruckJourney extends Document {
   // Settlement reconciliation
   is_settled: boolean;
   settlement_id?: Types.ObjectId;
+  adjustments?: IJourneyAdjustment[];
 
   // Soft delete flag
   is_deleted: boolean;
@@ -255,6 +291,17 @@ const TruckJourneySchema = new Schema<ITruckJourney>(
       required: true,
       index: true,
     },
+    driver_handover_history: [
+      {
+        outgoing_driver_id: { type: Schema.Types.ObjectId, ref: 'Driver', required: true },
+        incoming_driver_id: { type: Schema.Types.ObjectId, ref: 'Driver', required: true },
+        handover_odometer: { type: Number, required: true },
+        reason: { type: String, required: true, trim: true },
+        notes: { type: String, trim: true },
+        timestamp: { type: Date, default: Date.now },
+        authorized_by: { type: Schema.Types.ObjectId, ref: 'User' },
+      },
+    ],
     billing_party_id: {
       type: Schema.Types.ObjectId,
       ref: 'BillingParty',
@@ -485,6 +532,34 @@ const TruckJourneySchema = new Schema<ITruckJourney>(
       type: Schema.Types.ObjectId,
       ref: 'Settlement',
     },
+
+    // DEC-008 Completed-Trip Audited Adjustments
+    adjustments: [
+      {
+        adjustment_id: { type: String, required: true },
+        adjustment_type: {
+          type: String,
+          enum: ['driver_expense', 'fuel_stop', 'non_financial'],
+          required: true,
+        },
+        action: {
+          type: String,
+          enum: ['create', 'update', 'delete'],
+          default: 'update',
+        },
+        target_id: { type: Schema.Types.ObjectId },
+        target_field: { type: String, trim: true },
+        previous_snapshot: { type: Schema.Types.Mixed },
+        new_snapshot: { type: Schema.Types.Mixed },
+        justification: { type: String, required: true, trim: true },
+        actor_id: { type: Schema.Types.ObjectId, ref: 'User' },
+        actor_name: { type: String, trim: true },
+        actor_role: { type: String, trim: true },
+        applied_at: { type: Date, default: Date.now },
+        journal_id: { type: String, trim: true },
+        financial_impact: { type: Number, default: 0 },
+      },
+    ],
 
     is_deleted: {
       type: Boolean,

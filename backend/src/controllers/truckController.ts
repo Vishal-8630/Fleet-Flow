@@ -20,10 +20,13 @@
  */
 
 import { Request, Response } from 'express';
+import { Types } from 'mongoose';
 import { Truck, ITruck, ComplianceStatus } from '../models/Truck.js';
 import { Driver } from '../models/Driver.js';
 import { validateCustomFieldsPayload } from '../utils/customFieldValidator.js';
 import { getTenantEntitlements } from '../utils/entitlementService.js';
+import { runInTransaction, ConfigurationError } from '../utils/transactionHelper.js';
+import { logAuditEvent } from '../utils/auditService.js';
 
 /**
  * 1. listTrucks
@@ -347,34 +350,109 @@ export async function updateTruck(req: Request, res: Response): Promise<void> {
 /**
  * 5. deleteTruck
  * ----------------------------------------------------------------------------
- * Soft-deletes a vehicle from the active fleet.
+ * Soft-deletes a vehicle from the active fleet and atomically detaches any
+ * currently assigned driver while closing active assignment history records.
  */
 export async function deleteTruck(req: Request, res: Response): Promise<void> {
   try {
-    const { id } = req.params;
+    const id = req.params.id as string;
+    const companyId = req.tenant?.id;
 
-    const truck = await Truck.findOne({ _id: id, is_deleted: false });
+    if (!id || typeof id !== 'string' || !Types.ObjectId.isValid(id)) {
+      res.status(400).json({ error: 'Invalid vehicle ID format.' });
+      return;
+    }
+
+    const truck = await Truck.findOne({ _id: id, company_id: companyId, is_deleted: false });
     if (!truck) {
+      const foreignTruck = await Truck.findOne({ _id: id, is_deleted: false }, '_id', { skipTenantCheck: true });
+      if (foreignTruck) {
+        res.status(403).json({ error: 'Invalid vehicle reference: Vehicle does not belong to your workspace.' });
+        return;
+      }
       res.status(404).json({ error: 'Vehicle not found.' });
       return;
     }
 
-    // Unassign driver if currently attached
-    if (truck.current_driver_id) {
-      await Driver.updateOne(
-        { _id: truck.current_driver_id },
-        { current_truck_id: undefined }
-      );
-    }
+    await runInTransaction(async (session) => {
+      const sessTruck = await Truck.findOne({ _id: id, company_id: companyId, is_deleted: false }).session(session);
+      if (!sessTruck) {
+        const err: any = new Error('Vehicle not found.');
+        err.statusCode = 404;
+        throw err;
+      }
 
-    truck.is_deleted = true;
-    truck.status = 'decommissioned';
-    await truck.save();
+      const now = new Date();
+
+      // Unassign driver if currently attached
+      if (sessTruck.current_driver_id) {
+        const driverId = sessTruck.current_driver_id;
+
+        // Close open assignment in truck.driver_assignments
+        for (let i = sessTruck.driver_assignments.length - 1; i >= 0; i--) {
+          const entry = sessTruck.driver_assignments[i];
+          if (String(entry.driver_id) === String(driverId) && !entry.unassigned_at) {
+            entry.unassigned_at = now;
+            break;
+          }
+        }
+        sessTruck.current_driver_id = undefined;
+
+        // Close open assignment in driver.assignment_history & unset current_truck_id
+        const sessDriver = await Driver.findOne({ _id: driverId, company_id: companyId, is_deleted: false }).session(session);
+        if (sessDriver) {
+          for (let i = sessDriver.assignment_history.length - 1; i >= 0; i--) {
+            const entry = sessDriver.assignment_history[i];
+            if (String(entry.truck_id) === String(sessTruck._id) && !entry.unassigned_at) {
+              entry.unassigned_at = now;
+              break;
+            }
+          }
+          sessDriver.current_truck_id = undefined;
+          await sessDriver.save({ session });
+          await Driver.updateOne(
+            { _id: driverId, company_id: companyId },
+            { $unset: { current_truck_id: 1 } },
+            { session }
+          );
+        }
+      }
+
+      sessTruck.is_deleted = true;
+      sessTruck.status = 'decommissioned';
+      await sessTruck.save({ session });
+
+      await Truck.updateOne(
+        { _id: sessTruck._id, company_id: companyId },
+        { $unset: { current_driver_id: 1 } },
+        { session }
+      );
+
+      await logAuditEvent({
+        company_id: companyId,
+        entity_type: 'truck' as any,
+        entity_id: sessTruck._id,
+        entity_identifier: sessTruck.truck_no,
+        action: 'DELETE',
+        description: `Vehicle ${sessTruck.truck_no} decommissioned and removed from active fleet.`,
+        req,
+        session,
+        after_snapshot: {
+          is_deleted: true,
+          status: 'decommissioned',
+          current_driver_id: null,
+        },
+      });
+    });
 
     res.json({ message: `Vehicle ${truck.truck_no} removed from fleet.` });
   } catch (error: any) {
+    if (error instanceof ConfigurationError) {
+      res.status(500).json({ error: error.message, code: 'CONFIGURATION_ERROR' });
+      return;
+    }
     console.error('Error deleting truck:', error);
-    res.status(500).json({ error: 'Failed to delete vehicle.' });
+    res.status(error.statusCode || 500).json({ error: error.message || 'Failed to delete vehicle.' });
   }
 }
 
@@ -383,10 +461,12 @@ export async function deleteTruck(req: Request, res: Response): Promise<void> {
  * ----------------------------------------------------------------------------
  * Atomically binds a driver to a vehicle asset while maintaining historical
  * assignment logs on both Driver and Truck records.
+ * Uses MongoDB ACID transactions and explicit $unset operations to guarantee
+ * dual-pointer consistency and prevent orphaned pointers.
  */
 export async function assignDriver(req: Request, res: Response): Promise<void> {
   try {
-    const { id } = req.params;
+    const id = req.params.id as string;
     const { driverId, notes } = req.body;
 
     if (!driverId) {
@@ -394,67 +474,191 @@ export async function assignDriver(req: Request, res: Response): Promise<void> {
       return;
     }
 
+    const companyId = req.tenant?.id;
+    if (!companyId) {
+      res.status(401).json({ error: 'Unauthorized: Tenant context required.' });
+      return;
+    }
+
+    if (!id || typeof id !== 'string' || !Types.ObjectId.isValid(id) || !Types.ObjectId.isValid(driverId)) {
+      res.status(400).json({ error: 'Invalid ID format.' });
+      return;
+    }
+
+    // Tenant Scoping & Ownership Validation
     const [truck, driver] = await Promise.all([
-      Truck.findOne({ _id: id, is_deleted: false }),
-      Driver.findOne({ _id: driverId, is_deleted: false }),
+      Truck.findOne({ _id: id, company_id: companyId, is_deleted: false }),
+      Driver.findOne({ _id: driverId, company_id: companyId, is_deleted: false }),
     ]);
 
     if (!truck) {
+      const foreignTruck = await Truck.findOne({ _id: id, is_deleted: false }, '_id', { skipTenantCheck: true });
+      if (foreignTruck) {
+        res.status(403).json({ error: 'Invalid vehicle reference: Vehicle does not belong to your workspace.' });
+        return;
+      }
       res.status(404).json({ error: 'Vehicle not found.' });
       return;
     }
+
     if (!driver) {
+      const foreignDriver = await Driver.findOne({ _id: driverId, is_deleted: false }, '_id', { skipTenantCheck: true });
+      if (foreignDriver) {
+        res.status(403).json({ error: 'Invalid driver reference: Driver does not belong to your workspace.' });
+        return;
+      }
       res.status(404).json({ error: 'Driver not found.' });
       return;
     }
 
-    // If truck already has a driver assigned, unassign the old driver
-    if (truck.current_driver_id && String(truck.current_driver_id) !== String(driver._id)) {
-      await Driver.updateOne(
-        { _id: truck.current_driver_id },
-        { current_truck_id: undefined }
-      );
-      // Mark assignment unassigned timestamp
-      const lastAssignment = truck.driver_assignments[truck.driver_assignments.length - 1];
-      if (lastAssignment && !lastAssignment.unassigned_at) {
-        lastAssignment.unassigned_at = new Date();
+    // Execute atomic reconciliation in a MongoDB ACID transaction
+    const result = await runInTransaction(async (session) => {
+      const sessTruck = await Truck.findOne({ _id: id, company_id: companyId, is_deleted: false }).session(session);
+      const sessDriver = await Driver.findOne({ _id: driverId, company_id: companyId, is_deleted: false }).session(session);
+
+      if (!sessTruck) {
+        const err: any = new Error('Vehicle not found.');
+        err.statusCode = 404;
+        throw err;
       }
-    }
+      if (!sessDriver) {
+        const err: any = new Error('Driver not found.');
+        err.statusCode = 404;
+        throw err;
+      }
 
-    // If driver is currently assigned to another truck, detach that truck
-    if (driver.current_truck_id && String(driver.current_truck_id) !== String(truck._id)) {
-      await Truck.updateOne(
-        { _id: driver.current_truck_id },
-        { current_driver_id: undefined }
-      );
-    }
+      const now = new Date();
 
-    // Attach to truck
-    truck.current_driver_id = driver._id as any;
-    truck.driver_assignments.push({
-      driver_id: driver._id as any,
-      assigned_at: new Date(),
-      notes: notes || `Assigned to ${driver.name}`,
+      // Case: Already assigned to each other
+      if (
+        String(sessTruck.current_driver_id || '') === String(sessDriver._id) &&
+        String(sessDriver.current_truck_id || '') === String(sessTruck._id)
+      ) {
+        return {
+          truck: sessTruck,
+          driver: sessDriver,
+          message: `Driver ${sessDriver.name} is already assigned to ${sessTruck.truck_no}.`,
+        };
+      }
+
+      // Step 1: If truck already has a different driver assigned, detach that old driver
+      if (sessTruck.current_driver_id && String(sessTruck.current_driver_id) !== String(sessDriver._id)) {
+        const oldDriverId = sessTruck.current_driver_id;
+        const oldDriver = await Driver.findOne({ _id: oldDriverId, company_id: companyId, is_deleted: false }).session(session);
+
+        if (oldDriver) {
+          // Close open assignment in old driver's assignment_history
+          for (let i = oldDriver.assignment_history.length - 1; i >= 0; i--) {
+            const entry = oldDriver.assignment_history[i];
+            if (String(entry.truck_id) === String(sessTruck._id) && !entry.unassigned_at) {
+              entry.unassigned_at = now;
+              break;
+            }
+          }
+          oldDriver.current_truck_id = undefined;
+          await oldDriver.save({ session });
+          // Guarantee explicit MongoDB $unset
+          await Driver.updateOne(
+            { _id: oldDriverId, company_id: companyId },
+            { $unset: { current_truck_id: 1 } },
+            { session }
+          );
+        }
+
+        // Close open assignment in sessTruck.driver_assignments for oldDriverId
+        for (let i = sessTruck.driver_assignments.length - 1; i >= 0; i--) {
+          const entry = sessTruck.driver_assignments[i];
+          if (String(entry.driver_id) === String(oldDriverId) && !entry.unassigned_at) {
+            entry.unassigned_at = now;
+            break;
+          }
+        }
+      }
+
+      // Step 2: If driver is currently assigned to a different truck, detach that old truck
+      if (sessDriver.current_truck_id && String(sessDriver.current_truck_id) !== String(sessTruck._id)) {
+        const oldTruckId = sessDriver.current_truck_id;
+        const oldTruck = await Truck.findOne({ _id: oldTruckId, company_id: companyId, is_deleted: false }).session(session);
+
+        if (oldTruck) {
+          // Close open assignment in old truck's driver_assignments
+          for (let i = oldTruck.driver_assignments.length - 1; i >= 0; i--) {
+            const entry = oldTruck.driver_assignments[i];
+            if (String(entry.driver_id) === String(sessDriver._id) && !entry.unassigned_at) {
+              entry.unassigned_at = now;
+              break;
+            }
+          }
+          oldTruck.current_driver_id = undefined;
+          await oldTruck.save({ session });
+          // Guarantee explicit MongoDB $unset
+          await Truck.updateOne(
+            { _id: oldTruckId, company_id: companyId },
+            { $unset: { current_driver_id: 1 } },
+            { session }
+          );
+        }
+
+        // Close open assignment in sessDriver.assignment_history for oldTruckId
+        for (let i = sessDriver.assignment_history.length - 1; i >= 0; i--) {
+          const entry = sessDriver.assignment_history[i];
+          if (String(entry.truck_id) === String(oldTruckId) && !entry.unassigned_at) {
+            entry.unassigned_at = now;
+            break;
+          }
+        }
+      }
+
+      // Step 3: Attach driver to truck
+      sessTruck.current_driver_id = sessDriver._id as any;
+      sessTruck.driver_assignments.push({
+        driver_id: sessDriver._id as any,
+        assigned_at: now,
+        notes: notes || `Assigned to ${sessDriver.name}`,
+      });
+      await sessTruck.save({ session });
+
+      // Step 4: Attach truck to driver
+      sessDriver.current_truck_id = sessTruck._id as any;
+      sessDriver.assignment_history.push({
+        truck_id: sessTruck._id as any,
+        assigned_at: now,
+        notes: notes || `Assigned to ${sessTruck.truck_no}`,
+      });
+      await sessDriver.save({ session });
+
+      // Step 5: Audit Log
+      await logAuditEvent({
+        company_id: companyId,
+        entity_type: 'truck' as any,
+        entity_id: sessTruck._id,
+        entity_identifier: sessTruck.truck_no,
+        action: 'UPDATE',
+        description: `Driver ${sessDriver.name} assigned to vehicle ${sessTruck.truck_no}.`,
+        req,
+        session,
+        after_snapshot: {
+          current_driver_id: sessDriver._id,
+          assigned_at: now,
+          notes,
+        },
+      });
+
+      return {
+        truck: sessTruck,
+        driver: sessDriver,
+        message: `Driver ${sessDriver.name} assigned to ${sessTruck.truck_no}.`,
+      };
     });
-    await truck.save();
 
-    // Attach to driver
-    driver.current_truck_id = truck._id as any;
-    driver.assignment_history.push({
-      truck_id: truck._id as any,
-      assigned_at: new Date(),
-      notes: notes || `Assigned to ${truck.truck_no}`,
-    });
-    await driver.save();
-
-    res.json({
-      message: `Driver ${driver.name} assigned to ${truck.truck_no}.`,
-      truck,
-      driver,
-    });
+    res.json(result);
   } catch (error: any) {
+    if (error instanceof ConfigurationError) {
+      res.status(500).json({ error: error.message, code: 'CONFIGURATION_ERROR' });
+      return;
+    }
     console.error('Error assigning driver to truck:', error);
-    res.status(500).json({ error: 'Failed to assign driver.' });
+    res.status(error.statusCode || 500).json({ error: error.message || 'Failed to assign driver.' });
   }
 }
 
@@ -462,13 +666,31 @@ export async function assignDriver(req: Request, res: Response): Promise<void> {
  * 7. unassignDriver
  * ----------------------------------------------------------------------------
  * Detaches the current driver from a vehicle.
+ * Uses MongoDB ACID transactions and explicit $unset operations to guarantee
+ * dual-pointer consistency and close open historical assignment records.
  */
 export async function unassignDriver(req: Request, res: Response): Promise<void> {
   try {
-    const { id } = req.params;
+    const id = req.params.id as string;
 
-    const truck = await Truck.findOne({ _id: id, is_deleted: false });
+    const companyId = req.tenant?.id;
+    if (!companyId) {
+      res.status(401).json({ error: 'Unauthorized: Tenant context required.' });
+      return;
+    }
+
+    if (!id || typeof id !== 'string' || !Types.ObjectId.isValid(id)) {
+      res.status(400).json({ error: 'Invalid vehicle ID format.' });
+      return;
+    }
+
+    const truck = await Truck.findOne({ _id: id, company_id: companyId, is_deleted: false });
     if (!truck) {
+      const foreignTruck = await Truck.findOne({ _id: id, is_deleted: false }, '_id', { skipTenantCheck: true });
+      if (foreignTruck) {
+        res.status(403).json({ error: 'Invalid vehicle reference: Vehicle does not belong to your workspace.' });
+        return;
+      }
       res.status(404).json({ error: 'Vehicle not found.' });
       return;
     }
@@ -478,28 +700,87 @@ export async function unassignDriver(req: Request, res: Response): Promise<void>
       return;
     }
 
-    const driverId = truck.current_driver_id;
+    const result = await runInTransaction(async (session) => {
+      const sessTruck = await Truck.findOne({ _id: id, company_id: companyId, is_deleted: false }).session(session);
+      if (!sessTruck) {
+        const err: any = new Error('Vehicle not found.');
+        err.statusCode = 404;
+        throw err;
+      }
 
-    // Update truck
-    truck.current_driver_id = undefined;
-    const lastAssignment = truck.driver_assignments[truck.driver_assignments.length - 1];
-    if (lastAssignment && !lastAssignment.unassigned_at) {
-      lastAssignment.unassigned_at = new Date();
-    }
-    await truck.save();
+      if (!sessTruck.current_driver_id) {
+        const err: any = new Error('No driver is currently assigned to this vehicle.');
+        err.statusCode = 400;
+        throw err;
+      }
 
-    // Update driver
-    await Driver.updateOne(
-      { _id: driverId },
-      { current_truck_id: undefined }
-    );
+      const driverId = sessTruck.current_driver_id;
+      const now = new Date();
 
-    res.json({
-      message: `Driver detached from vehicle ${truck.truck_no}.`,
-      truck,
+      // Step 1: Update truck - close open assignment & unset current_driver_id
+      for (let i = sessTruck.driver_assignments.length - 1; i >= 0; i--) {
+        const entry = sessTruck.driver_assignments[i];
+        if (String(entry.driver_id) === String(driverId) && !entry.unassigned_at) {
+          entry.unassigned_at = now;
+          break;
+        }
+      }
+      sessTruck.current_driver_id = undefined;
+      await sessTruck.save({ session });
+      await Truck.updateOne(
+        { _id: sessTruck._id, company_id: companyId },
+        { $unset: { current_driver_id: 1 } },
+        { session }
+      );
+
+      // Step 2: Update driver - close open assignment history & unset current_truck_id
+      const sessDriver = await Driver.findOne({ _id: driverId, company_id: companyId, is_deleted: false }).session(session);
+      if (sessDriver) {
+        for (let i = sessDriver.assignment_history.length - 1; i >= 0; i--) {
+          const entry = sessDriver.assignment_history[i];
+          if (String(entry.truck_id) === String(sessTruck._id) && !entry.unassigned_at) {
+            entry.unassigned_at = now;
+            break;
+          }
+        }
+        sessDriver.current_truck_id = undefined;
+        await sessDriver.save({ session });
+        await Driver.updateOne(
+          { _id: driverId, company_id: companyId },
+          { $unset: { current_truck_id: 1 } },
+          { session }
+        );
+      }
+
+      // Step 3: Audit Log
+      await logAuditEvent({
+        company_id: companyId,
+        entity_type: 'truck' as any,
+        entity_id: sessTruck._id,
+        entity_identifier: sessTruck.truck_no,
+        action: 'UPDATE',
+        description: `Driver ${sessDriver ? sessDriver.name : driverId} detached from vehicle ${sessTruck.truck_no}.`,
+        req,
+        session,
+        after_snapshot: {
+          current_driver_id: null,
+          unassigned_at: now,
+        },
+      });
+
+      return {
+        truck: sessTruck,
+        message: `Driver detached from vehicle ${sessTruck.truck_no}.`,
+      };
     });
+
+    res.json(result);
   } catch (error: any) {
+    if (error instanceof ConfigurationError) {
+      res.status(500).json({ error: error.message, code: 'CONFIGURATION_ERROR' });
+      return;
+    }
     console.error('Error unassigning driver:', error);
-    res.status(500).json({ error: 'Failed to unassign driver.' });
+    res.status(error.statusCode || 500).json({ error: error.message || 'Failed to unassign driver.' });
   }
 }
