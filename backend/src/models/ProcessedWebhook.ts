@@ -21,7 +21,7 @@ import mongoose, { Document, Schema } from 'mongoose';
 
 export interface IProcessedWebhook extends Document {
   event_id: string;
-  source: 'razorpay' | 'stripe' | 'manual';
+  source: 'razorpay' | 'stripe' | 'whatsapp' | 'manual';
   event_type: string;
   payload: Record<string, any>;
   processed_at: Date;
@@ -33,7 +33,7 @@ export interface IProcessedWebhook extends Document {
 const ProcessedWebhookSchema = new Schema<IProcessedWebhook>(
   {
     event_id: { type: String, required: true, unique: true, index: true },
-    source: { type: String, required: true, enum: ['razorpay', 'stripe', 'manual'], default: 'razorpay' },
+    source: { type: String, required: true, enum: ['razorpay', 'stripe', 'whatsapp', 'manual'], default: 'razorpay' },
     event_type: { type: String, required: true, index: true },
     payload: { type: Schema.Types.Mixed, required: true },
     processed_at: { type: Date, default: () => new Date() },

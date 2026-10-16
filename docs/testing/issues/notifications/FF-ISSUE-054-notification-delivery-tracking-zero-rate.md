@@ -5,12 +5,12 @@
 - **ID:** FF-ISSUE-054
 - **Category:** Bug / Notifications
 - **Priority:** High
-- **Status:** Observed / Needs Verification
+- **Status:** **Resolved (Batch F)**
 - **Affected module:** Communications & Notification Delivery Logs
 - **Source:** `docs/testing/FLEET_FLOW_MANUAL_TESTING_AND_DECISION_HANDOFF.md` (Section 4.F, Notification Delivery Logs)
 - **Related issues:** [FF-ISSUE-055](FF-ISSUE-055-notification-retry-webhook-lifecycle.md)
-- **Related decisions:** [DEC-011](../../decisions/DEC-011-notification-reliability-and-retries.md)
-- **Implementation status:** Not implemented
+- **Related decisions:** [DEC-011](../../decisions/DEC-011-notification-delivery-reliability-scope.md)
+- **Implementation status:** Implemented & Verified (Batch F)
 
 ## 1. Summary
 
@@ -53,20 +53,29 @@ Operators cannot tell whether automated WhatsApp alerts (trip dispatches, settle
 2. Update metric calculator to provide clear breakdown: `Dispatched`, `Delivered`, `Pending Confirmation`, `Failed`.
 
 ## 9. Acceptance criteria
-
-- [ ] Delivery receipt webhooks update notification status from `sent` to `delivered`.
-- [ ] Delivered Ratio accurately calculates `delivered / (total dispatched - skipped)`.
-- [ ] Message rows display receipt timestamps and delivery status timelines.
-
+ 
+- [x] Delivery receipt webhooks update notification status from `sent` to `delivered`.
+- [x] Delivered Ratio accurately calculates `delivered / (total dispatched - skipped)`.
+- [x] Message rows display receipt timestamps and delivery status timelines.
+ 
 ## 10. Required tests
-
-- Integration tests simulating delivery receipt webhooks and verifying metric accuracy.
-
+ 
+- Integration tests simulating delivery receipt webhooks and verifying metric accuracy: `backend/src/tests/integration/phase6BatchFNotificationTracking.test.ts`.
+ 
 ## 11. Dependencies and related issues
-
-- Governed by [DEC-011](../../decisions/DEC-011-notification-reliability-and-retries.md).
+ 
+- Governed by [DEC-011](../../decisions/DEC-011-notification-delivery-reliability-scope.md).
 - Related to [FF-ISSUE-055](FF-ISSUE-055-notification-retry-webhook-lifecycle.md).
-
+ 
 ## 12. Verification evidence
-
-- Implementation and verification evidence pending.
+ 
+- **Automated Integration Tests:** `phase6BatchFNotificationTracking.test.ts` (21 tests passing).
+  - Verified webhook ingestion transitions message status to `delivered` with `delivered_at` timestamp.
+  - Verified delivered ratio calculation formula: `Math.round((delivered / eligibleCount) * 100)` where `eligibleCount = total - skipped`.
+  - Verified pending confirmation counter is returned to UI (`pending: stats.sent`), eliminating unexplained 0% ratio.
+- **Frontend Dashboard:** Updated `NotificationLogsPage.tsx` with:
+  - 5-metric KPI cards: Total Dispatched, Confirmed Delivered Ratio, Pending Confirmation, Failed Deliveries, Skipped (DND).
+  - Explicit pending receipt badge with tooltip `Awaiting gateway delivery receipt webhook confirmation`.
+  - Row badges showing `Sent (Pending)`.
+  - 4-stage lifecycle timeline (`Queued` → `Dispatched` → `Delivered` → `Read`).
+- **Production Build:** `npm --prefix frontend run build` (`tsc -b && vite build`) passed with zero errors.

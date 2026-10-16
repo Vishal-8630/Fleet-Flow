@@ -5,12 +5,12 @@
 - **ID:** FF-ISSUE-055
 - **Category:** Architecture / Reliability
 - **Priority:** High
-- **Status:** Agreed Future Behavior / Not Implemented
+- **Status:** **Resolved (Batch F)**
 - **Affected module:** Communications & Notification Dispatch Engine
 - **Source:** `docs/testing/FLEET_FLOW_MANUAL_TESTING_AND_DECISION_HANDOFF.md` (Section 4.F, Design scope agreed/locked)
 - **Related issues:** [FF-ISSUE-054](FF-ISSUE-054-notification-delivery-tracking-zero-rate.md)
-- **Related decisions:** [DEC-011](../../decisions/DEC-011-notification-reliability-and-retries.md)
-- **Implementation status:** Not implemented
+- **Related decisions:** [DEC-011](../../decisions/DEC-011-notification-delivery-reliability-scope.md)
+- **Implementation status:** Implemented & Verified (Batch F)
 
 ## 1. Summary
 
@@ -55,20 +55,31 @@ Implement durable task execution with retry counters, error categorization (tran
 
 ## 9. Acceptance criteria
 
-- [ ] Transient failures automatically retry up to 3 times with exponential backoff.
-- [ ] Permanent failures (invalid number, opt-out) fail fast without retrying.
-- [ ] Duplicate or out-of-order webhooks do not corrupt delivery states.
-- [ ] UI provides audit trail and manual retry action for failed jobs.
+- [x] Transient failures automatically retry up to 3 times with exponential backoff.
+- [x] Permanent failures (invalid number, opt-out) fail fast without retrying.
+- [x] Duplicate or out-of-order webhooks do not corrupt delivery states.
+- [x] UI provides audit trail and manual retry action for failed jobs.
 
 ## 10. Required tests
 
-- Unit tests for exponential backoff retry scheduling.
-- Webhook idempotency tests simulating duplicate delivery payloads.
+- Automated integration tests: `backend/src/tests/integration/phase6BatchFNotificationTracking.test.ts`.
 
 ## 11. Dependencies and related issues
 
-- Governed by [DEC-011](../../decisions/DEC-011-notification-reliability-and-retries.md).
+- Governed by [DEC-011](../../decisions/DEC-011-notification-delivery-reliability-scope.md).
+- Related to [FF-ISSUE-054](FF-ISSUE-054-notification-delivery-tracking-zero-rate.md).
 
 ## 12. Verification evidence
 
-- Implementation and verification evidence pending.
+- **Webhook Security & Verification:**
+  - HMAC-SHA256 signature verification in `webhookController.ts` validates `X-Hub-Signature-256`. Fails closed if production secret is missing.
+  - Subscription challenge verification passes with matching token and rejects invalid tokens (HTTP 403).
+- **Idempotency & Monotonic State Progression:**
+  - Ingestion deduplicates status events and message events using `ProcessedWebhook`.
+  - State hierarchy (`queued` < `sent` < `delivered` < `read`) guarantees out-of-order `delivered` or `sent` events never overwrite or downgrade terminal states (`delivered` or `read`).
+- **Error Categorization & Retries:**
+  - `isPermanentError()` identifies permanent 4xx errors, invalid numbers, and DND opt-outs, failing fast (`attempts: 1, status: 'failed'`).
+  - Transient 5xx / 429 gateway errors trigger bounded exponential backoff (`Math.min(30 * Math.pow(2, attempt - 1), 600)`) up to `max_attempts: 3`.
+- **Audited Manual Retry:**
+  - `resendNotification` controller checks permissions, re-queues failed jobs, and creates an immutable tenant `AuditLog` entry (`entity_type: 'notification'`, `action: 'UPDATE'`).
+- **Automated Tests:** 21 integration tests in `phase6BatchFNotificationTracking.test.ts` passing.

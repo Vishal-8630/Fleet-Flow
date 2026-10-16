@@ -21,6 +21,7 @@ import mongoose from 'mongoose';
 import os from 'os';
 import { NotificationJob, INotificationJob } from '../models/NotificationJob.js';
 import { NotificationLog } from '../models/NotificationLog.js';
+import { ProcessedWebhook } from '../models/ProcessedWebhook.js';
 import { OptOutRegistry } from '../models/OptOutRegistry.js';
 import { SupportAccessRequest } from '../models/SupportAccessRequest.js';
 import { PlatformSecurityAlert, IPlatformSecurityAlert } from '../models/PlatformSecurityAlert.js';
@@ -72,6 +73,65 @@ export function calculateBackoffSeconds(attempt: number): number {
 }
 
 /**
+ * Categorizes whether an error is permanent (e.g. invalid phone, unallocated number, DND, 4xx)
+ * or transient (e.g. 5xx, gateway timeout, 429 rate limit).
+ * Permanent errors must fail fast without retrying.
+ */
+export function isPermanentError(errorMsg?: string): boolean {
+  if (!errorMsg) return false;
+  const lower = errorMsg.toLowerCase();
+  return (
+    lower.includes('invalid recipient') ||
+    lower.includes('invalid phone') ||
+    lower.includes('opted out') ||
+    lower.includes('dnd') ||
+    lower.includes('not a whatsapp user') ||
+    lower.includes('unregistered') ||
+    lower.includes('http 400') ||
+    lower.includes('http 401') ||
+    lower.includes('http 403') ||
+    lower.includes('http 404') ||
+    lower.includes('parameter value is not valid') ||
+    lower.includes('template does not exist') ||
+    lower.includes('template name invalid') ||
+    lower.includes('unsupported channel')
+  );
+}
+
+/**
+ * Simulates receipt of an asynchronous delivery webhook in non-production environments.
+ * STRICT SAFETY INVARIANT: Throws immediately if invoked in production.
+ */
+export async function simulateWebhookDeliveryReceipt(providerMessageId: string): Promise<boolean> {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('Simulated receipts are strictly prohibited in production');
+  }
+
+  const log = await NotificationLog.findOne({ provider_message_id: providerMessageId });
+  if (!log) return false;
+
+  const eventId = `whatsapp_status_${providerMessageId}_delivered`;
+  const existingEvent = await ProcessedWebhook.findOne({ event_id: eventId });
+  if (existingEvent) return false;
+
+  if (log.status !== 'delivered' && log.status !== 'read') {
+    log.status = 'delivered';
+    log.delivered_at = new Date();
+    await log.save();
+  }
+
+  await ProcessedWebhook.create({
+    event_id: eventId,
+    source: 'whatsapp',
+    event_type: 'message.delivered',
+    payload: { id: providerMessageId, status: 'delivered', simulated: true },
+    status: 'success',
+  });
+
+  return true;
+}
+
+/**
  * Processes a single notification job from the queue
  */
 export async function processNotificationJob(job: INotificationJob): Promise<{ success: boolean; status: string }> {
@@ -113,7 +173,7 @@ export async function processNotificationJob(job: INotificationJob): Promise<{ s
     }
 
     // 2. Dispatch based on channel
-    let dispatchResult: { success: boolean; messageId: string; error?: string };
+    let dispatchResult: { success: boolean; messageId: string; error?: string; isSimulated?: boolean };
 
     if (job.channel === 'whatsapp') {
       dispatchResult = await sendWhatsAppTemplate({
@@ -181,7 +241,7 @@ export async function processNotificationJob(job: INotificationJob): Promise<{ s
         }
       }
 
-      job.status = 'delivered';
+      job.status = 'provider_accepted';
       job.provider_message_id = dispatchResult.messageId;
       job.attempts += 1;
       await job.save();
@@ -191,10 +251,23 @@ export async function processNotificationJob(job: INotificationJob): Promise<{ s
           status: 'sent',
           provider_message_id: dispatchResult.messageId,
           retry_count: job.attempts,
-          delivered_at: new Date(),
         });
       }
-      return { success: true, status: 'delivered' };
+
+      // In non-production, schedule simulated delivery receipt only when explicitly enabled
+      if (
+        dispatchResult.isSimulated &&
+        process.env.NODE_ENV !== 'production' &&
+        process.env.ENABLE_SIMULATED_WEBHOOK_RECEIPTS === 'true'
+      ) {
+        setImmediate(() => {
+          simulateWebhookDeliveryReceipt(dispatchResult.messageId).catch((err) => {
+            console.error('[Simulated Webhook Receipt Error]:', err.message);
+          });
+        });
+      }
+
+      return { success: true, status: 'sent' };
     }
 
     // 4. Handle Failure & Exponential Backoff
@@ -242,7 +315,24 @@ export async function processNotificationJob(job: INotificationJob): Promise<{ s
     job.attempts += 1;
     job.last_error = dispatchResult.error || 'Provider dispatch failed';
 
-    if (job.attempts >= job.max_attempts) {
+    // PERMANENT FAILURE: Fail fast immediately without retrying
+    if (isPermanentError(job.last_error)) {
+      job.status = 'failed';
+      await job.save();
+
+      if (job.notification_log_id) {
+        await NotificationLog.findByIdAndUpdate(job.notification_log_id, {
+          status: 'failed',
+          retry_count: job.attempts,
+          error_message: job.last_error,
+        });
+      }
+      return { success: false, status: 'failed_permanent' };
+    }
+
+    // TRANSIENT FAILURE: Bounded retries up to DEC-011 limit (max 3 attempts)
+    const maxRetries = Math.min(job.max_attempts || 3, 3);
+    if (job.attempts >= maxRetries) {
       job.status = 'dead_letter';
       await job.save();
 

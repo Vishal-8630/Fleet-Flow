@@ -107,8 +107,9 @@ export const NotificationLogsPage: React.FC = () => {
     );
   }
 
-  const stats = data?.stats || { total: 0, delivered: 0, sent: 0, queued: 0, failed: 0, skipped: 0 };
-  const deliveredPercentage = stats.total > 0 ? Math.round((stats.delivered / stats.total) * 100) : 0;
+  const stats = data?.stats || { total: 0, delivered: 0, sent: 0, queued: 0, failed: 0, skipped: 0, pending: 0, delivered_ratio: 0 };
+  const deliveredPercentage = stats.delivered_ratio ?? (stats.total > 0 ? Math.round((stats.delivered / Math.max(1, stats.total - (stats.skipped || 0))) * 100) : 0);
+  const pendingCount = stats.pending ?? stats.sent ?? 0;
 
   return (
     <div className="page-shell">
@@ -153,7 +154,26 @@ export const NotificationLogsPage: React.FC = () => {
             <div className="commercial-metric-val" style={{ color: '#059669' }}>
               {deliveredPercentage}%
             </div>
-            <div className="commercial-metric-label">Delivered Ratio ({stats.delivered})</div>
+            <div className="commercial-metric-label">
+              Delivered Ratio ({stats.delivered})
+              {pendingCount > 0 && stats.delivered === 0 && (
+                <span style={{ display: 'block', fontSize: '0.68rem', color: '#b45309', fontWeight: 500, marginTop: '2px' }}>
+                  ({pendingCount} awaiting receipt)
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="commercial-metric-card">
+          <div className="commercial-metric-icon" style={{ backgroundColor: 'rgba(217, 119, 6, 0.1)', color: '#d97706' }}>
+            <Clock size={22} />
+          </div>
+          <div className="commercial-metric-content">
+            <div className="commercial-metric-val" style={{ color: pendingCount > 0 ? '#d97706' : 'var(--text-primary)' }}>
+              {pendingCount}
+            </div>
+            <div className="commercial-metric-label">Pending Confirmation</div>
           </div>
         </div>
 
@@ -365,9 +385,9 @@ export const NotificationLogsPage: React.FC = () => {
                           <span>Read</span>
                         </span>
                       ) : log.status === 'sent' ? (
-                        <span className="badge badge-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
-                          <Check size={12} />
-                          <span>Sent</span>
+                        <span className="badge badge-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }} title="Dispatched to gateway; awaiting delivery receipt callback">
+                          <Clock size={12} />
+                          <span>Sent (Pending)</span>
                         </span>
                       ) : log.status === 'queued' ? (
                         <span className="badge badge-warning" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
@@ -484,6 +504,66 @@ export const NotificationLogsPage: React.FC = () => {
                 </code>
               </div>
             )}
+
+            {/* Delivery Lifecycle Timeline */}
+            <div style={{ padding: '0.875rem 1rem', backgroundColor: 'var(--bg-app, #f8fafc)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color, #e2e8f0)' }}>
+              <div style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.75rem', letterSpacing: '0.04em' }}>
+                Delivery Lifecycle Progress
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative' }}>
+                {/* Stage 1: Queued */}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 1, minWidth: '60px' }}>
+                  <div style={{ width: '24px', height: '24px', borderRadius: '50%', backgroundColor: '#10b981', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Check size={13} />
+                  </div>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 600, marginTop: '4px' }}>Queued</span>
+                  <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                    {new Date(selectedLog.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </div>
+
+                <div style={{ flex: 1, height: '2px', backgroundColor: selectedLog.status !== 'queued' ? '#10b981' : '#cbd5e1', margin: '0 4px', marginBottom: '18px' }} />
+
+                {/* Stage 2: Dispatched */}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 1, minWidth: '70px' }}>
+                  <div style={{ width: '24px', height: '24px', borderRadius: '50%', backgroundColor: selectedLog.status === 'failed' ? '#ef4444' : selectedLog.status !== 'queued' ? '#10b981' : '#cbd5e1', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {selectedLog.status === 'failed' ? <AlertTriangle size={13} /> : <Check size={13} />}
+                  </div>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 600, marginTop: '4px' }}>
+                    {selectedLog.status === 'failed' ? 'Failed' : 'Dispatched'}
+                  </span>
+                  <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                    {selectedLog.provider_message_id ? 'Gateway OK' : selectedLog.status === 'failed' ? 'Error' : 'Pending'}
+                  </span>
+                </div>
+
+                <div style={{ flex: 1, height: '2px', backgroundColor: selectedLog.status === 'delivered' || selectedLog.status === 'read' ? '#10b981' : '#cbd5e1', margin: '0 4px', marginBottom: '18px' }} />
+
+                {/* Stage 3: Delivered */}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 1, minWidth: '70px' }}>
+                  <div style={{ width: '24px', height: '24px', borderRadius: '50%', backgroundColor: selectedLog.status === 'delivered' || selectedLog.status === 'read' ? '#10b981' : selectedLog.status === 'sent' ? '#d97706' : '#cbd5e1', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {selectedLog.status === 'delivered' || selectedLog.status === 'read' ? <CheckCheck size={13} /> : <Clock size={13} />}
+                  </div>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 600, marginTop: '4px' }}>Delivered</span>
+                  <span style={{ fontSize: '0.68rem', color: selectedLog.delivered_at ? 'var(--text-muted)' : '#d97706' }}>
+                    {selectedLog.delivered_at ? new Date(selectedLog.delivered_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : selectedLog.status === 'sent' ? 'Awaiting Receipt' : 'Pending'}
+                  </span>
+                </div>
+
+                <div style={{ flex: 1, height: '2px', backgroundColor: selectedLog.status === 'read' ? '#0284c7' : '#cbd5e1', margin: '0 4px', marginBottom: '18px' }} />
+
+                {/* Stage 4: Read */}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 1, minWidth: '60px' }}>
+                  <div style={{ width: '24px', height: '24px', borderRadius: '50%', backgroundColor: selectedLog.status === 'read' ? '#0284c7' : '#cbd5e1', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <CheckCheck size={13} />
+                  </div>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 600, marginTop: '4px' }}>Read</span>
+                  <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                    {selectedLog.status === 'read' ? 'Opened' : 'Unopened'}
+                  </span>
+                </div>
+              </div>
+            </div>
 
             {selectedLog.error_message && (
               <div style={{ padding: '0.75rem 1rem', backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: 'var(--radius-md)', color: '#991b1b', fontSize: 'var(--font-size-sm)' }}>

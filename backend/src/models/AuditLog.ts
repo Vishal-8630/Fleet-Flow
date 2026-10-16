@@ -27,7 +27,8 @@ export type AuditEntityType =
   | 'truck'
   | 'driver'
   | 'party'
-  | 'company_settings';
+  | 'company_settings'
+  | 'notification';
 
 export interface IAuditLog extends Document {
   company_id: Types.ObjectId;
@@ -55,7 +56,7 @@ const AuditLogSchema = new Schema<IAuditLog>(
     },
     entity_type: {
       type: String,
-      enum: ['journey', 'entry', 'invoice', 'settlement', 'truck', 'driver', 'party', 'company_settings'],
+      enum: ['journey', 'entry', 'invoice', 'settlement', 'truck', 'driver', 'party', 'company_settings', 'notification'],
       required: true,
       index: true,
     },

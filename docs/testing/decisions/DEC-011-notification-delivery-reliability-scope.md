@@ -4,8 +4,8 @@
 
 - **Decision ID:** DEC-011
 - **Title:** Notification Delivery Tracking, Webhook Reliability, and Audit Architecture
-- **Status:** Scope Locked
-- **Date:** Scope locked for future work
+- **Status:** **Implemented (Batch F)**
+- **Date:** Implemented in Batch F
 - **Source:** `docs/testing/FLEET_FLOW_MANUAL_TESTING_AND_DECISION_HANDOFF.md`
 - **Related Issues:** [FF-ISSUE-054](../issues/notifications/FF-ISSUE-054-notification-delivery-tracking-zero-rate.md), [FF-ISSUE-055](../issues/notifications/FF-ISSUE-055-notification-retry-webhook-lifecycle.md)
 
@@ -35,22 +35,22 @@ Requires dedicated notification webhook endpoints, signature verification middle
 
 ## 5. Implementation Implications
 
-Implement `notificationDeliveryWebhook` controller, idempotency cache using provider message ID, and update metrics calculation formula.
+Implemented HMAC-SHA256 signature verification in `webhookController.ts`, idempotency cache via `ProcessedWebhook`, bounded retry worker in `notificationWorker.ts`, and updated `getNotificationLogs` metric formulas in `notificationController.ts`.
 
 ## 6. Acceptance Criteria and Verification Requirements
 
-- [ ] DEC-011 scope is locked. Implementation not authorized in this documentation phase.
-- [ ] Upon future implementation: Delivery logs display exact lifecycle state and timeline.
-- [ ] Duplicate webhooks do not duplicate log entries or corrupt metrics.
-- [ ] Delivery ratio metric accurately reflects confirmed delivery receipts.
+- [x] DEC-011 scope is fully implemented and verified in Batch F.
+- [x] Delivery logs display exact lifecycle state and timeline.
+- [x] Duplicate webhooks do not duplicate log entries or corrupt metrics.
+- [x] Delivery ratio metric accurately reflects confirmed delivery receipts.
 
 ## 7. Explicit Scope Boundaries
 
 Covers transactional operational notifications (WhatsApp, SMS, Email). Marketing bulk broadcast systems are explicitly out of scope.
 
-## 8. What is Not Yet Implemented or Verified
+## 8. Implementation & Verification Status
 
-Webhook ingestion, delivery receipt reconciliation, and retry queues are not implemented (FF-ISSUE-054, FF-ISSUE-055).
+Implemented and verified in Batch F. All 21 tests in `backend/src/tests/integration/phase6BatchFNotificationTracking.test.ts` pass cleanly, and the frontend dashboard compiles with 0 type errors.
 
 ## 9. Related Issues and Artifacts
 

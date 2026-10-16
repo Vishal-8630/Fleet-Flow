@@ -21,6 +21,7 @@ import { NotificationJob } from '../models/NotificationJob.js';
 import { OptOutRegistry } from '../models/OptOutRegistry.js';
 import { normalizeWhatsAppPhone } from '../utils/whatsappClient.js';
 import { processPendingNotificationJobs } from '../workers/notificationWorker.js';
+import { logAuditEvent } from '../utils/auditService.js';
 
 /**
  * GET /api/notifications/logs
@@ -101,6 +102,9 @@ export async function getNotificationLogs(req: Request, res: Response): Promise<
       else if (item._id === 'skipped') stats.skipped += item.count;
     }
 
+    const eligibleCount = stats.total - stats.skipped;
+    const deliveredRatio = eligibleCount > 0 ? Math.round((stats.delivered / eligibleCount) * 100) : 0;
+
     res.json({
       logs,
       pagination: {
@@ -109,7 +113,12 @@ export async function getNotificationLogs(req: Request, res: Response): Promise<
         total,
         pages: Math.ceil(total / limit),
       },
-      stats,
+      stats: {
+        ...stats,
+        pending: stats.sent, // Dispatched to provider gateway awaiting delivery receipt callback
+        eligible: eligibleCount,
+        delivered_ratio: deliveredRatio,
+      },
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to retrieve notification logs' });
@@ -131,30 +140,74 @@ export async function resendNotification(req: Request, res: Response): Promise<v
       return;
     }
 
-    // Reset log state
-    log.status = 'queued';
-    log.error_message = undefined;
-    log.retry_count = (log.retry_count || 0) + 1;
-    await log.save();
+    // ELIGIBILITY CHECK: Reject resending notifications already confirmed as delivered or read
+    if (log.status === 'delivered' || log.status === 'read') {
+      res.status(400).json({
+        error: `Cannot resend notification already confirmed as ${log.status}. Only failed, queued, or pending notifications can be retried.`,
+        code: 'ALREADY_DELIVERED',
+      });
+      return;
+    }
+
+    // CONCURRENCY CHECK: If notification is currently queued/in-flight, prevent duplicate queueing
+    if (log.status === 'queued') {
+      const activeJob = await NotificationJob.findOne({
+        notification_log_id: log._id,
+        status: { $in: ['pending', 'processing'] },
+      });
+      if (activeJob) {
+        res.status(409).json({
+          error: 'A retry job is already active or in-flight for this notification.',
+          code: 'CONCURRENT_RESEND_IN_PROGRESS',
+          job_id: activeJob.job_id,
+        });
+        return;
+      }
+    }
+
+    const priorStatus = log.status;
+    const priorRetryCount = log.retry_count || 0;
+
+    // ATOMIC CLAIM: Compare-and-swap on NotificationLog to prevent race conditions on concurrent resends
+    const claimedLog = await NotificationLog.findOneAndUpdate(
+      {
+        _id: id,
+        company_id: companyId,
+        status: priorStatus,
+      },
+      {
+        $set: { status: 'queued', error_message: undefined },
+        $inc: { retry_count: 1 },
+      },
+      { new: true }
+    );
+
+    if (!claimedLog) {
+      res.status(409).json({
+        error: 'Concurrent resend in progress. The notification state was modified by another request.',
+        code: 'CONCURRENT_RESEND_CONFLICT',
+      });
+      return;
+    }
 
     // Create fresh queue job
     const newJobId = `resend_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
     await NotificationJob.create({
       company_id: companyId,
       job_id: newJobId,
-      channel: log.channel,
-      event_type: log.event_type,
-      recipient_name: log.recipient_name,
-      recipient_phone: log.recipient_phone,
-      recipient_email: log.recipient_email,
-      message_preview: log.message_preview,
-      template_name: log.template_name,
-      template_variables: log.template_variables,
+      channel: claimedLog.channel,
+      event_type: claimedLog.event_type,
+      recipient_name: claimedLog.recipient_name,
+      recipient_phone: claimedLog.recipient_phone,
+      recipient_email: claimedLog.recipient_email,
+      message_preview: claimedLog.message_preview,
+      template_name: claimedLog.template_name,
+      template_variables: claimedLog.template_variables,
       attempts: 0,
       max_attempts: 5,
       next_run_at: new Date(),
       status: 'pending',
-      notification_log_id: log._id,
+      notification_log_id: claimedLog._id,
     });
 
     // Trigger worker immediately
@@ -164,10 +217,25 @@ export async function resendNotification(req: Request, res: Response): Promise<v
       });
     });
 
+    // Write audited operational log
+    await logAuditEvent({
+      company_id: companyId,
+      entity_type: 'notification',
+      entity_id: claimedLog._id,
+      entity_identifier: claimedLog.provider_message_id || String(claimedLog._id),
+      action: 'UPDATE',
+      description: `Manual retry triggered for notification ${claimedLog._id} (${claimedLog.channel} / ${claimedLog.event_type}) to ${claimedLog.recipient_name}`,
+      req,
+      before_snapshot: { status: priorStatus, retry_count: priorRetryCount },
+      after_snapshot: { status: 'queued', retry_count: claimedLog.retry_count, new_job_id: newJobId },
+    }).catch((err) => {
+      console.warn('[Notification Audit Warning]: Failed to write audit entry for resend:', err.message);
+    });
+
     res.json({
       message: 'Notification re-queued for delivery',
       job_id: newJobId,
-      log,
+      log: claimedLog,
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to re-queue notification' });
