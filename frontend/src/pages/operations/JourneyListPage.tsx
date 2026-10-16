@@ -126,6 +126,14 @@ export const JourneyListPage: React.FC = () => {
   });
 
   const handleOpenMilestoneModal = (journey: any) => {
+    if (journey.status !== 'active' && journey.status !== 'delayed') {
+      toast.error(`Cannot log milestone: Journey is ${journey.status}.`);
+      return;
+    }
+    if (journey.is_settled) {
+      toast.error('Cannot log milestone: Journey has already been settled.');
+      return;
+    }
     setSelectedJourneyId(journey._id);
     setIsMilestoneModalOpen(true);
   };
@@ -418,7 +426,7 @@ export const JourneyListPage: React.FC = () => {
                           </button>
                         )}
 
-                        {canEdit && (j.status === 'active' || j.status === 'delayed') && (
+                        {canEdit && (j.status === 'active' || j.status === 'delayed') && !j.is_settled && (
                           <button
                             type="button"
                             className="btn btn-secondary"

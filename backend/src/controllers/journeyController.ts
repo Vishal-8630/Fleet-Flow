@@ -621,9 +621,25 @@ export const addMilestone = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Current location is required.' });
     }
 
-    const journey = await TruckJourney.findById(req.params.id);
-    if (!journey || journey.is_deleted) {
+    const companyId = req.tenant?.id;
+    const query: any = { _id: req.params.id, is_deleted: false };
+    if (companyId) query.company_id = companyId;
+
+    const journey = await TruckJourney.findOne(query);
+    if (!journey) {
       return res.status(404).json({ error: 'Journey not found.' });
+    }
+
+    if (journey.is_settled) {
+      return res.status(409).json({
+        error: `Conflict: Cannot log transit milestone for journey '${journey.journey_number}' as it has already been settled in a completed driver payout.`,
+      });
+    }
+
+    if (journey.status === 'completed' || journey.status === 'cancelled') {
+      return res.status(400).json({
+        error: `Cannot log transit milestone for journey '${journey.journey_number}' as it is already ${journey.status}.`,
+      });
     }
 
     const dayNumber = (journey.daily_progress?.length || 0) + 1;
@@ -666,9 +682,25 @@ export const recordDelay = async (req: Request, res: Response) => {
       });
     }
 
-    const journey = await TruckJourney.findById(req.params.id);
-    if (!journey || journey.is_deleted) {
+    const companyId = req.tenant?.id;
+    const query: any = { _id: req.params.id, is_deleted: false };
+    if (companyId) query.company_id = companyId;
+
+    const journey = await TruckJourney.findOne(query);
+    if (!journey) {
       return res.status(404).json({ error: 'Journey not found.' });
+    }
+
+    if (journey.is_settled) {
+      return res.status(409).json({
+        error: `Conflict: Cannot record transit delay for journey '${journey.journey_number}' as it has already been settled in a completed driver payout.`,
+      });
+    }
+
+    if (journey.status === 'completed' || journey.status === 'cancelled') {
+      return res.status(400).json({
+        error: `Cannot record transit delay for journey '${journey.journey_number}' as it is already ${journey.status}.`,
+      });
     }
 
     journey.delays.push({
@@ -742,6 +774,12 @@ export const addDieselStop = async (req: Request, res: Response) => {
       });
     }
 
+    if (journey.status === 'completed' || journey.status === 'cancelled') {
+      return res.status(400).json({
+        error: `Cannot record diesel fuel stop for journey '${journey.journey_number}' as it is already ${journey.status}.`,
+      });
+    }
+
     if (balance_party_id) {
       await validateTenantOwnership(companyId!, { balance_party_id });
     }
@@ -767,6 +805,14 @@ export const addDieselStop = async (req: Request, res: Response) => {
           `Conflict: Cannot record diesel fuel stop for journey '${sessJourney.journey_number}' as it has already been settled in a completed driver payout.`
         );
         err.statusCode = 409;
+        throw err;
+      }
+
+      if (sessJourney.status === 'completed' || sessJourney.status === 'cancelled') {
+        const err: any = new Error(
+          `Cannot record diesel fuel stop for journey '${sessJourney.journey_number}' as it is already ${sessJourney.status}.`
+        );
+        err.statusCode = 400;
         throw err;
       }
 
@@ -881,9 +927,25 @@ export const addDriverExpense = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Expense type and amount are required.' });
     }
 
-    const journey = await TruckJourney.findById(req.params.id);
-    if (!journey || journey.is_deleted) {
+    const companyId = req.tenant?.id;
+    const query: any = { _id: req.params.id, is_deleted: false };
+    if (companyId) query.company_id = companyId;
+
+    const journey = await TruckJourney.findOne(query);
+    if (!journey) {
       return res.status(404).json({ error: 'Journey not found.' });
+    }
+
+    if (journey.is_settled) {
+      return res.status(409).json({
+        error: `Conflict: Cannot log cash expense for journey '${journey.journey_number}' as it has already been settled in a completed driver payout.`,
+      });
+    }
+
+    if (journey.status === 'completed' || journey.status === 'cancelled') {
+      return res.status(400).json({
+        error: `Cannot log cash expense for journey '${journey.journey_number}' as it is already ${journey.status}.`,
+      });
     }
 
     journey.driver_expenses.push({

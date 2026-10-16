@@ -48,6 +48,7 @@ import {
   Phone,
   CreditCard,
   Wallet,
+  Lock,
 } from 'lucide-react';
 
 export const JourneyDetailPage: React.FC = () => {
@@ -114,6 +115,9 @@ export const JourneyDetailPage: React.FC = () => {
   });
 
   const journey = data;
+  const isJourneyActive = journey?.status === 'active' || journey?.status === 'delayed';
+  const isJourneyClosed = journey?.status === 'completed' || journey?.status === 'cancelled' || !!journey?.is_settled;
+  const canLogEnRoute = canEdit && isJourneyActive && !journey?.is_settled;
 
   // 1.5 Fetch Balance Parties for Credit Pump Vendor Selection
   const { data: balancePartiesData } = useQuery({
@@ -459,7 +463,7 @@ export const JourneyDetailPage: React.FC = () => {
               </button>
             )}
 
-            {canEdit && (journey.status === 'active' || journey.status === 'delayed') && (
+            {canLogEnRoute && (
               <>
                 <button
                   type="button"
@@ -781,7 +785,7 @@ export const JourneyDetailPage: React.FC = () => {
                   Driver check-ins, highway toll crossings, and en-route incident records.
                 </p>
               </div>
-              {canEdit && (
+              {canLogEnRoute && (
                 <button
                   type="button"
                   className="btn btn-primary btn-sm"
@@ -800,7 +804,7 @@ export const JourneyDetailPage: React.FC = () => {
                   <p style={{ fontSize: 'var(--font-size-xs)', margin: '0.25rem 0 1rem 0' }}>
                     Track highway toll crossings, en-route checkpoints, and transit delays as the vehicle travels.
                   </p>
-                  {canEdit && (
+                  {canLogEnRoute ? (
                     <button
                       type="button"
                       className="btn btn-secondary btn-sm"
@@ -808,6 +812,10 @@ export const JourneyDetailPage: React.FC = () => {
                     >
                       Log First Checkpoint Now
                     </button>
+                  ) : (
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem', marginTop: '0.75rem', fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
+                      <Lock size={14} /> Journey {journey?.status === 'completed' ? 'completed' : journey?.status} — En-route checkpoints locked.
+                    </div>
                   )}
                 </div>
               ) : (
@@ -903,7 +911,7 @@ export const JourneyDetailPage: React.FC = () => {
                   </div>
                 </div>
 
-                {canEdit && (
+                {canLogEnRoute ? (
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
                     <button
                       type="button"
@@ -921,6 +929,19 @@ export const JourneyDetailPage: React.FC = () => {
                     >
                       <Clock size={14} /> + Report Delay
                     </button>
+                  </div>
+                ) : (
+                  <div style={{
+                    padding: '0.625rem 0.75rem',
+                    borderRadius: 'var(--radius-md)',
+                    backgroundColor: 'var(--color-slate-100)',
+                    color: 'var(--text-muted)',
+                    fontSize: 'var(--font-size-xs)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem'
+                  }}>
+                    <Lock size={14} /> Journey {journey?.status === 'completed' ? 'completed' : journey?.status} — Milestone & delay logging locked.
                   </div>
                 )}
               </div>
@@ -1015,7 +1036,7 @@ export const JourneyDetailPage: React.FC = () => {
                   Highway fuel card swipes, pump slips, and commercial rate audits.
                 </p>
               </div>
-              {canEdit && (
+              {canLogEnRoute && (
                 <button
                   type="button"
                   className="btn btn-primary btn-sm"
@@ -1049,7 +1070,7 @@ export const JourneyDetailPage: React.FC = () => {
                         <p style={{ fontSize: 'var(--font-size-xs)', margin: '0.25rem 0 1rem 0' }}>
                           Log highway fuel card transactions, diesel slips, and quantity in liters to monitor fleet mileage.
                         </p>
-                        {canEdit && (
+                        {canLogEnRoute ? (
                           <button
                             type="button"
                             className="btn btn-secondary btn-sm"
@@ -1057,6 +1078,10 @@ export const JourneyDetailPage: React.FC = () => {
                           >
                             Record First Fuel Stop Now
                           </button>
+                        ) : (
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem', marginTop: '0.75rem', fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
+                            <Lock size={14} /> Journey {journey?.status === 'completed' ? 'completed' : journey?.status} — Fuel stop logging locked.
+                          </div>
                         )}
                       </td>
                     </tr>
@@ -1162,7 +1187,7 @@ export const JourneyDetailPage: React.FC = () => {
                   Fastag recharges, weighbridge slips, port entry, and en-route emergency repair receipts.
                 </p>
               </div>
-              {canEdit && (
+              {canLogEnRoute && (
                 <button
                   type="button"
                   className="btn btn-primary btn-sm"
@@ -1193,7 +1218,7 @@ export const JourneyDetailPage: React.FC = () => {
                         <p style={{ fontSize: 'var(--font-size-xs)', margin: '0.25rem 0 1rem 0' }}>
                           Log highway tolls, Dharam Kanta weighbridge slips, and maintenance vouchers to reconcile driver cash advances.
                         </p>
-                        {canEdit && (
+                        {canLogEnRoute ? (
                           <button
                             type="button"
                             className="btn btn-secondary btn-sm"
@@ -1201,6 +1226,10 @@ export const JourneyDetailPage: React.FC = () => {
                           >
                             Log First Cash Expense Now
                           </button>
+                        ) : (
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem', marginTop: '0.75rem', fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
+                            <Lock size={14} /> Journey {journey?.status === 'completed' ? 'completed' : journey?.status} — Cash expense logging locked.
+                          </div>
                         )}
                       </td>
                     </tr>
@@ -1468,6 +1497,11 @@ export const JourneyDetailPage: React.FC = () => {
             milestoneMutation.mutate();
           }}
         >
+          {!canLogEnRoute && (
+            <div className="alert alert-warning" style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: 'var(--font-size-xs)' }}>
+              <Lock size={14} /> Journey is {journey?.status || 'closed'}. En-route milestones cannot be added.
+            </div>
+          )}
           <div className="form-group">
             <label className="form-label">
               Current Location / Toll Checkpoint <span style={{ color: 'var(--color-danger)' }}>*</span>
@@ -1505,7 +1539,7 @@ export const JourneyDetailPage: React.FC = () => {
             >
               Cancel
             </button>
-            <button type="submit" className="btn btn-primary" disabled={milestoneMutation.isPending}>
+            <button type="submit" className="btn btn-primary" disabled={milestoneMutation.isPending || !canLogEnRoute}>
               {milestoneMutation.isPending ? 'Saving...' : 'Record Milestone'}
             </button>
           </div>
@@ -1525,6 +1559,11 @@ export const JourneyDetailPage: React.FC = () => {
             dieselMutation.mutate();
           }}
         >
+          {!canLogEnRoute && (
+            <div className="alert alert-warning" style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: 'var(--font-size-xs)' }}>
+              <Lock size={14} /> Journey is {journey?.status || 'closed'}. Fuel stops cannot be added.
+            </div>
+          )}
           <div className="form-group">
             <label className="form-label">
               Petrol Pump / Fuel Station Name <span style={{ color: 'var(--color-danger)' }}>*</span>
@@ -1649,7 +1688,7 @@ export const JourneyDetailPage: React.FC = () => {
             >
               Cancel
             </button>
-            <button type="submit" className="btn btn-primary" disabled={dieselMutation.isPending || isUploading}>
+            <button type="submit" className="btn btn-primary" disabled={dieselMutation.isPending || isUploading || !canLogEnRoute}>
               {dieselMutation.isPending ? 'Saving...' : 'Record Fuel Stop'}
             </button>
           </div>
@@ -1669,6 +1708,11 @@ export const JourneyDetailPage: React.FC = () => {
             expenseMutation.mutate();
           }}
         >
+          {!canLogEnRoute && (
+            <div className="alert alert-warning" style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: 'var(--font-size-xs)' }}>
+              <Lock size={14} /> Journey is {journey?.status || 'closed'}. Cash expenses cannot be added.
+            </div>
+          )}
           <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: '1rem', marginBottom: '1rem' }}>
             <div className="form-group" style={{ marginBottom: 0 }}>
               <label className="form-label">Expense Category</label>
@@ -1739,7 +1783,7 @@ export const JourneyDetailPage: React.FC = () => {
             >
               Cancel
             </button>
-            <button type="submit" className="btn btn-primary" disabled={expenseMutation.isPending || isUploading}>
+            <button type="submit" className="btn btn-primary" disabled={expenseMutation.isPending || isUploading || !canLogEnRoute}>
               {expenseMutation.isPending ? 'Saving...' : 'Log Expense'}
             </button>
           </div>
@@ -1759,6 +1803,11 @@ export const JourneyDetailPage: React.FC = () => {
             delayMutation.mutate();
           }}
         >
+          {!canLogEnRoute && (
+            <div className="alert alert-warning" style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: 'var(--font-size-xs)' }}>
+              <Lock size={14} /> Journey is {journey?.status || 'closed'}. Delay reports cannot be logged.
+            </div>
+          )}
           <div className="form-group">
             <label className="form-label">
               Incident Location <span style={{ color: 'var(--color-danger)' }}>*</span>
@@ -1825,7 +1874,7 @@ export const JourneyDetailPage: React.FC = () => {
             >
               Cancel
             </button>
-            <button type="submit" className="btn btn-primary" disabled={delayMutation.isPending}>
+            <button type="submit" className="btn btn-primary" disabled={delayMutation.isPending || !canLogEnRoute}>
               {delayMutation.isPending ? 'Logging Delay...' : 'Record Delay Event'}
             </button>
           </div>

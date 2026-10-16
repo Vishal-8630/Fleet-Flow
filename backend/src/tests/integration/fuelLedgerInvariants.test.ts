@@ -444,4 +444,69 @@ describe('FF-ISSUE-043 & 044: Fuel Payment Modes Ledger Invariants & Driver Sett
     expect(res.status).toBe(409);
     expect(res.body.error).toMatch(/already been settled in a previous payout/i);
   });
+
+  it('rejects adding milestones, delays, fuel stops, and cash expenses after journey is completed', async () => {
+    const journey = await TruckJourney.create({
+      company_id: tenant.company._id,
+      truck_id: truck._id,
+      driver_id: driver._id,
+      journey_number: `JRN-${Date.now()}-COMPLETED-OPERATIONS`,
+      status: 'completed',
+      from_location: { city: 'Mumbai', state: 'Maharashtra' },
+      to_location: { city: 'Delhi', state: 'Delhi' },
+      start_date: new Date(),
+      start_odometer_kms: 170000,
+      is_settled: false,
+    });
+
+    // 1. Milestone rejection
+    const milestoneRes = await request(app)
+      .post(`/api/operations/journeys/${journey._id}/milestones`)
+      .set('Authorization', `Bearer ${tenant.token}`)
+      .send({
+        current_location: 'Jaipur Bypass Toll',
+        transit_notes: 'Attempting retroactive checkpoint',
+      });
+    expect(milestoneRes.status).toBe(400);
+    expect(milestoneRes.body.error).toMatch(/Cannot log transit milestone.*completed/i);
+
+    // 2. Delay rejection
+    const delayRes = await request(app)
+      .post(`/api/operations/journeys/${journey._id}/delays`)
+      .set('Authorization', `Bearer ${tenant.token}`)
+      .send({
+        location: 'Jaipur Highway',
+        delay_hours: 2,
+        reason: 'traffic',
+        notes: 'Attempting retroactive delay',
+      });
+    expect(delayRes.status).toBe(400);
+    expect(delayRes.body.error).toMatch(/Cannot record transit delay.*completed/i);
+
+    // 3. Driver cash expense rejection
+    const expenseRes = await request(app)
+      .post(`/api/operations/journeys/${journey._id}/expenses`)
+      .set('Authorization', `Bearer ${tenant.token}`)
+      .send({
+        expense_type: 'toll',
+        amount: 550,
+        notes: 'Attempting retroactive cash expense',
+      });
+    expect(expenseRes.status).toBe(400);
+    expect(expenseRes.body.error).toMatch(/Cannot log cash expense.*completed/i);
+
+    // 4. Diesel fuel stop rejection
+    const dieselRes = await request(app)
+      .post(`/api/operations/journeys/${journey._id}/diesel`)
+      .set('Authorization', `Bearer ${tenant.token}`)
+      .send({
+        petrol_pump_name: 'BPCL Highway Oasis',
+        slip_number: 'SLIP-COMPLETED-001',
+        fuel_quantity_litres: 50,
+        rate_per_litre: 90,
+        payment_mode: 'fuel_card',
+      });
+    expect(dieselRes.status).toBe(400);
+    expect(dieselRes.body.error).toMatch(/Cannot record diesel fuel stop.*completed/i);
+  });
 });
