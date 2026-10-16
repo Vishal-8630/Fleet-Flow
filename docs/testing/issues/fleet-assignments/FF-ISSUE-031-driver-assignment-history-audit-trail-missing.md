@@ -5,13 +5,13 @@
 - **ID:** FF-ISSUE-031
 - **Category:** Bug
 - **Priority:** High
-- **Status:** Observed
+- **Status:** Resolved
 - **Affected module:** Fleet Management / Driver Profiles
 - **Source:** `docs/testing/FLEET_FLOW_MANUAL_TESTING_AND_DECISION_HANDOFF.md`
 - **Legacy ID:** `N/A`
 - **Related issues:** [FF-ISSUE-028](FF-ISSUE-028-vehicle-current-driver-stale-display.md), [FF-ISSUE-029](FF-ISSUE-029-driver-historical-vehicle-assignment-sync.md)
 - **Related decisions:** N/A
-- **Implementation status:** Not implemented
+- **Implementation status:** Implemented (Batch C — Commit 79d8a30)
 
 ## 1. Summary
 
@@ -52,9 +52,9 @@ Include driver status update (`status: 'ON_TRIP'`) and assignment history creati
 
 ## 9. Acceptance criteria
 
-- [ ] Trip creation updates driver status to On Trip.
-- [ ] Driver detail view displays current trip ID, assigned vehicle number, and assignment history entry.
-- [ ] Driver is removed from unallocated pool while trip is active.
+- [x] Trip creation updates driver status to On Trip.
+- [x] Driver detail view displays current trip ID, assigned vehicle number, and assignment history entry.
+- [x] Driver is removed from unallocated pool while trip is active.
 
 ## 10. Required tests
 
@@ -68,4 +68,7 @@ Include driver status update (`status: 'ON_TRIP'`) and assignment history creati
 
 ## 12. Verification evidence
 
-*Implementation and verification evidence are pending. No fixes have been applied in this documentation phase.*
+- **Resolved in Commit:** `79d8a30` (Batch C)
+- **Controller & Service Implementation:** `backend/src/controllers/journeyController.ts` (`createJourney`, `dispatchJourney`), `backend/src/controllers/driverController.ts`
+- **Integration Test Suite:** `backend/src/tests/integration/driverVehicleSync.test.ts`, `backend/src/tests/integration/journeyLifecycleState.test.ts`
+

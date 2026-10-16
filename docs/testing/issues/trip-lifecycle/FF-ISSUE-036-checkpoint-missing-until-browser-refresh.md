@@ -5,13 +5,13 @@
 - **ID:** FF-ISSUE-036
 - **Category:** Bug
 - **Priority:** High
-- **Status:** Observed
+- **Status:** Resolved
 - **Affected module:** Trip Lifecycle / Checkpoints & Milestones
 - **Source:** `docs/testing/FLEET_FLOW_MANUAL_TESTING_AND_DECISION_HANDOFF.md`
 - **Legacy ID:** `N/A`
 - **Related issues:** [FF-ISSUE-017](../ui-ux/FF-ISSUE-017-driver-assignment-stale-state.md), [FF-ISSUE-038](FF-ISSUE-038-fuel-stops-milestones-edit-missing.md)
 - **Related decisions:** N/A
-- **Implementation status:** Not implemented
+- **Implementation status:** Implemented (Batch C — Commit 79d8a30)
 
 ## 1. Summary
 
@@ -52,9 +52,9 @@ Invalidate both `['trips']` and `['trip', tripId]` query keys upon successful ch
 
 ## 9. Acceptance criteria
 
-- [ ] Added checkpoint appears immediately in trip detail timeline upon opening record.
-- [ ] No manual browser refresh required.
-- [ ] Cache invalidation triggered on mutation success.
+- [x] Added checkpoint appears immediately in trip detail timeline upon opening record.
+- [x] No manual browser refresh required.
+- [x] Cache invalidation triggered on mutation success.
 
 ## 10. Required tests
 
@@ -68,4 +68,7 @@ Invalidate both `['trips']` and `['trip', tripId]` query keys upon successful ch
 
 ## 12. Verification evidence
 
-*Implementation and verification evidence are pending. No fixes have been applied in this documentation phase.*
+- **Resolved in Commit:** `79d8a30` (Batch C)
+- **Controller & Service Implementation:** `backend/src/controllers/journeyController.ts` (`addMilestone`), state persistence under ACID transaction, and synchronized cache key invalidations on journey mutation.
+- **Integration Test Suite:** `backend/src/tests/integration/journeyLifecycleState.test.ts` (Immediate milestone recording and verification across queries).
+

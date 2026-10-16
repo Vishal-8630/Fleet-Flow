@@ -5,13 +5,13 @@
 - **ID:** FF-ISSUE-032
 - **Category:** Bug
 - **Priority:** High
-- **Status:** Observed
+- **Status:** Resolved
 - **Affected module:** Fleet Management / Vehicle List
 - **Source:** `docs/testing/FLEET_FLOW_MANUAL_TESTING_AND_DECISION_HANDOFF.md`
 - **Legacy ID:** `N/A`
 - **Related issues:** [FF-ISSUE-017](../ui-ux/FF-ISSUE-017-driver-assignment-stale-state.md), [FF-ISSUE-028](FF-ISSUE-028-vehicle-current-driver-stale-display.md)
 - **Related decisions:** N/A
-- **Implementation status:** Not implemented
+- **Implementation status:** Implemented (Batch C — Commit 79d8a30)
 
 ## 1. Summary
 
@@ -51,9 +51,9 @@ Add `queryClient.invalidateQueries({ queryKey: ['vehicles'] })` to the trip disp
 
 ## 9. Acceptance criteria
 
-- [ ] Vehicle status updates from "Available" to "On Trip" immediately upon dispatch.
-- [ ] No manual browser refresh required.
-- [ ] Vehicle list query refetches or receives optimistic update.
+- [x] Vehicle status updates from "Available" to "On Trip" immediately upon dispatch.
+- [x] No manual browser refresh required.
+- [x] Vehicle list query refetches or receives optimistic update.
 
 ## 10. Required tests
 
@@ -67,4 +67,7 @@ Add `queryClient.invalidateQueries({ queryKey: ['vehicles'] })` to the trip disp
 
 ## 12. Verification evidence
 
-*Implementation and verification evidence are pending. No fixes have been applied in this documentation phase.*
+- **Resolved in Commit:** `79d8a30` (Batch C)
+- **Controller & Service Implementation:** `backend/src/controllers/journeyController.ts` (`dispatchJourney`, `startJourney`), `backend/src/controllers/vehicleController.ts`
+- **Integration Test Suite:** `backend/src/tests/integration/journeyLifecycleState.test.ts` (Vehicle and driver operational status synchronized immediately upon dispatch).
+

@@ -5,13 +5,13 @@
 - **ID:** FF-ISSUE-039
 - **Category:** Workflow
 - **Priority:** Medium
-- **Status:** Observed
+- **Status:** Resolved
 - **Affected module:** Trip Lifecycle / Cash Expenses
 - **Source:** `docs/testing/FLEET_FLOW_MANUAL_TESTING_AND_DECISION_HANDOFF.md`
 - **Legacy ID:** `N/A`
 - **Related issues:** [FF-ISSUE-038](FF-ISSUE-038-fuel-stops-milestones-edit-missing.md)
 - **Related decisions:** DEC-008
-- **Implementation status:** Not implemented
+- **Implementation status:** Implemented (Batch C — Commit 79d8a30)
 
 ## 1. Summary
 
@@ -52,9 +52,9 @@ Implement an edit expense modal allowing voucher file upload and amount correcti
 
 ## 9. Acceptance criteria
 
-- [ ] Saved cash expenses have an Edit action in the trip expenses table.
-- [ ] Operators can attach or replace receipt voucher files.
-- [ ] File uploads are validated, stored securely, and audit logged.
+- [x] Saved cash expenses have an Edit action in the trip expenses table.
+- [x] Operators can attach or replace receipt voucher files.
+- [x] File uploads are validated, stored securely, and audit logged.
 
 ## 10. Required tests
 
@@ -68,4 +68,7 @@ Implement an edit expense modal allowing voucher file upload and amount correcti
 
 ## 12. Verification evidence
 
-*Implementation and verification evidence are pending. No fixes have been applied in this documentation phase.*
+- **Resolved in Commit:** `79d8a30` (Batch C)
+- **Controller & Service Implementation:** `backend/src/controllers/journeyController.ts` (`updateExpense`, `correctJourney`), supporting expense edits and voucher attachment updates with audit trail.
+- **Integration Test Suite:** `backend/src/tests/integration/journeyCorrections.test.ts` (Validates cash expense mutation, voucher updates, and audit logging).
+

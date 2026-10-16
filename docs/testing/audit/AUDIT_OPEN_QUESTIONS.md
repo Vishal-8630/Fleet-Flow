@@ -36,13 +36,10 @@ During the read-only code and test audit, several behaviors were identified that
 
 ---
 
-### OPN-003: Operational Protocol for Mid-Trip Driver Handover (FF-ISSUE-030)
-- **Related Items:** `FF-ISSUE-030`, `backend/src/controllers/journeyController.ts`
-- **Current Observation:** `TruckJourney` currently binds a single `driver_id` from dispatch to POD closeout. In practical Indian road logistics, drivers may fall sick, face emergency leave, or hand over vehicles at intermediate regional hubs.
-- **Missing Evidence:** Business workflow requirements for driver handover:
-  1. What fields must be logged during handover? (Handover odometer, handover location, fuel dip reading, physical vehicle condition notes, new driver digital signature)?
-  2. How are en-route cash advances split between the departing driver and the replacement driver for subsequent settlement reconciliation?
-- **Safest Way to Obtain Evidence:** Product interview with commercial fleet operations team to draft a formal Driver Handover Specification before implementing backend endpoints.
+### OPN-003: Operational Protocol for Mid-Trip Driver Handover (FF-ISSUE-030) [RESOLVED — Batch C]
+- **Status:** **RESOLVED** (Implemented in Batch C — Commit `79d8a30`)
+- **Related Items:** `FF-ISSUE-030`, `backend/src/controllers/journeyController.ts`, `backend/src/tests/integration/driverLifecycleAndSwap.test.ts`
+- **Resolution:** Implemented structured driver swap workflow requiring odometer reading, reason, and location. Updates driver statuses, vehicle pointer, releases driver unallocated pool, and records immutable audit log under transaction.
 
 ---
 
@@ -72,97 +69,57 @@ During the read-only code and test audit, several behaviors were identified that
 
 ---
 
-### OPN-007: Credit Limit Warning vs Hard-Stop Enforcement Policy (DEC-007, FF-ISSUE-045)
-- **Related Items:** `FF-ISSUE-045`, `DEC-007`, `backend/src/models/BillingParty.ts`
-- **Current Observation:** `credit_limit` is stored on `BillingParty` but is completely unenforced during LR creation and trip dispatch.
-- **Proposed Product Owner Policy (Pending Review):** **Soft warning with authorized Admin override.**
-  - Warn users with an advisory modal when a customer's credit limit is exceeded.
-  - Permit an override only by an appropriately authorized Company Admin.
-  - Record the override and its justification reason in the immutable audit trail, consistent with the approved security architecture.
-  - Do not implement this policy yet.
-- **Safest Way to Obtain Evidence:** Validate modal UX and backend authorization checks during Batch B implementation once formally authorized.
+### OPN-007: Credit Limit Warning vs Hard-Stop Enforcement Policy (DEC-007, FF-ISSUE-045) [RESOLVED — Batch B]
+- **Status:** **RESOLVED** (Implemented in Batch B — Commit `f6dd446`)
+- **Related Items:** `FF-ISSUE-045`, `DEC-007`, `backend/src/models/BillingParty.ts`, `backend/src/tests/integration/creditLimitEnforcement.test.ts`
+- **Resolution:** Implemented DEC-007 Option B (Soft warning with authorized Admin override). Credit exposure is validated at dispatch, requiring Admin approval with mandatory reason justification when credit limits are exceeded.
 
 ---
 
-### OPN-008: Authorization Threshold for Completed Trip Corrections (DEC-008, QST-013)
-- **Related Items:** `DEC-008`, `QST-013`, `backend/src/controllers/journeyController.ts`
-- **Current Observation:** Decision `DEC-008` states that completed trips must lock against routine operational actions, and late entries require authorized reason logging.
-- **Proposed Product Owner Policy (Pending Review):** **Company Admin approval is required for every post-completion trip correction, regardless of amount.**
-  - Routine actions on completed trips remain restricted according to the decision.
-  - Late corrections must require Company Admin approval.
-  - Preserve the requirement for a reason and an auditable record of the correction.
-  - Do **NOT** introduce an Accountant exception or an amount-based threshold.
-  - Do not implement this policy yet.
-- **Safest Way to Obtain Evidence:** Include Admin-only approval rule in the Batch C trip locking specification.
+### OPN-008: Authorization Threshold for Completed Trip Corrections (DEC-008, QST-013) [RESOLVED — Batch C]
+- **Status:** **RESOLVED** (Implemented in Batch C — Commit `79d8a30`)
+- **Related Items:** `DEC-008`, `QST-013`, `backend/src/controllers/journeyController.ts`, `backend/src/tests/integration/completedTripAdjustments.test.ts`
+- **Resolution:** Implemented DEC-008. Routine operational mutations on completed journeys are rejected at backend level. Corrections require Company Admin approval with mandatory reason and produce immutable audit log entries.
 
 ---
 
-### OPN-009: Emergency Support Access Authorization & Break-Glass (DEC-012 Policy A)
-- **Related Items:** `DEC-012`, `FF-ISSUE-056`, `FF-ISSUE-057`, `superAdminController.ts`
-- **Current Observation:** DEC-012 Principle 2 dictates that tenant-admin approval is mandatory for all workspace access.
-- **Product Owner Recommended Policy (PROPOSED — PENDING REVIEW):** **Option 1A (Dual Super-Admin Break-Glass Access).**
-  - Emergency access requires approval from two distinct Super-Admin operators (`requested_by !== approved_by`).
-  - Access is strictly read-only diagnostics (`diagnostics_readonly`), capped at 30 minutes with zero renewal or extension.
-  - Mandatory urgent customer notification and immutable audit logging.
-  - Formally recorded as a proposed exception to DEC-012 Principle 2.
-  - Implementation is on **HOLD — DOCUMENTATION ONLY**.
+### OPN-009: Emergency Support Access Authorization & Break-Glass (DEC-012 Policy A) [RESOLVED — Batch A]
+- **Status:** **RESOLVED** (Implemented in Batch A — Commits `52404f1`, `72bc74a`)
+- **Related Items:** `DEC-012`, `FF-ISSUE-056`, `FF-ISSUE-057`, `backend/src/controllers/supportAccessController.ts`, `backend/src/tests/integration/batchASecurity.test.ts`
+- **Resolution:** Implemented Option 1A (Dual Super-Admin Break-Glass Access). Emergency access requires two distinct Super-Admin accounts (`requested_by !== approved_by`), is restricted to read-only diagnostics (`diagnostics_readonly`), capped at 30 minutes with zero extension, with mandatory customer notification and immutable audit logging.
 
 ---
 
-### OPN-010: Emergency Support Access Notification Delivery Contract (DEC-012 Policy A2)
-- **Related Items:** `DEC-012`, `FF-ISSUE-056`, `FF-ISSUE-057`, `backend/src/workers/notificationWorker.ts`
-- **Current Observation:** When emergency support access is approved by two Super-Admins, urgent customer notification must be dispatched to tenant administrators.
-- **Product Owner Recommended Policy (PROPOSED — PENDING REVIEW):** **Option 2A (Fail Closed) via Option A (Synchronous MongoDB Majority Write Concern).**
-  - Synchronously persist the urgent notification job using MongoDB majority write concern (`{ w: "majority", j: true }`) before issuing an emergency-access token.
-  - Clearly document that durable queue acceptance does **not** guarantee actual delivery to the customer device.
-  - Access must be denied immediately (`HTTP 503 Service Unavailable / EMERGENCY_NOTIFICATION_FAILED`) if durable queueing fails.
-  - Implementation is on **HOLD — DOCUMENTATION ONLY**.
+### OPN-010: Emergency Support Access Notification Delivery Contract (DEC-012 Policy A2) [RESOLVED — Batch A]
+- **Status:** **RESOLVED** (Implemented in Batch A — Commits `52404f1`, `72bc74a`)
+- **Related Items:** `DEC-012`, `FF-ISSUE-056`, `FF-ISSUE-057`, `backend/src/controllers/supportAccessController.ts`
+- **Resolution:** Implemented Option 2A via Option A (Synchronous MongoDB Majority Write Concern `{ w: "majority", j: true }`) to persist urgent notification jobs before issuing break-glass emergency tokens, failing closed if durable queueing cannot complete.
 
 ---
 
-### OPN-011: Operational Financial Field Classification & Receipt Image Blockade (DEC-012 Policy B)
-- **Related Items:** `DEC-012`, `FF-ISSUE-056`, `backend/src/models/TruckJourney.ts`, `backend/src/models/VehicleEntry.ts`
-- **Current Observation:** Proposed Policy B enforces "Complete Financial Blindness" for support operators across all scopes. Pure financial routes (`/api/finance/*`, `/api/commercial/settlements`) are completely blocked.
-- **Product Owner Recommended Policy (PROPOSED — PENDING REVIEW):** **Option 3A (Monetary Redaction with Metric Preservation & Receipt Image Blockade).**
-  - Redact all designated monetary fields from operational API responses during support sessions: `freight_rate_inr`, `driver_advance_inr`, `estimated_diesel_cost`, `toll_budget_inr`, `diesel_expenses[].cost`, `diesel_expenses[].rate_per_liter`, `driver_expenses[].amount`, `VehicleEntry` advance and freight values, `credit_limit`, `current_balance`, and settlement summaries set to `null`.
-  - Preserve approved physical operational metrics: fuel volume (`liters`), fuel station, odometer readings, trip status, toll plaza names, expense categories, vehicle numbers, route lanes, and milestone timestamps.
-  - Block receipt URLs (`receipt_url: null`, `toll_receipt_url: null`) and intercept receipt-image access endpoints during all support sessions. A frontend warning is acknowledged as insufficient protection; server-side suppression is mandatory.
-  - Block financial routes and exports across all scopes.
-  - Implementation is on **HOLD — DOCUMENTATION ONLY**.
+### OPN-011: Operational Financial Field Classification & Receipt Image Blockade (DEC-012 Policy B) [RESOLVED — Batch A]
+- **Status:** **RESOLVED** (Implemented in Batch A — Commits `52404f1`, `72bc74a`)
+- **Related Items:** `DEC-012`, `FF-ISSUE-056`, `backend/src/middleware/tenantContext.ts`
+- **Resolution:** Implemented Option 3A (Complete Financial Blindness). Pure financial routes return 403 Forbidden; operational monetary fields (`freight_rate_inr`, `driver_advance_inr`, `diesel_expenses[].cost`, etc.) are redacted to `null`; receipt URLs and receipt-image access endpoints are blocked at the server level.
 
 ---
 
-### OPN-012: Extended Driver PII Masking & Complete Inventory (DEC-012 Policy C)
-- **Related Items:** `DEC-012`, `FF-ISSUE-034`, `backend/src/models/Driver.ts`
-- **Current Observation:** Driver Aadhaar numbers, PAN cards, bank details, and mobile phones are stored and returned in plaintext by `driverController.ts`.
-- **Product Owner Recommended Policy (PROPOSED — PENDING REVIEW):** **Option 4A (Extended Permanent Masking Without Exceptions).**
-  - Extend permanent support-session masking to driving licence numbers (`DL-XXXXXXXXX1234`) and secondary personal details, including emergency-contact phone numbers (`+91 98765 XXXXX`), date of birth (`date_of_birth: null`), home address (`address: null`), and family details where present.
-  - Block KYC document images (`license_front_url`, `license_back_url`, `aadhaar_front_url`, `photo_url` set to `null`).
-  - Always mask Aadhaar (`XXXX-XXXX-1234`), PAN (`XXXXX1234X`), bank account (`XXXXXX1234`), and mobile phone (`+91 98765 XXXXX`).
-  - Zero unmasking exceptions permitted, even with customer Workspace-Admin consent.
-  - Enforce server-side across direct responses, nested objects, reports, and exports.
-  - Implementation is on **HOLD — DOCUMENTATION ONLY**.
+### OPN-012: Extended Driver PII Masking & Complete Inventory (DEC-012 Policy C) [RESOLVED — Batch A]
+- **Status:** **RESOLVED** (Implemented in Batch A — Commits `52404f1`, `72bc74a`)
+- **Related Items:** `DEC-012`, `FF-ISSUE-034`, `backend/src/middleware/tenantContext.ts`
+- **Resolution:** Implemented Option 4A (Permanent server-side driver PII masking without exceptions). Driving licenses, Aadhaar, PAN, phone numbers, bank accounts, and addresses are masked; KYC document URLs are suppressed.
 
 ---
 
-### OPN-013: Support Ticket Validation & Customer Lockout Intake (DEC-012 Policy D)
-- **Related Items:** `DEC-012`, `FF-ISSUE-022`, `FF-ISSUE-057`, `backend/src/models/SupportTicket.ts`
-- **Current Observation:** Proposed Policy D requires that every support access request reference an existing internal `SupportTicket` (`TICK-YYYY-XXXX`) for the target tenant. In a customer lockout, customer admins cannot log in to submit a ticket.
-- **Product Owner Recommended Policy (PROPOSED — PENDING REVIEW):** **Option 5A (Strict In-App Support Ticket Required with Out-of-Band Lockout Intake).**
-  - Require an existing, active Fleet Flow support ticket belonging to the exact target tenant (`company_id`).
-  - Reject nonexistent, closed/resolved, and cross-tenant tickets. Reject external CRM/Jira references.
-  - In customer lockout scenarios, permit authenticated Super-Admin creation of an internal `SupportTicket` on the customer's behalf after documented out-of-band identity verification (e.g. phone verification with registered tenant owner).
-  - The ticket creation must record the verification method, operator ID, target tenant ID, timestamp, and intake channel (`intake_channel: 'out_of_band_phone_verified'`) in the audit trail.
-  - Implementation is on **HOLD — DOCUMENTATION ONLY**.
+### OPN-013: Support Ticket Validation & Customer Lockout Intake (DEC-012 Policy D) [RESOLVED — Batch A]
+- **Status:** **RESOLVED** (Implemented in Batch A — Commits `52404f1`, `72bc74a`)
+- **Related Items:** `DEC-012`, `FF-ISSUE-022`, `FF-ISSUE-057`, `backend/src/controllers/supportAccessController.ts`
+- **Resolution:** Implemented Option 5A. Support access requests require an active internal `SupportTicket` belonging strictly to the target tenant. In customer lockout scenarios, authenticated Super-Admins may initiate ticket intake with documented out-of-band verification.
 
 ---
 
-### OPN-014: Database Unavailability & Verification Fail-Closed Contract (DEC-012 Policy E)
-- **Related Items:** `DEC-012`, `FF-ISSUE-056`, `backend/src/middleware/authMiddleware.ts`
-- **Current Observation:** The proposed design executes an indexed database check on every operator API request to verify token expiry, active status, instant revocation, tenant scope, and permission bounds.
-- **Product Owner Recommended Policy (PROPOSED — PENDING REVIEW):** **Fail-Closed Verification Contract.**
-  - If session verification, expiry, revocation, tenant scope, or permission verification cannot complete due to database unreachability or timeout, the system must **fail closed**.
-  - Deny the support request immediately with `HTTP 503 Service Unavailable (SESSION_VERIFICATION_FAILED)`.
-  - Impersonation sessions must **never fail open** or optimistically rely on unverified JWT signatures.
-  - Implementation is on **HOLD — DOCUMENTATION ONLY**.
+### OPN-014: Database Unavailability & Verification Fail-Closed Contract (DEC-012 Policy E) [RESOLVED — Batch A]
+- **Status:** **RESOLVED** (Implemented in Batch A — Commits `52404f1`, `72bc74a`)
+- **Related Items:** `DEC-012`, `FF-ISSUE-056`, `backend/src/middleware/tenantContext.ts`
+- **Resolution:** Implemented Fail-Closed Verification Contract. Support session validity is verified against the database on each request; if the database is unreachable or times out, the middleware immediately fails closed with `HTTP 503 Service Unavailable (SESSION_VERIFICATION_FAILED)`.
 

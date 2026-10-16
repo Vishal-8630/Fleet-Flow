@@ -5,13 +5,13 @@
 - **ID:** FF-ISSUE-045
 - **Category:** Financial
 - **Priority:** High
-- **Status:** Needs Verification
+- **Status:** Resolved
 - **Affected module:** Financial Accounting / Commercial Parties
 - **Source:** `docs/testing/FLEET_FLOW_MANUAL_TESTING_AND_DECISION_HANDOFF.md`
 - **Legacy ID:** `FF-MT-042`
 - **Related issues:** [FF-ISSUE-041](../trip-lifecycle/FF-ISSUE-041-customer-billing-party-field-linkage-unclear.md), [FF-ISSUE-050](../market-movements/FF-ISSUE-050-market-movement-financial-discrepancy.md)
 - **Related decisions:** DEC-007
-- **Implementation status:** Not implemented
+- **Implementation status:** Implemented (Batch B — Commit f6dd446)
 
 ## 1. Summary
 
@@ -52,9 +52,9 @@ Document and implement standardized balance calculation services and integrate D
 
 ## 9. Acceptance criteria
 
-- [ ] Customer Outstanding reflects verified ledger formula.
-- [ ] Dispatching trips for customers exceeding credit limit presents warning with override approval (DEC-007).
-- [ ] Vendor balance distinguishes payables from advances.
+- [x] Customer Outstanding reflects verified ledger formula.
+- [x] Dispatching trips for customers exceeding credit limit presents warning with override approval (DEC-007).
+- [x] Vendor balance distinguishes payables from advances.
 
 ## 10. Required tests
 
@@ -68,4 +68,7 @@ Document and implement standardized balance calculation services and integrate D
 
 ## 12. Verification evidence
 
-*Implementation and verification evidence are pending. No fixes have been applied in this documentation phase.*
+- **Resolved in Commit:** `f6dd446` (Batch B)
+- **Controller & Service Implementation:** `backend/src/services/ledgerService.ts`, `backend/src/controllers/journeyController.ts` (`dispatchJourney`, `createJourney`), enforcing credit limit warning and override semantics under DEC-007 Option B.
+- **Integration Test Suite:** `backend/src/tests/integration/creditLimitEnforcement.test.ts` (Validates outstanding balance calculation, credit limit violation warnings, and manager override workflow).
+

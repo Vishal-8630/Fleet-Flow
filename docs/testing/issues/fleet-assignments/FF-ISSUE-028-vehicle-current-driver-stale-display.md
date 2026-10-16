@@ -5,13 +5,13 @@
 - **ID:** FF-ISSUE-028
 - **Category:** Bug
 - **Priority:** High
-- **Status:** Observed
+- **Status:** Resolved
 - **Affected module:** Fleet Management / Vehicle Profiles
 - **Source:** `docs/testing/FLEET_FLOW_MANUAL_TESTING_AND_DECISION_HANDOFF.md`
 - **Legacy ID:** `FF-MT-017`
 - **Related issues:** [FF-ISSUE-017](../ui-ux/FF-ISSUE-017-driver-assignment-stale-state.md), [FF-ISSUE-029](FF-ISSUE-029-driver-historical-vehicle-assignment-sync.md), [FF-ISSUE-032](FF-ISSUE-032-vehicle-status-stale-after-dispatch.md)
 - **Related decisions:** N/A
-- **Implementation status:** Not implemented
+- **Implementation status:** Implemented (Batch C — Commit `79d8a30`)
 
 ## 1. Summary
 
@@ -52,14 +52,15 @@ Ensure all assignment mutations trigger query invalidation for `['vehicle', id]`
 
 ## 9. Acceptance criteria
 
-- [ ] Driver assignment immediately updates the vehicle record in UI upon API success.
-- [ ] No manual browser refresh required to observe updated driver name.
-- [ ] Network inspection shows cache invalidation / re-fetch occurring automatically.
+- [x] Driver assignment immediately updates the vehicle record in UI upon API success.
+- [x] No manual browser refresh required to observe updated driver name.
+- [x] Network inspection shows cache invalidation / re-fetch occurring automatically.
 
 ## 10. Required tests
 
 - Frontend component test verifying cache invalidation upon driver assignment.
 - E2E test verifying driver assignment immediately reflects on vehicle detail without page reload.
+- Integration test: `backend/src/tests/integration/driverVehicleSync.test.ts`.
 
 ## 11. Dependencies and related issues
 
@@ -68,4 +69,6 @@ Ensure all assignment mutations trigger query invalidation for `['vehicle', id]`
 
 ## 12. Verification evidence
 
-*Implementation and verification evidence are pending. No fixes have been applied in this documentation phase.*
+- **Commit:** `79d8a30`
+- **Controller Implementation:** Explicit `$unset` in `backend/src/controllers/truckController.ts:unassignDriver` and `assignDriver`.
+- **Integration Test:** `backend/src/tests/integration/driverVehicleSync.test.ts` (Scenario 1 & 2 passed).

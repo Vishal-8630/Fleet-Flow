@@ -5,13 +5,13 @@
 - **ID:** FF-ISSUE-043
 - **Category:** Financial
 - **Priority:** High
-- **Status:** Observed
+- **Status:** Resolved
 - **Affected module:** Financial Accounting / Driver Advances & Fuel
 - **Source:** `docs/testing/FLEET_FLOW_MANUAL_TESTING_AND_DECISION_HANDOFF.md`
 - **Legacy ID:** `N/A`
 - **Related issues:** [FF-ISSUE-044](FF-ISSUE-044-fuel-payment-mode-accounting-semantics.md)
 - **Related decisions:** N/A
-- **Implementation status:** Not implemented
+- **Implementation status:** Implemented (Batch B — Commit f6dd446)
 
 ## 1. Summary
 
@@ -53,9 +53,9 @@ Include fuel stops with payment mode `DRIVER_CASH_ADVANCE` in the driver cash ad
 
 ## 9. Acceptance criteria
 
-- [ ] Fuel purchases marked "Driver Cash Advance" deduct directly from the driver's advance balance.
-- [ ] Trip financial summary displays advance-funded fuel breakdown distinctly.
-- [ ] Driver settlement reconciliation includes advance fuel receipts in debit total.
+- [x] Fuel purchases marked "Driver Cash Advance" deduct directly from the driver's advance balance.
+- [x] Trip financial summary displays advance-funded fuel breakdown distinctly.
+- [x] Driver settlement reconciliation includes advance fuel receipts in debit total.
 
 ## 10. Required tests
 
@@ -69,4 +69,7 @@ Include fuel stops with payment mode `DRIVER_CASH_ADVANCE` in the driver cash ad
 
 ## 12. Verification evidence
 
-*Implementation and verification evidence are pending. No fixes have been applied in this documentation phase.*
+- **Resolved in Commit:** `f6dd446` (Batch B)
+- **Controller & Service Implementation:** `backend/src/controllers/journeyController.ts` (`addFuelStop`), `backend/src/services/ledgerService.ts`, correctly deducting advance-funded fuel from driver cash balance and ledger accounts.
+- **Integration Test Suite:** `backend/src/tests/integration/fuelLedgerInvariants.test.ts` (Ensures driver cash advance balance accurately reflects deductions for fuel payments made from advances).
+

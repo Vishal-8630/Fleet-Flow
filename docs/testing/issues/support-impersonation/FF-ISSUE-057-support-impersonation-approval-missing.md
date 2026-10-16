@@ -5,12 +5,12 @@
 - **ID:** FF-ISSUE-057
 - **Category:** Security / Workflow
 - **Priority:** High
-- **Status:** Observed / Agreed Future Behavior
+- **Status:** Resolved
 - **Affected module:** Super-Admin Control Plane & Tenant Governance
 - **Source:** `docs/testing/FLEET_FLOW_MANUAL_TESTING_AND_DECISION_HANDOFF.md` (Section 4.G, Access should require workspace-admin approval)
 - **Related issues:** [FF-ISSUE-056](FF-ISSUE-056-superadmin-unscoped-tenant-access.md)
 - **Related decisions:** [DEC-012](../../decisions/DEC-012-tenant-privacy-and-support-access.md)
-- **Implementation status:** Not implemented
+- **Implementation status:** Implemented (Batch A — Commits 52404f1, 72bc74a)
 
 ## 1. Summary
 
@@ -59,10 +59,10 @@ The backend must reject token generation unless status is `approved` and current
 
 ## 9. Acceptance criteria
 
-- [ ] Super-Admin cannot generate an impersonation token without an approved support request.
-- [ ] Workspace Admins can review, approve, or reject support access requests.
-- [ ] Workspace Admins can revoke active support sessions immediately.
-- [ ] Expired or revoked sessions immediately invalidate operator tokens.
+- [x] Super-Admin cannot generate an impersonation token without an approved support request.
+- [x] Workspace Admins can review, approve, or reject support access requests.
+- [x] Workspace Admins can revoke active support sessions immediately.
+- [x] Expired or revoked sessions immediately invalidate operator tokens.
 
 ## 10. Required tests
 
@@ -76,4 +76,7 @@ The backend must reject token generation unless status is `approved` and current
 
 ## 12. Verification evidence
 
-- Implementation and verification evidence pending.
+- **Resolved in Commits:** `52404f1`, `72bc74a` (Batch A)
+- **Controller & Middleware Implementation:** `backend/src/controllers/supportAccessController.ts`, `backend/src/models/SupportAccessRequest.ts`, `backend/src/middleware/tenantContext.ts`, implementing full Support Access Center request-and-approval lifecycle, time-limited token generation upon workspace-admin approval, and instant session revocation.
+- **Integration Test Suite:** `backend/src/tests/integration/batchASecurity.test.ts` (Validates support request workflow, approval authorization checks, and token revocation).
+

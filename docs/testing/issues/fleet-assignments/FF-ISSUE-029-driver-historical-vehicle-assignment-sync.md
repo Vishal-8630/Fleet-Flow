@@ -5,13 +5,13 @@
 - **ID:** FF-ISSUE-029
 - **Category:** Bug
 - **Priority:** Critical
-- **Status:** Observed
+- **Status:** Resolved
 - **Affected module:** Fleet Management / Driver Profiles
 - **Source:** `docs/testing/FLEET_FLOW_MANUAL_TESTING_AND_DECISION_HANDOFF.md`
 - **Legacy ID:** `FF-MT-018`
 - **Related issues:** [FF-ISSUE-018](../ui-ux/FF-ISSUE-018-dual-driver-assignment-anomaly.md), [FF-ISSUE-030](FF-ISSUE-030-driver-vehicle-concurrency-safeguards.md)
 - **Related decisions:** N/A
-- **Implementation status:** Not implemented
+- **Implementation status:** Implemented (Batch C — Commit `79d8a30`)
 
 ## 1. Summary
 
@@ -52,14 +52,15 @@ Ensure driver assignment query explicitly filters for active unassigned_at IS NU
 
 ## 9. Acceptance criteria
 
-- [ ] Driver profile only shows "Currently Driving" if assignment has no unassigned_at timestamp.
-- [ ] Historical assignments appear strictly in assignment history table with start and end dates.
-- [ ] Unassignment atomically updates both vehicle and driver queries.
+- [x] Driver profile only shows "Currently Driving" if assignment has no unassigned_at timestamp.
+- [x] Historical assignments appear strictly in assignment history table with start and end dates.
+- [x] Unassignment atomically updates both vehicle and driver queries.
 
 ## 10. Required tests
 
 - Backend integration test: Reassigning vehicle updates driver A to historical and driver B to active.
 - Database invariant test: No two drivers can have an active assignment to the same vehicle simultaneously.
+- Integration test: `backend/src/tests/integration/driverVehicleSync.test.ts`.
 
 ## 11. Dependencies and related issues
 
@@ -68,4 +69,6 @@ Ensure driver assignment query explicitly filters for active unassigned_at IS NU
 
 ## 12. Verification evidence
 
-*Implementation and verification evidence are pending. No fixes have been applied in this documentation phase.*
+- **Commit:** `79d8a30`
+- **Controller Implementation:** `backend/src/controllers/truckController.ts:assignDriver` reconciles old truck and old driver pointers inside ACID transaction.
+- **Integration Test:** `backend/src/tests/integration/driverVehicleSync.test.ts` (Scenarios 1, 2, 3, 4 passed).

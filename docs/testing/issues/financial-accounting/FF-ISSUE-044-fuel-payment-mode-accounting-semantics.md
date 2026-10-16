@@ -5,13 +5,13 @@
 - **ID:** FF-ISSUE-044
 - **Category:** Financial
 - **Priority:** High
-- **Status:** Needs Verification
+- **Status:** Resolved
 - **Affected module:** Financial Accounting / Fuel & Payables
 - **Source:** `docs/testing/FLEET_FLOW_MANUAL_TESTING_AND_DECISION_HANDOFF.md`
 - **Legacy ID:** `N/A`
 - **Related issues:** [FF-ISSUE-043](FF-ISSUE-043-driver-cash-advance-fuel-deduction-missing.md)
 - **Related decisions:** N/A
-- **Implementation status:** Not implemented
+- **Implementation status:** Implemented (Batch B — Commit f6dd446)
 
 ## 1. Summary
 
@@ -52,10 +52,10 @@ Implement explicit ledger event handlers for each fuel payment mode with proper 
 
 ## 9. Acceptance criteria
 
-- [ ] Pump Vendor Credit requires vendor selection and posts to Accounts Payable.
-- [ ] Fuel Card posts to Fuel Card Clearing / Bank Liability account.
-- [ ] Driver Cash Advance deducts from Driver Advance asset account.
-- [ ] All journal entries enforce balanced debit/credit invariants.
+- [x] Pump Vendor Credit requires vendor selection and posts to Accounts Payable.
+- [x] Fuel Card posts to Fuel Card Clearing / Bank Liability account.
+- [x] Driver Cash Advance deducts from Driver Advance asset account.
+- [x] All journal entries enforce balanced debit/credit invariants.
 
 ## 10. Required tests
 
@@ -69,4 +69,7 @@ Implement explicit ledger event handlers for each fuel payment mode with proper 
 
 ## 12. Verification evidence
 
-*Implementation and verification evidence are pending. No fixes have been applied in this documentation phase.*
+- **Resolved in Commit:** `f6dd446` (Batch B)
+- **Controller & Service Implementation:** `backend/src/services/ledgerService.ts`, `backend/src/controllers/journeyController.ts` (`addFuelStop`), ensuring each payment mode executes strict double-entry ledger postings with debit/credit balance validation.
+- **Integration Test Suite:** `backend/src/tests/integration/fuelLedgerInvariants.test.ts` (Verifies accounting routing, vendor payables, card liabilities, and balance invariants).
+

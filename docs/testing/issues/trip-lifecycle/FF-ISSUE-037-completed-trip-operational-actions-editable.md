@@ -5,13 +5,13 @@
 - **ID:** FF-ISSUE-037
 - **Category:** Workflow
 - **Priority:** High
-- **Status:** Observed
+- **Status:** Resolved
 - **Affected module:** Trip Lifecycle / Completed Trips
 - **Source:** `docs/testing/FLEET_FLOW_MANUAL_TESTING_AND_DECISION_HANDOFF.md`
 - **Legacy ID:** `N/A`
 - **Related issues:** [FF-ISSUE-035](FF-ISSUE-035-draft-trip-ineligible-operational-actions.md), [FF-ISSUE-038](FF-ISSUE-038-fuel-stops-milestones-edit-missing.md)
 - **Related decisions:** DEC-008
-- **Implementation status:** Not implemented
+- **Implementation status:** Implemented (Batch C — Commit 79d8a30)
 
 ## 1. Summary
 
@@ -51,9 +51,9 @@ Enforce read-only state for routine actions on COMPLETED trips on both frontend 
 
 ## 9. Acceptance criteria
 
-- [ ] Routine operational actions are disabled or hidden on Completed trips.
-- [ ] Backend returns HTTP 409/422 if routine mutation is attempted on a Completed trip.
-- [ ] Late adjustments require authorized correction flow with mandatory reason.
+- [x] Routine operational actions are disabled or hidden on Completed trips.
+- [x] Backend returns HTTP 409/422 if routine mutation is attempted on a Completed trip.
+- [x] Late adjustments require authorized correction flow with mandatory reason.
 
 ## 10. Required tests
 
@@ -67,4 +67,7 @@ Enforce read-only state for routine actions on COMPLETED trips on both frontend 
 
 ## 12. Verification evidence
 
-*Implementation and verification evidence are pending. No fixes have been applied in this documentation phase.*
+- **Resolved in Commit:** `79d8a30` (Batch C)
+- **Controller & Service Implementation:** `backend/src/controllers/journeyController.ts` (`addFuelStop`, `addExpense`, `addMilestone` reject terminal trips; `correctJourney` requires authorization and reason).
+- **Integration Test Suite:** `backend/src/tests/integration/journeyLifecycleState.test.ts`, `backend/src/tests/integration/completedTripAdjustments.test.ts`
+

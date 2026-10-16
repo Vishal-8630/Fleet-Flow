@@ -5,13 +5,13 @@
 - **ID:** FF-ISSUE-038
 - **Category:** Workflow
 - **Priority:** Medium
-- **Status:** Observed
+- **Status:** Resolved
 - **Affected module:** Trip Lifecycle / Fuel & Milestones
 - **Source:** `docs/testing/FLEET_FLOW_MANUAL_TESTING_AND_DECISION_HANDOFF.md`
 - **Legacy ID:** `N/A`
 - **Related issues:** [FF-ISSUE-037](FF-ISSUE-037-completed-trip-operational-actions-editable.md), [FF-ISSUE-039](FF-ISSUE-039-cash-expenses-edit-voucher-missing.md)
 - **Related decisions:** DEC-008
-- **Implementation status:** Not implemented
+- **Implementation status:** Implemented (Batch C — Commit 79d8a30)
 
 ## 1. Summary
 
@@ -51,9 +51,9 @@ Provide an authorized Edit modal for fuel stops and milestones while trip is act
 
 ## 9. Acceptance criteria
 
-- [ ] Authorized user can edit fuel stop quantity, rate, vendor, and odometer.
-- [ ] Milestone location and timestamp can be updated with audit logging.
-- [ ] Trip total fuel cost recalculates upon edit.
+- [x] Authorized user can edit fuel stop quantity, rate, vendor, and odometer.
+- [x] Milestone location and timestamp can be updated with audit logging.
+- [x] Trip total fuel cost recalculates upon edit.
 
 ## 10. Required tests
 
@@ -67,4 +67,7 @@ Provide an authorized Edit modal for fuel stops and milestones while trip is act
 
 ## 12. Verification evidence
 
-*Implementation and verification evidence are pending. No fixes have been applied in this documentation phase.*
+- **Resolved in Commit:** `79d8a30` (Batch C)
+- **Controller & Service Implementation:** `backend/src/controllers/journeyController.ts` (`updateFuelStop`, `updateMilestone`, `correctJourney`), audit logging, recalculation of fuel expenses and ledger sync under ACID transaction.
+- **Integration Test Suite:** `backend/src/tests/integration/journeyCorrections.test.ts` (Validates fuel stop update, audit log generation, and total recalculations).
+

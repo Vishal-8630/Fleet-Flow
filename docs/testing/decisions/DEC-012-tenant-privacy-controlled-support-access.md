@@ -4,8 +4,8 @@
 
 - **Decision ID:** DEC-012
 - **Title:** Tenant Privacy Architecture and Controlled Support Impersonation Access
-- **Status:** Approved (Implementation Authorized)
-- **Date:** 15 October 2026 (Formal Implementation Authorized)
+- **Status:** Implemented (Batch A — Commits 52404f1, 72bc74a)
+- **Date:** 15 October 2026
 - **Source:** `docs/testing/FLEET_FLOW_MANUAL_TESTING_AND_DECISION_HANDOFF.md`
 - **Related Issues:** [FF-ISSUE-022](../issues/support-tickets/FF-ISSUE-022-central-support-inbox-missing.md), [FF-ISSUE-056](../issues/support-impersonation/FF-ISSUE-056-superadmin-unscoped-tenant-access.md), [FF-ISSUE-057](../issues/support-impersonation/FF-ISSUE-057-support-impersonation-approval-missing.md)
 
@@ -106,18 +106,18 @@ Implement `supportAccessRequest` collection, approval flow in workspace settings
 ## 6. Acceptance Criteria and Verification Requirements
 
 - [x] DEC-012 emergency exception reconciled with Principle 2 and approved.
-- [ ] Super-Admin cannot enter tenant workspace without approved support session token.
-- [ ] Support sessions expire automatically after duration and can be revoked by Workspace Admin.
-- [ ] Every action taken during support session is stamped with operator identity in audit logs.
-- [ ] All six approved policies are implemented and verified via automated negative security tests.
+- [x] Super-Admin cannot enter tenant workspace without approved support session token.
+- [x] Support sessions expire automatically after duration and can be revoked by Workspace Admin.
+- [x] Every action taken during support session is stamped with operator identity in audit logs.
+- [x] All six approved policies are implemented and verified via automated negative security tests.
 
 ## 7. Explicit Scope Boundaries
 
 Governs platform operator access to customer business records. Does not prevent Super-Admin from managing tenant subscriptions, billing status, or platform health telemetry.
 
-## 8. What is Not Yet Implemented or Verified
+## 8. Implementation and Verification Status
 
-Batch A implementation was formally authorized by the Product Owner on 15 October 2026. Code implementation proceeds in small, reviewable stages backed by automated security tests.
+This policy is **IMPLEMENTED** in Batch A (Commits `52404f1`, `72bc74a`). Support Access Request approval workflows, dual break-glass emergency access, session token scoping, driver PII masking, and financial data redaction are implemented in `backend/src/controllers/supportAccessController.ts` and `backend/src/middleware/tenantContext.ts`. Validated via integration test suite `backend/src/tests/integration/batchASecurity.test.ts`.
 
 ## 9. Related Issues and Artifacts
 

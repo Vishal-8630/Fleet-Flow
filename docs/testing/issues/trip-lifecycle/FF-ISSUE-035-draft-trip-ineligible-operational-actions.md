@@ -5,13 +5,13 @@
 - **ID:** FF-ISSUE-035
 - **Category:** Workflow
 - **Priority:** High
-- **Status:** Observed
+- **Status:** Resolved
 - **Affected module:** Trip Lifecycle / Trip Details
 - **Source:** `docs/testing/FLEET_FLOW_MANUAL_TESTING_AND_DECISION_HANDOFF.md`
 - **Legacy ID:** `N/A`
 - **Related issues:** [FF-ISSUE-037](FF-ISSUE-037-completed-trip-operational-actions-editable.md)
 - **Related decisions:** DEC-008
-- **Implementation status:** Not implemented
+- **Implementation status:** Implemented (Batch C — Commit 79d8a30)
 
 ## 1. Summary
 
@@ -52,9 +52,9 @@ Implement backend validation rejecting operational mutations when trip status is
 
 ## 9. Acceptance criteria
 
-- [ ] Draft trips disable or hide Add Fuel, Add Expense, Add Milestone, and Upload POD.
-- [ ] Direct API calls to record expenses on Draft trips are rejected with HTTP 400/422.
-- [ ] Draft trip clearly indicates that dispatch is required before recording operational events.
+- [x] Draft trips disable or hide Add Fuel, Add Expense, Add Milestone, and Upload POD.
+- [x] Direct API calls to record expenses on Draft trips are rejected with HTTP 400/422.
+- [x] Draft trip clearly indicates that dispatch is required before recording operational events.
 
 ## 10. Required tests
 
@@ -68,4 +68,7 @@ Implement backend validation rejecting operational mutations when trip status is
 
 ## 12. Verification evidence
 
-*Implementation and verification evidence are pending. No fixes have been applied in this documentation phase.*
+- **Resolved in Commit:** `79d8a30` (Batch C)
+- **Controller & Service Implementation:** `backend/src/controllers/journeyController.ts` (`addFuelStop`, `addExpense`, `addMilestone`, `uploadPod` — state precondition guard rejecting non-dispatched/draft trips).
+- **Integration Test Suite:** `backend/src/tests/integration/journeyLifecycleState.test.ts` (Validates rejection of operational actions on draft journeys).
+

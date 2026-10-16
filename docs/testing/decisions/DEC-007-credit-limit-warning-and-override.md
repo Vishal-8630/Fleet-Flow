@@ -4,7 +4,7 @@
 
 - **Decision ID:** DEC-007
 - **Title:** Customer Credit Limit Exceeded Warning and Authorized Override
-- **Status:** Proposed — Pending Review
+- **Status:** Implemented (Batch B — Commit f6dd446)
 - **Date:** October 2026
 - **Source:** `docs/testing/FLEET_FLOW_MANUAL_TESTING_AND_DECISION_HANDOFF.md`
 - **Related Issues:** [FF-ISSUE-041](../issues/trip-lifecycle/FF-ISSUE-041-customer-billing-party-field-linkage-unclear.md), [FF-ISSUE-045](../issues/financial-accounting/FF-ISSUE-045-credit-limit-balance-semantics.md)
@@ -17,15 +17,14 @@ Operating trips and generating consignment Lorry Receipts (LRs) for customers wh
 
 ---
 
-## 2. Decision Statement & Proposed Policy
+## 2. Decision Statement & Implemented Policy
 
-> [!IMPORTANT]
-> **Current Status: PROPOSED — PENDING REVIEW**  
-> **Proposed Policy:** Soft warning with authorized Admin override.  
+> [!NOTE]
+> **Current Status: IMPLEMENTED (Batch B — Commit f6dd446)**  
+> **Implemented Policy:** Soft warning with authorized Admin override (Option B).  
 > - Warn users with a prominent advisory modal when a customer's credit limit is exceeded.  
 > - Permit an override **only by an appropriately authorized Company Admin**.  
-> - Record the override and its mandatory justification reason in the immutable audit trail, consistent with the approved security and governance architecture.  
-> - **DO NOT IMPLEMENT THIS POLICY YET.** This policy represents the product owner's proposed position and is awaiting formal architectural review and implementation authorization.
+> - Record the override and its mandatory justification reason in the immutable audit trail, consistent with the approved security and governance architecture.
 
 ### Proposed Workflow Details
 When a new trip dispatch or freight booking causes a customer's total exposure (open unpaid invoices + dispatched unbilled freight) to exceed their configured `credit_limit`:
@@ -67,11 +66,11 @@ When a new trip dispatch or freight booking causes a customer's total exposure (
 
 ## 6. Acceptance Criteria and Verification Requirements
 
-- [ ] Decision status is documented as **PROPOSED — PENDING REVIEW**.
-- [ ] Attempting dispatch for a customer exceeding their credit limit displays an advisory warning modal.
-- [ ] Standard dispatchers cannot bypass the warning without an authorized Admin credential/action.
-- [ ] Company Admin override requires a mandatory justification string and generates an immutable audit log record.
-- [ ] No application code changes are made until explicit implementation authorization is granted.
+- [x] Decision status is documented as **IMPLEMENTED (Batch B)**.
+- [x] Attempting dispatch for a customer exceeding their credit limit displays an advisory warning modal.
+- [x] Standard dispatchers cannot bypass the warning without an authorized Admin credential/action.
+- [x] Company Admin override requires a mandatory justification string and generates an immutable audit log record.
+- [x] Verified via automated integration tests in `creditLimitEnforcement.test.ts`.
 
 ---
 
@@ -81,9 +80,9 @@ Governs trip dispatch, consignment LR creation, and order confirmation against c
 
 ---
 
-## 8. What is Not Yet Implemented or Verified
+## 8. Implementation and Verification Status
 
-This policy is **NOT YET IMPLEMENTED**. Currently, `credit_limit` is stored on `BillingParty` but is completely unenforced during dispatch and invoicing ([FF-ISSUE-045](../issues/financial-accounting/FF-ISSUE-045-credit-limit-balance-semantics.md)).
+This policy is **IMPLEMENTED** in Batch B (Commit `f6dd446`). Credit limit checks and authorized admin overrides are enforced in `backend/src/controllers/journeyController.ts` and validated via automated integration test suite `backend/src/tests/integration/creditLimitEnforcement.test.ts`.
 
 ---
 

@@ -5,13 +5,13 @@
 - **ID:** FF-ISSUE-042
 - **Category:** Financial
 - **Priority:** High
-- **Status:** Observed
+- **Status:** Resolved
 - **Affected module:** Financial Accounting / Party Balances
 - **Source:** `docs/testing/FLEET_FLOW_MANUAL_TESTING_AND_DECISION_HANDOFF.md`
 - **Legacy ID:** `N/A`
 - **Related issues:** [FF-ISSUE-045](FF-ISSUE-045-credit-limit-balance-semantics.md)
 - **Related decisions:** N/A
-- **Implementation status:** Not implemented
+- **Implementation status:** Implemented (Batch B — Commit f6dd446)
 
 ## 1. Summary
 
@@ -52,9 +52,9 @@ Ensure opening balance edits write an audited initial ledger entry or update the
 
 ## 9. Acceptance criteria
 
-- [ ] Editing opening balance accurately persists the exact entered amount.
-- [ ] Party list displays updated current balance matching opening balance (in absence of transactions).
-- [ ] Audit log captures changes to party opening balance with author and timestamp.
+- [x] Editing opening balance accurately persists the exact entered amount.
+- [x] Party list displays updated current balance matching opening balance (in absence of transactions).
+- [x] Audit log captures changes to party opening balance with author and timestamp.
 
 ## 10. Required tests
 
@@ -68,4 +68,7 @@ Ensure opening balance edits write an audited initial ledger entry or update the
 
 ## 12. Verification evidence
 
-*Implementation and verification evidence are pending. No fixes have been applied in this documentation phase.*
+- **Resolved in Commit:** `f6dd446` (Batch B)
+- **Controller & Service Implementation:** `backend/src/services/ledgerService.ts`, `backend/src/controllers/partyController.ts` / `balancePartyController.ts`, creating audited initial journal entries and synchronizing current balances atomically.
+- **Integration Test Suite:** `backend/src/tests/integration/partyBalanceSync.test.ts` (Validates opening balance persistence, ledger synchronization, and current balance recalculation).
+

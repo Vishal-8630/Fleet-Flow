@@ -5,12 +5,12 @@
 - **ID:** FF-ISSUE-056
 - **Category:** Security / Architecture
 - **Priority:** Critical
-- **Status:** Observed / Agreed Future Behavior
+- **Status:** Resolved
 - **Affected module:** Super-Admin Control Plane & Tenant Security
 - **Source:** `docs/testing/FLEET_FLOW_MANUAL_TESTING_AND_DECISION_HANDOFF.md` (Section 4.G, Super-Admin workspace access)
 - **Related issues:** [FF-ISSUE-022](../support-tickets/FF-ISSUE-022-central-support-inbox-missing.md), [FF-ISSUE-057](FF-ISSUE-057-support-impersonation-approval-missing.md)
 - **Related decisions:** [DEC-012](../../decisions/DEC-012-tenant-privacy-and-support-access.md)
-- **Implementation status:** Not implemented
+- **Implementation status:** Implemented (Batch A — Commits 52404f1, 72bc74a)
 
 ## 1. Summary
 
@@ -57,10 +57,10 @@ Major enterprise security and data privacy concern. Prospective B2B logistics en
 
 ## 9. Acceptance criteria
 
-- [ ] Super-Admin cannot access tenant business records without an active, approved support session.
-- [ ] Support sessions default to read-only access.
-- [ ] Financial data is masked during ordinary troubleshooting sessions.
-- [ ] All actions performed during support sessions are permanently logged in the audit trail.
+- [x] Super-Admin cannot access tenant business records without an active, approved support session.
+- [x] Support sessions default to read-only access.
+- [x] Financial data is masked during ordinary troubleshooting sessions.
+- [x] All actions performed during support sessions are permanently logged in the audit trail.
 
 ## 10. Required tests
 
@@ -74,4 +74,7 @@ Major enterprise security and data privacy concern. Prospective B2B logistics en
 
 ## 12. Verification evidence
 
-- Implementation and verification evidence pending.
+- **Resolved in Commits:** `52404f1`, `72bc74a` (Batch A)
+- **Controller & Middleware Implementation:** `backend/src/controllers/supportAccessController.ts`, `backend/src/middleware/tenantContext.ts`, enforcing strict tenant boundary scoping, read-only defaults, token expiry, ticket linkage, and financial masking per DEC-012.
+- **Integration Test Suite:** `backend/src/tests/integration/batchASecurity.test.ts` (Super-admin impersonation scoping, financial masking, and audit logging).
+

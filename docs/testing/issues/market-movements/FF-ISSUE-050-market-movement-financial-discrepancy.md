@@ -5,13 +5,13 @@
 - **ID:** FF-ISSUE-050
 - **Category:** Financial
 - **Priority:** High
-- **Status:** Needs Verification
+- **Status:** Resolved
 - **Affected module:** Market Movements / Financial Settlement
 - **Source:** `docs/testing/FLEET_FLOW_MANUAL_TESTING_AND_DECISION_HANDOFF.md`
 - **Legacy ID:** `FF-MT-042`
 - **Related issues:** [FF-ISSUE-045](../financial-accounting/FF-ISSUE-045-credit-limit-balance-semantics.md)
 - **Related decisions:** N/A
-- **Implementation status:** Not implemented
+- **Implementation status:** Implemented (Batch B — Commit f6dd446)
 
 ## 1. Summary
 
@@ -51,9 +51,9 @@ Investigate the exact database fields and formula during code audit. Render all 
 
 ## 9. Acceptance criteria
 
-- [ ] Every deduction contributing to Net Due is explicitly labeled and displayed.
-- [ ] Mathematical invariant verified: Net Due equals Freight minus sum of all itemized deductions.
-- [ ] Backend and frontend calculations agree 100% on settlement totals.
+- [x] Every deduction contributing to Net Due is explicitly labeled and displayed.
+- [x] Mathematical invariant verified: Net Due equals Freight minus sum of all itemized deductions.
+- [x] Backend and frontend calculations agree 100% on settlement totals.
 
 ## 10. Required tests
 
@@ -67,4 +67,7 @@ Investigate the exact database fields and formula during code audit. Render all 
 
 ## 12. Verification evidence
 
-*Implementation and verification evidence are pending. No fixes have been applied in this documentation phase.*
+- **Resolved in Commit:** `f6dd446` (Batch B)
+- **Controller & Service Implementation:** `backend/src/models/MarketMovement.ts`, `backend/src/controllers/marketMovementController.ts`, itemizing all deduction elements and guaranteeing mathematical balance invariants for `net_due`.
+- **Integration Test Suite:** `backend/src/tests/integration/marketMovementMath.test.ts` (Validates itemized deductions and strict arithmetic parity between freight, advances, brokerage, and net due).
+

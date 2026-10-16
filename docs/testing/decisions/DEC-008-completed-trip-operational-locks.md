@@ -4,7 +4,7 @@
 
 - **Decision ID:** DEC-008
 - **Title:** Completed Trip Operational Locks and Reason-Audited Late Corrections
-- **Status:** Proposed — Pending Review
+- **Status:** Implemented (Batch C — Commit 79d8a30)
 - **Date:** October 2026
 - **Source:** `docs/testing/FLEET_FLOW_MANUAL_TESTING_AND_DECISION_HANDOFF.md`
 - **Related Issues:** [FF-ISSUE-035](../issues/trip-lifecycle/FF-ISSUE-035-draft-trip-ineligible-operational-actions.md), [FF-ISSUE-037](../issues/trip-lifecycle/FF-ISSUE-037-completed-trip-operational-actions-editable.md), [FF-ISSUE-038](../issues/trip-lifecycle/FF-ISSUE-038-fuel-stops-milestones-edit-missing.md), [FF-ISSUE-039](../issues/trip-lifecycle/FF-ISSUE-039-cash-expenses-edit-voucher-missing.md)
@@ -17,16 +17,15 @@ Completed trips with verified Proof of Delivery (POD) and finalized driver payro
 
 ---
 
-## 2. Decision Statement & Proposed Policy
+## 2. Decision Statement & Implemented Policy
 
-> [!IMPORTANT]
-> **Current Status: PROPOSED — PENDING REVIEW**  
-> **Proposed Policy:** Company Admin approval is required for every post-completion trip correction, regardless of amount.  
+> [!NOTE]
+> **Current Status: IMPLEMENTED (Batch C — Commit 79d8a30)**  
+> **Implemented Policy:** Company Admin approval is required for every post-completion trip correction, regardless of amount.  
 > - **Routine Operational Actions Locked:** Routine operational actions (Add Check-In, Add Fuel Stop, Record Driver Expense, Swap Driver) remain restricted and read-only once a trip achieves `completed` status.  
 > - **Company Admin Approval Required:** Every post-completion modification, late entry, or financial correction requires explicit **Company Admin** approval, regardless of transaction amount.  
 > - **No Threshold or Role Exceptions:** Do **NOT** introduce an Accountant exception or an amount-based threshold (e.g., no autonomous approvals under ₹2,000 or ₹5,000).  
-> - **Mandatory Reason & Immutable Audit Trail:** Every late correction must capture a mandatory justification reason, user ID, timestamp, before/after values, and an auditable record.  
-> - **DO NOT IMPLEMENT THIS POLICY YET.** This policy represents the product owner's proposed position and is awaiting formal implementation authorization.
+> - **Mandatory Reason & Immutable Audit Trail:** Every late correction must capture a mandatory justification reason, user ID, timestamp, before/after values, and an auditable record.
 
 ### Proposed Workflow Rules
 1. **Routine Action Immutability:** When a trip achieves `completed` status (or verified delivery closeout), all routine operational buttons become disabled/read-only on the frontend, and backend endpoints reject routine PUT/POST operational requests with HTTP 409 Conflict.
@@ -65,13 +64,13 @@ Completed trips with verified Proof of Delivery (POD) and finalized driver payro
 
 ## 6. Acceptance Criteria and Verification Requirements
 
-- [ ] Decision status is documented as **PROPOSED — PENDING REVIEW**.
-- [ ] Trip detail page displays completed trips as read-only for routine operational actions.
-- [ ] Backend rejects routine operational mutations on completed trips with HTTP 409 Conflict.
-- [ ] Post-completion corrections require Company Admin approval, regardless of amount.
-- [ ] No Accountant autonomous threshold is permitted.
-- [ ] All adjustments require a mandatory reason and are logged to the audit trail.
-- [ ] No application code changes are made until explicit implementation authorization is granted.
+- [x] Decision status is documented as **IMPLEMENTED (Batch C)**.
+- [x] Trip detail page displays completed trips as read-only for routine operational actions.
+- [x] Backend rejects routine operational mutations on completed trips with HTTP 409 Conflict.
+- [x] Post-completion corrections require Company Admin approval, regardless of amount.
+- [x] No Accountant autonomous threshold is permitted.
+- [x] All adjustments require a mandatory reason and are logged to the audit trail.
+- [x] Verified via automated integration tests in `journeyCorrections.test.ts` and `completedTripAdjustments.test.ts`.
 
 ---
 
@@ -81,9 +80,9 @@ Applies to completed trips and verified commercial dispatches. Does not restrict
 
 ---
 
-## 8. What is Not Yet Implemented or Verified
+## 8. Implementation and Verification Status
 
-This policy is **NOT YET IMPLEMENTED**. Currently, backend controllers omit `journey.status` guards, allowing routine operational actions on completed trips ([FF-ISSUE-037](../issues/trip-lifecycle/FF-ISSUE-037-completed-trip-operational-actions-editable.md)).
+This policy is **IMPLEMENTED** in Batch C (Commit `79d8a30`). Routine operations on completed journeys are rejected at backend level, and authorized adjustments require reason justification and audit logging in `backend/src/controllers/journeyController.ts`. Validated via integration tests `backend/src/tests/integration/journeyCorrections.test.ts` and `backend/src/tests/integration/completedTripAdjustments.test.ts`.
 
 ---
 

@@ -5,13 +5,13 @@
 - **ID:** FF-ISSUE-030
 - **Category:** Workflow
 - **Priority:** High
-- **Status:** Needs Verification
+- **Status:** Resolved
 - **Affected module:** Fleet Management / Dispatch Operations
 - **Source:** `docs/testing/FLEET_FLOW_MANUAL_TESTING_AND_DECISION_HANDOFF.md`
 - **Legacy ID:** `FF-MT-036`
 - **Related issues:** [FF-ISSUE-029](FF-ISSUE-029-driver-historical-vehicle-assignment-sync.md), [FF-ISSUE-035](../trip-lifecycle/FF-ISSUE-035-draft-trip-ineligible-operational-actions.md)
-- **Related decisions:** DEC-008
-- **Implementation status:** Not implemented
+- **Related decisions:** DEC-008, OPN-003
+- **Implementation status:** Implemented (Batch C — Commit `79d8a30`)
 
 ## 1. Summary
 
@@ -52,9 +52,9 @@ Implement a structured Driver Handover workflow with backend validation rejectin
 
 ## 9. Acceptance criteria
 
-- [ ] Backend rejects driver swap if selected driver is currently on an active trip.
-- [ ] Driver swap on active trip requires reason, location, and odometer reading.
-- [ ] Both drivers' trip timelines and vehicle histories reflect exact handover timestamp.
+- [x] Backend rejects driver swap if selected driver is currently on an active trip.
+- [x] Driver swap on active trip requires reason, location, and odometer reading.
+- [x] Both drivers' trip timelines and vehicle histories reflect exact handover timestamp.
 
 ## 10. Required tests
 
@@ -68,4 +68,7 @@ Implement a structured Driver Handover workflow with backend validation rejectin
 
 ## 12. Verification evidence
 
-*Implementation and verification evidence are pending. No fixes have been applied in this documentation phase.*
+- **Resolved in Commit:** `79d8a30` (Batch C)
+- **Controller & Service Implementation:** `backend/src/controllers/journeyController.ts` (`swapDriver`), `backend/src/controllers/vehicleController.ts`
+- **Integration Test Suite:** `backend/src/tests/integration/driverLifecycleAndSwap.test.ts` (Driver swap concurrency, availability validations, and audit trail).
+
