@@ -5,12 +5,12 @@
 - **ID:** FF-ISSUE-012
 - **Category:** UI-UX
 - **Priority:** High
-- **Status:** Observed
+- **Status:** Resolved (Batch E6)
 - **Affected module:** Global Toast Notifications & Modal Dialogs
 - **Source:** `docs/testing/FLEET_FLOW_MANUAL_TESTING_AND_DECISION_HANDOFF.md` (Section 4.A, FF-MT-019)
 - **Related issues:** [FF-ISSUE-033](../data-validation/FF-ISSUE-033-duplicate-gstin-billing-parties.md)
 - **Related decisions:** None
-- **Implementation status:** Not implemented
+- **Implementation status:** Implemented & Verified in Batch E6
 
 ## 1. Summary
 
@@ -56,14 +56,17 @@ Users cannot diagnose why form submissions fail. They may repeatedly click submi
 
 ## 9. Acceptance criteria
 
-- [ ] Toast notifications render strictly above all modal dialogs, backdrops, and sidebars.
-- [ ] Error toasts remain visible for at least 6 seconds unless manually closed.
-- [ ] Hovering over a toast pauses the auto-dismiss countdown.
-- [ ] Toast is accessible via keyboard and screen readers.
+- [x] Toast notifications render strictly above all modal dialogs, backdrops, and sidebars (`z-index: 9999` portaled to `document.body`).
+- [x] Error toasts remain visible for at least 6 seconds (6000ms) unless manually closed.
+- [x] Non-error toasts preserve default 4500ms duration.
+- [x] Hovering over a toast pauses the auto-dismiss countdown.
+- [x] Leaving hover resumes countdown with exact remaining duration.
+- [x] Toast is accessible via keyboard and screen readers (`aria-live="polite"`, `role="alert"`).
 
 ## 10. Required tests
 
-- Unit tests for Toast component verifying hover pause behavior and z-index style rules.
+- Unit & integration tests verifying z-index hierarchy, portal mounting, duration defaults, and remaining-time hover pause/resume logic: Completed in `backend/src/tests/integration/phase5BatchE6UiAndToastHardening.test.ts` (16 passing).
+- Frontend production build verification (`tsc -b && vite build`: Exit Code 0).
 
 ## 11. Dependencies and related issues
 
@@ -71,4 +74,8 @@ Users cannot diagnose why form submissions fail. They may repeatedly click submi
 
 ## 12. Verification evidence
 
-- Implementation and verification evidence pending.
+- Documented in [`docs/testing/audit/BATCH_E6_AUDIT_REPORT.md`](../../audit/BATCH_E6_AUDIT_REPORT.md).
+- Automated test suite: `backend/src/tests/integration/phase5BatchE6UiAndToastHardening.test.ts` (16 passing).
+- Cumulative regression test suite: 125/125 passing across all 7 test files.
+- Production build verified with zero errors.
+

@@ -195,7 +195,7 @@ export const FeaturesPage: React.FC = () => {
           >
             <h2 style={{ fontSize: '2rem', fontWeight: 800, margin: 0 }}>Ready to Modernize Your Fleet Operations?</h2>
             <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '1rem', maxWidth: 540, margin: '1rem auto 2rem' }}>
-              Start with our 14-day free trial on the Standard Commercial plan. No credit card required. Cancel anytime.
+              Start with our 7-day free trial with Starter tier features. No credit card required. Cancel anytime.
             </p>
             <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem' }}>
               <Link
@@ -213,7 +213,7 @@ export const FeaturesPage: React.FC = () => {
                   boxShadow: '0 0 25px rgba(99,102,241,0.4)',
                 }}
               >
-                <span>Start Free 14-Day Trial</span>
+                <span>Start Free 7-Day Trial</span>
                 <ArrowRight size={18} />
               </Link>
               <Link

@@ -3,11 +3,11 @@
  * HOME PAGE — MARKETING LANDING PAGE (HomePage.tsx)
  * ============================================================================
  * Modern SaaS landing page for Fleet Flow targeting Indian road transporters.
- * Features: Hero, Value Pillars, ROI Calculator, Social Proof, CTA.
+ * Features: Hero, Value Pillars, Social Proof, CTA.
  * ============================================================================
  */
 
-import React, { useState } from 'react';
+import React from 'react';
 import { Link } from 'react-router-dom';
 import { PublicLayout } from '../../components/layout/PublicLayout';
 import {
@@ -59,14 +59,6 @@ const PLAN_BADGES: Record<string, string> = {
 };
 
 export const HomePage: React.FC = () => {
-  const [fleetSize, setFleetSize] = useState(10);
-
-  // Simple ROI calculator
-  const hoursPerTruckPerMonth = 4; // billing hours saved
-  const hourlyRate = 500; // ₹/hr
-  const fuelSavingPerTruck = 3000; // ₹/month from leakage reduction
-  const totalSavings = fleetSize * (hoursPerTruckPerMonth * hourlyRate + fuelSavingPerTruck);
-
   return (
     <PublicLayout>
       {/* ================================================================
@@ -111,7 +103,7 @@ export const HomePage: React.FC = () => {
                 boxShadow: '0 0 40px rgba(99,102,241,0.5)',
               }}
             >
-              Start Free 14-Day Trial <ArrowRight size={18} />
+              Start Free 7-Day Trial <ArrowRight size={18} />
             </Link>
             <Link
               to="/demo"
@@ -127,7 +119,7 @@ export const HomePage: React.FC = () => {
           </div>
 
           <div style={{ marginTop: '1.5rem', display: 'flex', gap: '1.5rem', justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap' }}>
-            {['No credit card required', '14-day free trial', 'Cancel anytime'].map((t) => (
+            {['No credit card required', '7-day free trial', 'Cancel anytime'].map((t) => (
               <div key={t} style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)' }}>
                 <CheckCircle size={13} color="#34d399" />
                 {t}
@@ -197,57 +189,6 @@ export const HomePage: React.FC = () => {
                 <p style={{ fontSize: '0.875rem', color: 'rgba(255,255,255,0.55)', lineHeight: 1.6 }}>{desc}</p>
               </div>
             ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ================================================================
-          ROI CALCULATOR
-      ================================================================ */}
-      <section style={{ padding: '5rem 1.5rem', background: 'linear-gradient(135deg, #0f0a2e, #0a1628)' }}>
-        <div style={{ maxWidth: 700, margin: '0 auto', textAlign: 'center' }}>
-          <h2 style={{ fontSize: '2rem', fontWeight: 800, color: '#fff', marginBottom: '0.75rem' }}>
-            Fleet ROI Calculator
-          </h2>
-          <p style={{ color: 'rgba(255,255,255,0.5)', marginBottom: '2.5rem' }}>
-            Drag the slider to see your estimated monthly savings with Fleet Flow.
-          </p>
-
-          <div style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '1.25rem', padding: '2rem' }}>
-            <div style={{ marginBottom: '1.5rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#fff', marginBottom: '0.75rem' }}>
-                <span style={{ fontSize: '0.875rem', color: 'rgba(255,255,255,0.6)' }}>Your Fleet Size</span>
-                <span style={{ fontWeight: 700, fontSize: '1.25rem' }}>{fleetSize} Trucks</span>
-              </div>
-              <input
-                type="range" min={1} max={100} value={fleetSize}
-                onChange={(e) => setFleetSize(Number(e.target.value))}
-                style={{ width: '100%', accentColor: '#6366f1' }}
-              />
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'rgba(255,255,255,0.3)' }}>
-                <span>1</span><span>100+</span>
-              </div>
-            </div>
-
-            <div style={{ background: 'linear-gradient(135deg, rgba(99,102,241,0.2), rgba(52,211,153,0.1))', borderRadius: '0.75rem', padding: '1.5rem', marginTop: '1rem' }}>
-              <div style={{ fontSize: '0.875rem', color: 'rgba(255,255,255,0.6)', marginBottom: '0.5rem' }}>Estimated Monthly Savings</div>
-              <div style={{ fontSize: '2.5rem', fontWeight: 900, color: '#34d399' }}>
-                ₹{totalSavings.toLocaleString('en-IN')}
-              </div>
-              <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.4)', marginTop: '0.5rem' }}>
-                From billing automation (₹{(fleetSize * hoursPerTruckPerMonth * hourlyRate).toLocaleString('en-IN')}) + fuel leakage reduction (₹{(fleetSize * fuelSavingPerTruck).toLocaleString('en-IN')})
-              </div>
-            </div>
-
-            <Link to="/register" style={{
-              display: 'inline-flex', alignItems: 'center', gap: '0.5rem', marginTop: '1.5rem',
-              padding: '0.875rem 2rem', borderRadius: '0.625rem', textDecoration: 'none',
-              fontWeight: 700, fontSize: '1rem', color: '#fff',
-              background: 'linear-gradient(135deg, #6366f1, #4f46e5)',
-              boxShadow: '0 0 30px rgba(99,102,241,0.4)',
-            }}>
-              Start Saving Now <ArrowRight size={16} />
-            </Link>
           </div>
         </div>
       </section>

@@ -28,6 +28,7 @@ import { PlatformSetting } from '../models/PlatformSetting.js';
 import { PromoCode } from '../models/PromoCode.js';
 import { seedBillingCatalog } from '../utils/billingSeedService.js';
 import { validateModuleDependencies } from '../utils/featureCatalog.js';
+import { getTenantEntitlements } from '../utils/entitlementService.js';
 import { getCookieOptions } from './authController.js';
 
 /**
@@ -231,7 +232,7 @@ export async function overrideTenantQuota(req: Request, res: Response): Promise<
 export async function extendTenantTrial(req: Request, res: Response): Promise<void> {
   try {
     const { id } = req.params;
-    const { additional_days = 14 } = req.body;
+    const { additional_days = 7 } = req.body;
 
     const company = await Company.findById(id);
     if (!company) {
@@ -927,6 +928,79 @@ export async function togglePromoCode(req: Request, res: Response): Promise<void
     res.json({ success: true, message: `Promo code is now ${promo.is_active ? 'active' : 'inactive'}.`, promo });
   } catch (error: any) {
     res.status(500).json({ error: error.message || 'Failed to toggle promo code.' });
+  }
+}
+
+/**
+ * GET /api/super-admin/tenants/modules-overview
+ * ----------------------------------------------------------------------------
+ * Multi-company module configuration and effective access overview for Super Admins.
+ * 
+ * INVARIANTS:
+ * 1. Read-Only: Strictly inspects tenant configuration; provides zero mutation capability.
+ * 2. Super Admin Authorization: Guarded by requireSuperAdmin middleware.
+ * 3. Privacy Preservation: Minimizes sensitive tenant PII (excludes passwords, financial records, API keys).
+ * 4. Transparent Governance: Exposes subscription plan/status, eligible modules, saved preferences, and effective access.
+ * 5. Accurate Usage Telemetry: Reports honest instrumentation status without inventing synthetic metrics.
+ */
+export async function getCompanyModulesOverview(req: Request, res: Response): Promise<void> {
+  try {
+    const { page = '1', limit = '50', search, status } = req.query;
+    const queryPage = Math.max(1, parseInt(page as string, 10));
+    const queryLimit = Math.max(1, parseInt(limit as string, 10));
+
+    const filter: any = { is_deleted: false };
+    if (status) filter.subscription_status = status;
+    if (search) {
+      filter.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { slug: { $regex: search, $options: 'i' } },
+      ];
+    }
+
+    const total = await Company.countDocuments(filter);
+    const companies = await Company.find(filter)
+      .sort({ created_at: -1 })
+      .skip((queryPage - 1) * queryLimit)
+      .limit(queryLimit);
+
+    const tenantsOverview = await Promise.all(
+      companies.map(async (company) => {
+        const entitlements = await getTenantEntitlements(company);
+        const savedPreferences = company.settings?.enabled_modules ?? null;
+        const isCustomized = Array.isArray(company.settings?.enabled_modules);
+
+        return {
+          company_id: company._id,
+          company_name: company.name,
+          slug: company.slug,
+          subscription_plan: entitlements.plan,
+          subscription_status: company.subscription_status,
+          trial_ends_at: company.trial_ends_at,
+          is_read_only: entitlements.is_read_only,
+          is_customized: isCustomized,
+          eligible_modules: entitlements.plan_features,
+          saved_preferences: savedPreferences,
+          effective_modules: entitlements.enabled_features,
+          usage: {
+            is_instrumented: false,
+            status: 'usage_not_tracked',
+            note: 'Operational module usage telemetry is not instrumented.',
+          },
+        };
+      })
+    );
+
+    res.json({
+      success: true,
+      total,
+      page: queryPage,
+      limit: queryLimit,
+      tenants: tenantsOverview,
+    });
+  } catch (error: any) {
+    console.error('Error fetching company modules overview:', error);
+    res.status(500).json({ error: error.message || 'Failed to fetch company modules overview.' });
   }
 }
 

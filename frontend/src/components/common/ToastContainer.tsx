@@ -19,26 +19,68 @@
  * ============================================================================
  */
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import ReactDOM from 'react-dom';
 import { useUiStore, Toast } from '../../stores/uiStore';
 import { CheckCircle2, AlertTriangle, AlertCircle, Info, X } from 'lucide-react';
 
 /**
- * Individual Toast Item with auto-dismiss timer and dismissal action
+ * Individual Toast Item with auto-dismiss timer, hover pause/resume, and dismissal action
  */
 const ToastItem: React.FC<{ toast: Toast; onDismiss: (id: string) => void }> = ({
   toast,
   onDismiss,
 }) => {
-  // Auto-dismiss countdown timer
+  const [, setIsPaused] = useState(false);
+  const remainingTimeRef = useRef<number>(toast.duration ?? 4500);
+  const startTimeRef = useRef<number>(Date.now());
+  const timerIdRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearCurrentTimer = useCallback(() => {
+    if (timerIdRef.current) {
+      clearTimeout(timerIdRef.current);
+      timerIdRef.current = null;
+    }
+  }, []);
+
+  const startTimer = useCallback((durationMs: number) => {
+    clearCurrentTimer();
+    if (durationMs <= 0) {
+      onDismiss(toast.id);
+      return;
+    }
+    startTimeRef.current = Date.now();
+    timerIdRef.current = setTimeout(() => {
+      onDismiss(toast.id);
+    }, durationMs);
+  }, [clearCurrentTimer, onDismiss, toast.id]);
+
+  // Mount & initial timer start
   useEffect(() => {
     if (toast.duration && toast.duration > 0) {
-      const timer = setTimeout(() => {
-        onDismiss(toast.id);
-      }, toast.duration);
-      return () => clearTimeout(timer);
+      startTimer(remainingTimeRef.current);
     }
-  }, [toast, onDismiss]);
+    return () => clearCurrentTimer();
+  }, [toast.id, toast.duration, startTimer, clearCurrentTimer]);
+
+  const handlePointerEnter = () => {
+    if (!toast.duration || toast.duration <= 0) return;
+    clearCurrentTimer();
+    const elapsed = Date.now() - startTimeRef.current;
+    remainingTimeRef.current = Math.max(0, remainingTimeRef.current - elapsed);
+    setIsPaused(true);
+  };
+
+  const handlePointerLeave = () => {
+    if (!toast.duration || toast.duration <= 0) return;
+    setIsPaused(false);
+    startTimer(remainingTimeRef.current);
+  };
+
+  const handleManualDismiss = () => {
+    clearCurrentTimer();
+    onDismiss(toast.id);
+  };
 
   // Icon mapping according to alert severity
   const renderIcon = () => {
@@ -56,7 +98,12 @@ const ToastItem: React.FC<{ toast: Toast; onDismiss: (id: string) => void }> = (
   };
 
   return (
-    <div className={`toast toast-${toast.type}`} role="alert">
+    <div
+      className={`toast toast-${toast.type}`}
+      role="alert"
+      onPointerEnter={handlePointerEnter}
+      onPointerLeave={handlePointerLeave}
+    >
       <div className="toast-icon">{renderIcon()}</div>
       <div className="toast-content">
         {toast.title && <div className="toast-title">{toast.title}</div>}
@@ -65,7 +112,7 @@ const ToastItem: React.FC<{ toast: Toast; onDismiss: (id: string) => void }> = (
       <button
         type="button"
         className="toast-close-btn"
-        onClick={() => onDismiss(toast.id)}
+        onClick={handleManualDismiss}
         aria-label="Close notification"
       >
         <X size={14} />
@@ -75,18 +122,25 @@ const ToastItem: React.FC<{ toast: Toast; onDismiss: (id: string) => void }> = (
 };
 
 /**
- * Fixed container rendered in App.tsx that iterates through active toasts
+ * Fixed container rendered via Portal into document.body that iterates through active toasts.
+ * Escapes any parent stacking context or overflow clipping in the application shell.
  */
 export const ToastContainer: React.FC = () => {
   const { toasts, removeToast } = useUiStore();
 
   if (toasts.length === 0) return null;
 
-  return (
+  const content = (
     <div className="toast-container" aria-live="polite">
       {toasts.map((toast) => (
         <ToastItem key={toast.id} toast={toast} onDismiss={removeToast} />
       ))}
     </div>
   );
+
+  if (typeof document !== 'undefined') {
+    return ReactDOM.createPortal(content, document.body);
+  }
+  return content;
 };
+

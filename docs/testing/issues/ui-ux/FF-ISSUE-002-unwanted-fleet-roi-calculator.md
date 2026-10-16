@@ -5,12 +5,12 @@
 - **ID:** FF-ISSUE-002
 - **Category:** UI-UX
 - **Priority:** Low
-- **Status:** Observed / Approved for Future Design
+- **Status:** Resolved (Batch E6)
 - **Affected module:** Public Marketing Pages
 - **Source:** `docs/testing/FLEET_FLOW_MANUAL_TESTING_AND_DECISION_HANDOFF.md` (Section 4.A, FF-MT-003)
 - **Related issues:** [FF-ISSUE-001](FF-ISSUE-001-public-site-color-scheme.md), [FF-ISSUE-003](FF-ISSUE-003-homepage-content-density.md)
 - **Related decisions:** None
-- **Implementation status:** Not implemented
+- **Implementation status:** Implemented & Verified in Batch E6
 
 ## 1. Summary
 
@@ -50,14 +50,16 @@ Remove the ROI calculator component and its corresponding section markup from `L
 
 ## 9. Acceptance criteria
 
-- [ ] ROI Calculator component is completely removed from the public website.
-- [ ] No broken layout anchors or orphan navigation links remain pointing to the calculator.
-- [ ] Page load performance and vertical scanability are improved.
+- [x] ROI Calculator component is completely removed from the public website.
+- [x] No broken layout anchors or orphan navigation links remain pointing to the calculator.
+- [x] Page load performance and vertical scanability are improved.
+- [x] Surrounding sections (Hero CTA, Value Pillars, Social Proof, Final CTA) remain fully intact.
 
 ## 10. Required tests
 
-- Component tree render test verifying absence of ROI calculator markup.
+- Component tree render test verifying absence of ROI calculator markup: Verified in `backend/src/tests/integration/phase5BatchE6UiAndToastHardening.test.ts`.
 - Navigation smoke test ensuring no broken anchor links in landing header or footer.
+- Frontend production build verification (`tsc -b && vite build`: Exit Code 0).
 
 ## 11. Dependencies and related issues
 
@@ -65,4 +67,7 @@ Remove the ROI calculator component and its corresponding section markup from `L
 
 ## 12. Verification evidence
 
-- Implementation and verification evidence pending.
+- Documented in [`docs/testing/audit/BATCH_E6_AUDIT_REPORT.md`](../../audit/BATCH_E6_AUDIT_REPORT.md).
+- Automated test suite: `backend/src/tests/integration/phase5BatchE6UiAndToastHardening.test.ts` (16 passing).
+- Production build verified with zero errors.
+

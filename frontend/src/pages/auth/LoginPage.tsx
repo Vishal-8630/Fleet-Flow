@@ -272,7 +272,7 @@ export const LoginPage: React.FC = () => {
                 textDecoration: 'none',
               }}
             >
-              Start 14-Day Free Trial
+              Start 7-Day Free Trial
             </Link>
           </div>
         </div>

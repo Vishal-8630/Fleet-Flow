@@ -19,6 +19,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import {
   TrendingUp,
@@ -53,6 +54,7 @@ import {
 import { Modal } from '../../components/common/Modal';
 import { toast } from '../../stores/uiStore';
 import { useAuthStore } from '../../stores/authStore';
+import { SuperAdminModulesOverviewTab } from './SuperAdminModulesOverviewTab';
 
 interface TenantProfile {
   id: string;
@@ -99,8 +101,22 @@ export const SuperAdminDashboardPage: React.FC = () => {
     max_users: 5,
   });
 
-  // Main Navigation Tabs
-  const [activeMainTab, setActiveMainTab] = useState<'tenants' | 'support_sessions' | 'audit_logs'>('tenants');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const [activeMainTab, setActiveMainTab] = useState<'tenants' | 'modules_overview' | 'support_sessions' | 'audit_logs'>(
+    tabParam === 'modules' || tabParam === 'modules_overview'
+      ? 'modules_overview'
+      : tabParam === 'support_sessions'
+      ? 'support_sessions'
+      : tabParam === 'audit_logs'
+      ? 'audit_logs'
+      : 'tenants'
+  );
+
+  const handleMainTabChange = (tab: 'tenants' | 'modules_overview' | 'support_sessions' | 'audit_logs') => {
+    setActiveMainTab(tab);
+    setSearchParams({ tab });
+  };
 
   // Platform Support Access Authorizations State
   const [allSupportSessions, setAllSupportSessions] = useState<any[]>([]);
@@ -579,7 +595,7 @@ export const SuperAdminDashboardPage: React.FC = () => {
       >
         <button
           type="button"
-          onClick={() => setActiveMainTab('tenants')}
+          onClick={() => handleMainTabChange('tenants')}
           style={{
             padding: '0.5rem 1.25rem',
             borderRadius: 'var(--radius-md, 8px)',
@@ -601,8 +617,30 @@ export const SuperAdminDashboardPage: React.FC = () => {
 
         <button
           type="button"
+          onClick={() => handleMainTabChange('modules_overview')}
+          style={{
+            padding: '0.5rem 1.25rem',
+            borderRadius: 'var(--radius-md, 8px)',
+            border: 'none',
+            cursor: 'pointer',
+            background: activeMainTab === 'modules_overview' ? 'var(--bg-card, #ffffff)' : 'transparent',
+            color: activeMainTab === 'modules_overview' ? 'var(--text-primary)' : 'var(--text-muted)',
+            fontWeight: activeMainTab === 'modules_overview' ? 600 : 500,
+            fontSize: 'var(--font-size-sm, 13px)',
+            boxShadow: activeMainTab === 'modules_overview' ? 'var(--shadow-sm)' : 'none',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+          }}
+        >
+          <Layers size={15} />
+          Modules Overview
+        </button>
+
+        <button
+          type="button"
           onClick={() => {
-            setActiveMainTab('support_sessions');
+            handleMainTabChange('support_sessions');
             fetchAllSupportSessions();
           }}
           style={{
@@ -627,7 +665,7 @@ export const SuperAdminDashboardPage: React.FC = () => {
         <button
           type="button"
           onClick={() => {
-            setActiveMainTab('audit_logs');
+            handleMainTabChange('audit_logs');
             fetchAuditLogs();
           }}
           style={{
@@ -845,6 +883,13 @@ export const SuperAdminDashboardPage: React.FC = () => {
           </div>
         )}
       </div>
+      )}
+
+      {/* Tab: Company Modules Overview */}
+      {activeMainTab === 'modules_overview' && (
+        <div style={{ marginTop: '0.5rem' }}>
+          <SuperAdminModulesOverviewTab />
+        </div>
       )}
 
       {/* 5. Tab 2: Support Access Authorizations & History */}

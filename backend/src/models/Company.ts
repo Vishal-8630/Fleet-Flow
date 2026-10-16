@@ -16,12 +16,13 @@
  *   invoice prefix, timezone, and date format) so that users see their preferred numbers
  *   without requiring separate databases.
  * - `subscription_status` & `trial_ends_at`: Drives billing access. New companies
- *   start with a 14-day free trial ('trialing') without needing a credit card upfront.
+ *   start with a 7-day free trial ('trialing') without needing a credit card upfront (DEC-001).
  * - `is_deleted`: Soft-delete flag ensuring audit compliance and preventing accidental data loss.
  * ============================================================================
  */
 
 import mongoose, { Document, Schema } from 'mongoose';
+import { ModuleKey } from '../utils/featureCatalog.js';
 
 export interface ICompany extends Document {
   name: string;
@@ -53,6 +54,7 @@ export interface ICompany extends Document {
       label: string;
       is_driver_reimbursable: boolean;
     }>;
+    enabled_modules?: ModuleKey[];
   };
   counters?: {
     lr_seq: number;
@@ -116,6 +118,10 @@ const CompanySchema = new Schema<ICompany>(
           { code: 'driver_bhatta', label: 'Driver Food Bhatta', is_driver_reimbursable: false },
         ],
       },
+      enabled_modules: {
+        type: [{ type: String }],
+        default: undefined,
+      },
     },
     counters: {
       lr_seq: { type: Number, default: 0 },
@@ -133,7 +139,7 @@ const CompanySchema = new Schema<ICompany>(
     },
     trial_ends_at: {
       type: Date,
-      default: () => new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), // 14 days default trial
+      default: () => new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days default trial per DEC-001
     },
     is_deleted: { type: Boolean, default: false },
   },

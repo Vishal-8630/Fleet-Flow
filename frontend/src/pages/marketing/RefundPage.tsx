@@ -43,10 +43,10 @@ export const RefundPage: React.FC = () => {
             <section style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '1rem', padding: '1.75rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
                 <CheckCircle size={22} color="#10b981" />
-                <h2 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0, color: '#fff' }}>1. 14-Day Free Trial Policy</h2>
+                <h2 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0, color: '#fff' }}>1. 7-Day Free Trial Policy</h2>
               </div>
               <p style={{ margin: 0 }}>
-                Every newly registered company is granted a 14-day free trial on the Standard Commercial plan. No payment information or credit card is collected during signup. If you decide not to continue, your account automatically expires at the conclusion of the 14 days without any bill or unwanted charge.
+                Every newly registered company is granted a 7-day free trial with Starter-level feature access. No payment information or credit card is collected during signup. If you decide not to continue, your account automatically expires at the conclusion of the 7 days without any bill or unwanted charge.
               </p>
             </section>
 

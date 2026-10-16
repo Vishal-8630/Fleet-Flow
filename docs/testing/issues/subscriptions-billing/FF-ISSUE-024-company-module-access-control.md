@@ -5,12 +5,12 @@
 - **ID:** FF-ISSUE-024
 - **Category:** Workflow / Configuration
 - **Priority:** Medium
-- **Status:** Observed / Needs Verification
+- **Status:** Resolved (Batch E5)
 - **Affected module:** Company Workspace Settings & Entitlements
 - **Source:** `docs/testing/FLEET_FLOW_MANUAL_TESTING_AND_DECISION_HANDOFF.md` (Section 4.A, FF-MT-011)
 - **Related issues:** [FF-ISSUE-025](FF-ISSUE-025-pro-module-lock-bypass.md)
 - **Related decisions:** [DEC-001](../../decisions/DEC-001-subscription-pricing-and-entitlements.md)
-- **Implementation status:** Not implemented
+- **Implementation status:** Implemented & Verified in Batch E5
 
 ## 1. Summary
 
@@ -52,20 +52,26 @@ Cluttered navigation for small operators who do not utilize complex modules. Con
 Add an `enabled_modules` field to `Company.settings` allowing workspace admins to toggle non-core features that their plan entitles them to use, dynamically adjusting the sidebar navigation.
 
 ## 9. Acceptance criteria
-
-- [ ] Workspace Admins can enable/disable eligible modules in Company Settings.
-- [ ] Sidebar dynamically shows/hides modules based on the company's active selection.
-- [ ] Disabling a module does not delete historical data associated with it.
+ 
+- [x] Workspace Admins can enable/disable eligible modules in Company Settings.
+- [x] Sidebar dynamically shows/hides modules based on the company's active selection.
+- [x] Disabling a module does not delete historical data associated with it.
+- [x] Effective access is computed as Plan Entitlements intersected with Company Preferences.
+- [x] Super Admin has complete read-only visibility into tenant module eligibility and preferences.
 
 ## 10. Required tests
 
-- Integration tests verifying company settings update `enabled_modules`.
-- Frontend tests verifying sidebar links respond to `enabled_modules` state.
+- Integration tests verifying company settings update `enabled_modules`: Completed in `backend/src/tests/integration/phase5BatchE5CompanyModules.test.ts` (27/27 tests passed).
+- Frontend tests & production build verifying sidebar and route guards: Completed (`npm --prefix frontend run build`, 0 errors).
 
 ## 11. Dependencies and related issues
 
 - Related to [FF-ISSUE-025](FF-ISSUE-025-pro-module-lock-bypass.md).
+- Related to [DEC-001](../../decisions/DEC-001-subscription-pricing-and-entitlements.md).
 
 ## 12. Verification evidence
 
-- Implementation and verification evidence pending.
+- Documented in [`docs/testing/audit/BATCH_E5_AUDIT_REPORT.md`](../../audit/BATCH_E5_AUDIT_REPORT.md).
+- Automated test suite: `backend/src/tests/integration/phase5BatchE5CompanyModules.test.ts` (27 passing).
+- Production build verified with zero errors.
+

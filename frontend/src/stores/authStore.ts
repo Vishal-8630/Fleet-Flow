@@ -80,6 +80,7 @@ interface AuthState {
   company: Company | null;
   role: UserRole | null;
   enabledFeatures: ModuleKey[];
+  planFeatures: ModuleKey[];
   limits: ResourceLimits | null;
   isReadOnly: boolean;
   isImpersonation: boolean;
@@ -90,6 +91,7 @@ interface AuthState {
   error: string | null;
 
   checkAuth: () => Promise<void>;
+  refreshEntitlements: () => Promise<void>;
   loadWorkspaces: () => Promise<void>;
   switchWorkspace: (companyId: string) => Promise<void>;
   exitImpersonation: () => Promise<void>;
@@ -110,7 +112,7 @@ interface AuthState {
     gstin?: string;
   }) => Promise<void>;
   logout: () => Promise<void>;
-  setAuth: (user: User, company: Company, role?: UserRole, enabledFeatures?: ModuleKey[], limits?: ResourceLimits | null) => void;
+  setAuth: (user: User, company: Company, role?: UserRole, enabledFeatures?: ModuleKey[], limits?: ResourceLimits | null, planFeatures?: ModuleKey[]) => void;
   clearError: () => void;
 }
 
@@ -119,6 +121,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   company: null,
   role: null,
   enabledFeatures: [],
+  planFeatures: [],
   limits: null,
   isReadOnly: false,
   isImpersonation: false,
@@ -140,6 +143,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         company: res.data.company,
         role: res.data.role,
         enabledFeatures: res.data.enabledFeatures || [],
+        planFeatures: res.data.planFeatures || [],
         limits: res.data.limits || null,
         isReadOnly: Boolean(res.data.isReadOnly),
         isImpersonation: Boolean(res.data.isImpersonation),
@@ -157,6 +161,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         company: null,
         role: null,
         enabledFeatures: [],
+        planFeatures: [],
         limits: null,
         isReadOnly: false,
         isImpersonation: false,
@@ -165,6 +170,24 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         isAuthenticated: false,
         isLoading: false,
       });
+    }
+  },
+
+  /**
+   * Refreshes active company entitlements without full app tear-down
+   */
+  refreshEntitlements: async () => {
+    try {
+      const res = await api.get('/auth/me');
+      set({
+        enabledFeatures: res.data.enabledFeatures || [],
+        planFeatures: res.data.planFeatures || [],
+        company: res.data.company,
+        limits: res.data.limits || null,
+        isReadOnly: Boolean(res.data.isReadOnly),
+      });
+    } catch (err) {
+      console.error('Failed to refresh workspace entitlements:', err);
     }
   },
 
@@ -180,6 +203,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         company: res.data.company,
         role: res.data.role,
         enabledFeatures: res.data.enabledFeatures || [],
+        planFeatures: res.data.planFeatures || [],
         limits: res.data.limits || null,
         isReadOnly: Boolean(res.data.isReadOnly),
         isAuthenticated: true,
@@ -203,6 +227,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         company: res.data.company,
         role: 'admin',
         enabledFeatures: res.data.enabledFeatures || [],
+        planFeatures: res.data.planFeatures || [],
         limits: res.data.limits || null,
         isReadOnly: false,
         isAuthenticated: true,
@@ -301,6 +326,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         company: null,
         role: null,
         enabledFeatures: [],
+        planFeatures: [],
         limits: null,
         isReadOnly: false,
         isImpersonation: false,
@@ -316,12 +342,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   /**
    * Helper to set authenticated state directly (used during invitation acceptance)
    */
-  setAuth: (user, company, role = 'dispatcher', enabledFeatures = [], limits = null) => {
+  setAuth: (user, company, role = 'dispatcher', enabledFeatures = [], limits = null, planFeatures = []) => {
     set({
       user,
       company,
       role,
       enabledFeatures,
+      planFeatures,
       limits,
       isReadOnly: false,
       isAuthenticated: true,

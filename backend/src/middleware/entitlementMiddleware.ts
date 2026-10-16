@@ -33,16 +33,27 @@ export function requireFeature(moduleKey: ModuleKey) {
       }
 
       // Check if feature is granted
-      const hasAccess = await hasFeatureAccess(req.company, moduleKey);
+      const profile = await getTenantEntitlements(req.company);
+      const hasAccess = profile.enabled_features.includes(moduleKey);
       if (!hasAccess) {
         const moduleDef = MOD_CATALOG[moduleKey];
-        res.status(403).json({
-          code: 'FEATURE_LOCKED',
-          module: moduleKey,
-          module_name: moduleDef?.name || moduleKey,
-          required_tier: moduleDef?.defaultTier || 'standard',
-          error: `The feature "${moduleDef?.name || moduleKey}" is not included in your current subscription plan. Please upgrade to unlock this capability.`,
-        });
+        const isEntitledByPlan = profile.plan_features.includes(moduleKey);
+        if (!isEntitledByPlan) {
+          res.status(403).json({
+            code: 'FEATURE_LOCKED',
+            module: moduleKey,
+            module_name: moduleDef?.name || moduleKey,
+            required_tier: moduleDef?.defaultTier || 'standard',
+            error: `The feature "${moduleDef?.name || moduleKey}" is not included in your current subscription plan. Please upgrade to unlock this capability.`,
+          });
+        } else {
+          res.status(403).json({
+            code: 'MODULE_DISABLED',
+            module: moduleKey,
+            module_name: moduleDef?.name || moduleKey,
+            error: `The feature "${moduleDef?.name || moduleKey}" is disabled for your company in Workspace Settings.`,
+          });
+        }
         return;
       }
 
@@ -69,10 +80,11 @@ export function requireAllFeatures(moduleKeys: ModuleKey[]) {
 
       if (missing.length > 0) {
         const missingDefs = missing.map((k) => MOD_CATALOG[k]?.name || k);
+        const unentitled = missing.filter((k) => !profile.plan_features.includes(k));
         res.status(403).json({
-          code: 'FEATURE_LOCKED',
+          code: unentitled.length > 0 ? 'FEATURE_LOCKED' : 'MODULE_DISABLED',
           missing_modules: missing,
-          error: `This action requires features not available on your plan: ${missingDefs.join(', ')}.`,
+          error: `This action requires features not currently active for your company: ${missingDefs.join(', ')}.`,
         });
         return;
       }

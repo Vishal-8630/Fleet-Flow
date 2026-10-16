@@ -30,6 +30,7 @@ import {
   updatePlatformSettings,
   createPromoCode,
   togglePromoCode,
+  getCompanyModulesOverview,
 } from '../controllers/superAdminController.js';
 import {
   requestSupportAccess,
@@ -48,6 +49,7 @@ router.use(requireSuperAdmin);
 // Health Telemetry & Directory
 router.get('/kpis', getPlatformKPIs);
 router.get('/tenants', listAllTenants);
+router.get('/tenants/modules-overview', getCompanyModulesOverview);
 router.patch('/tenants/:id/override', overrideTenantQuota);
 router.patch('/tenants/:id/extend-trial', extendTenantTrial);
 router.patch('/tenants/:id/status', toggleTenantStatus);

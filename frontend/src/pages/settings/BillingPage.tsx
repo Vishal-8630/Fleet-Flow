@@ -16,7 +16,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { Navigate } from 'react-router-dom';
-import axios from 'axios';
+import api, { generateIdempotencyKey } from '../../api/client';
+import { classifyPaymentError } from '../../utils/paymentErrorHandler';
 import { useAuthStore } from '../../stores/authStore';
 import {
   CreditCard,
@@ -131,8 +132,8 @@ export const BillingPage: React.FC = () => {
     try {
       setLoading(true);
       const [plansRes, subRes] = await Promise.all([
-        axios.get('/api/billing/plans', { withCredentials: true }),
-        axios.get('/api/billing/subscription', { withCredentials: true }),
+        api.get('/billing/plans'),
+        api.get('/billing/subscription'),
       ]);
 
       setPlans(plansRes.data.plans || []);
@@ -142,7 +143,7 @@ export const BillingPage: React.FC = () => {
         setBillingCycle(subRes.data.subscription.billing_cycle);
       }
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to load subscription details.');
+      toast.error(err.response?.data?.error || err.message || 'Failed to load subscription details.');
     } finally {
       setLoading(false);
     }
@@ -151,7 +152,7 @@ export const BillingPage: React.FC = () => {
   const fetchBillingHistory = async () => {
     try {
       setHistoryLoading(true);
-      const res = await axios.get('/api/billing/history', { withCredentials: true });
+      const res = await api.get('/billing/history');
       setHistoryTransactions(res.data.transactions || []);
     } catch (err: any) {
       console.warn('Failed to load billing history:', err);
@@ -173,14 +174,13 @@ export const BillingPage: React.FC = () => {
     setCalculatingProration(true);
 
     try {
-      const res = await axios.post(
-        '/api/billing/calculate-change',
-        { target_plan_id: plan._id, billing_cycle: billingCycle },
-        { withCredentials: true }
+      const res = await api.post(
+        '/billing/calculate-change',
+        { target_plan_id: plan._id, billing_cycle: billingCycle }
       );
       setProrationData(res.data.proration);
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to compute proration calculus.');
+      toast.error(err.response?.data?.error || err.message || 'Failed to compute proration calculus.');
       setProrationModalOpen(false);
     } finally {
       setCalculatingProration(false);
@@ -188,6 +188,13 @@ export const BillingPage: React.FC = () => {
   };
 
   const openRazorpayCheckout = (orderData: any) => {
+    // Generate or preserve the single idempotency token for this payment order attempt
+    const orderIdempotencyKey = orderData.idempotency_key || generateIdempotencyKey();
+    orderData.idempotency_key = orderIdempotencyKey;
+
+    let paymentSubmitted = false;
+    let gatewayFailedReason: string | null = null;
+
     // If Razorpay SDK is available on window and real live keys are configured:
     if ((window as any).Razorpay && orderData.is_live) {
       try {
@@ -199,19 +206,27 @@ export const BillingPage: React.FC = () => {
           description: `${orderData.plan.name} (${orderData.billing_cycle}) Subscription`,
           order_id: orderData.order_id,
           handler: async (response: any) => {
-            await handleVerifyPayment({
-              razorpay_order_id: response.razorpay_order_id,
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_signature: response.razorpay_signature,
-              plan_id: orderData.plan.id,
-              billing_cycle: orderData.billing_cycle,
-              payment_method: 'card',
-            });
+            paymentSubmitted = true;
+            await handleVerifyPayment(
+              {
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+                plan_id: orderData.plan.id,
+                billing_cycle: orderData.billing_cycle,
+                payment_method: 'card',
+              },
+              orderIdempotencyKey
+            );
           },
           modal: {
             ondismiss: () => {
-              toast.warning('Payment window closed. Your plan has not been changed.');
               setActionLoading(false);
+              // Suppress "window closed" if verification was already submitted or gateway reported failure
+              if (paymentSubmitted || gatewayFailedReason) {
+                return;
+              }
+              toast.info('Payment checkout was closed. No charges were made.');
             },
           },
           prefill: {
@@ -223,6 +238,10 @@ export const BillingPage: React.FC = () => {
           },
         };
         const rzp = new (window as any).Razorpay(options);
+        rzp.on('payment.failed', (resp: any) => {
+          gatewayFailedReason = resp?.error?.description || resp?.error?.reason || 'Transaction declined by bank or gateway.';
+          toast.error(`Payment failed: ${gatewayFailedReason}`);
+        });
         rzp.open();
         return;
       } catch (err) {
@@ -237,19 +256,27 @@ export const BillingPage: React.FC = () => {
 
   const handleCancelCheckout = () => {
     setCheckoutModalOpen(false);
-    toast.warning('Payment window closed. Your plan has not been changed.');
+    toast.info('Payment checkout was closed. No charges were made.');
     setActionLoading(false);
   };
 
-  const handleVerifyPayment = async (verificationPayload: any) => {
+  const handleVerifyPayment = async (verificationPayload: any, customIdempotencyKey?: string) => {
+    const idempotencyKey = customIdempotencyKey || checkoutOrder?.idempotency_key || generateIdempotencyKey();
+    if (checkoutOrder) {
+      checkoutOrder.idempotency_key = idempotencyKey;
+    }
+
     try {
-      const res = await axios.post('/api/billing/verify-payment', verificationPayload, { withCredentials: true });
+      const res = await api.post('/billing/verify-payment', verificationPayload, {
+        headers: { 'x-idempotency-key': idempotencyKey },
+      });
       toast.success(res.data.message || `Payment verified successfully! Your workspace has been upgraded to ${checkoutOrder?.plan?.name || 'new plan'}.`);
       setProrationModalOpen(false);
       setCheckoutModalOpen(false);
       await Promise.all([fetchBillingData(), fetchBillingHistory(), useAuthStore.getState().checkAuth()]);
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Payment verification failed.');
+      const classified = classifyPaymentError(err);
+      toast.error(classified.message);
       throw err;
     }
   };
@@ -258,16 +285,21 @@ export const BillingPage: React.FC = () => {
     if (!checkoutOrder) return;
     setPaymentProcessing(true);
     try {
-      await handleVerifyPayment({
-        razorpay_order_id: checkoutOrder.order_id,
-        razorpay_payment_id: `pay_${Date.now()}_test`,
-        razorpay_signature: 'simulated_test_signature_valid',
-        plan_id: checkoutOrder.plan.id,
-        billing_cycle: checkoutOrder.billing_cycle,
-        payment_method: selectedMethod,
-      });
+      const orderKey = checkoutOrder.idempotency_key || generateIdempotencyKey();
+      checkoutOrder.idempotency_key = orderKey;
+      await handleVerifyPayment(
+        {
+          razorpay_order_id: checkoutOrder.order_id,
+          razorpay_payment_id: `pay_${Date.now()}_test`,
+          razorpay_signature: 'simulated_test_signature_valid',
+          plan_id: checkoutOrder.plan.id,
+          billing_cycle: checkoutOrder.billing_cycle,
+          payment_method: selectedMethod,
+        },
+        orderKey
+      );
     } catch (err: any) {
-      // toast shown in handleVerifyPayment
+      // Diagnostic toast was handled via classifyPaymentError in handleVerifyPayment
     } finally {
       setPaymentProcessing(false);
     }
@@ -301,38 +333,16 @@ export const BillingPage: React.FC = () => {
     if (isDowngradeTier && status !== 'trialing') {
       setActionLoading(true);
       try {
-        const res = await axios.post(
-          '/api/billing/change-plan',
-          { target_plan_id: targetPlan._id, billing_cycle: billingCycle, immediate: false },
-          { withCredentials: true }
+        const res = await api.post(
+          '/billing/change-plan',
+          { target_plan_id: targetPlan._id, billing_cycle: billingCycle, immediate: false }
         );
         toast.success(res.data.message || `Downgrade to ${targetPlan.name} scheduled for end of cycle.`);
         setProrationModalOpen(false);
         await fetchBillingData();
         await useAuthStore.getState().checkAuth();
       } catch (err: any) {
-        toast.error(err.response?.data?.error || 'Failed to schedule plan downgrade.');
-      } finally {
-        setActionLoading(false);
-      }
-      return;
-    }
-
-    // If in trialing status and switching free trial tier:
-    if (status === 'trialing' && !prorationData?.net_payable_rupees) {
-      setActionLoading(true);
-      try {
-        const res = await axios.post(
-          '/api/billing/change-plan',
-          { target_plan_id: targetPlan._id, billing_cycle: billingCycle, immediate: true },
-          { withCredentials: true }
-        );
-        toast.success(res.data.message || `Switched to ${targetPlan.name} (Trial Active)!`);
-        setProrationModalOpen(false);
-        await fetchBillingData();
-        await useAuthStore.getState().checkAuth();
-      } catch (err: any) {
-        toast.error(err.response?.data?.error || 'Failed to update trial plan.');
+        toast.error(err.response?.data?.error || err.message || 'Failed to schedule plan downgrade.');
       } finally {
         setActionLoading(false);
       }
@@ -342,15 +352,14 @@ export const BillingPage: React.FC = () => {
     // Upgrading or activating paid plan: Initialize Checkout
     setActionLoading(true);
     try {
-      const res = await axios.post(
-        '/api/billing/checkout',
-        { plan_id: targetPlan._id, billing_cycle: billingCycle },
-        { withCredentials: true }
+      const res = await api.post(
+        '/billing/checkout',
+        { plan_id: targetPlan._id, billing_cycle: billingCycle }
       );
       setProrationModalOpen(false);
       openRazorpayCheckout(res.data);
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to initialize payment checkout.');
+      toast.error(err.response?.data?.error || err.message || 'Failed to initialize payment checkout.');
     } finally {
       setActionLoading(false);
     }
@@ -360,10 +369,10 @@ export const BillingPage: React.FC = () => {
     setReceiptLoading(true);
     setReceiptModalOpen(true);
     try {
-      const res = await axios.get(`/api/billing/invoices/${transactionId}/receipt`, { withCredentials: true });
+      const res = await api.get(`/billing/invoices/${transactionId}/receipt`);
       setReceiptData(res.data.receipt);
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to load tax invoice receipt.');
+      toast.error(err.response?.data?.error || err.message || 'Failed to load tax invoice receipt.');
       setReceiptModalOpen(false);
     } finally {
       setReceiptLoading(false);
@@ -373,16 +382,15 @@ export const BillingPage: React.FC = () => {
   const handleApplyScheduled = async () => {
     setActionLoading(true);
     try {
-      const res = await axios.post(
-        '/api/billing/apply-scheduled',
-        {},
-        { withCredentials: true }
+      const res = await api.post(
+        '/billing/apply-scheduled',
+        {}
       );
       toast.success(res.data.message || 'Plan applied immediately!');
       await fetchBillingData();
       await useAuthStore.getState().checkAuth();
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to apply plan.');
+      toast.error(err.response?.data?.error || err.message || 'Failed to apply plan.');
     } finally {
       setActionLoading(false);
     }
@@ -391,16 +399,15 @@ export const BillingPage: React.FC = () => {
   const handleCancelScheduled = async () => {
     setActionLoading(true);
     try {
-      const res = await axios.post(
-        '/api/billing/cancel-scheduled',
-        {},
-        { withCredentials: true }
+      const res = await api.post(
+        '/billing/cancel-scheduled',
+        {}
       );
       toast.success(res.data.message || 'Scheduled plan change cancelled.');
       await fetchBillingData();
       await useAuthStore.getState().checkAuth();
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to cancel scheduled plan.');
+      toast.error(err.response?.data?.error || err.message || 'Failed to cancel scheduled plan.');
     } finally {
       setActionLoading(false);
     }
@@ -408,15 +415,14 @@ export const BillingPage: React.FC = () => {
 
   const handleToggleAddon = async (addonCode: string, currentlyActive: boolean) => {
     try {
-      const res = await axios.post(
-        '/api/billing/toggle-addon',
-        { addon_code: addonCode, enabled: !currentlyActive },
-        { withCredentials: true }
+      const res = await api.post(
+        '/billing/toggle-addon',
+        { addon_code: addonCode, enabled: !currentlyActive }
       );
       toast.success(res.data.message);
       fetchBillingData();
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to update add-on.');
+      toast.error(err.response?.data?.error || err.message || 'Failed to update add-on.');
     }
   };
 
@@ -471,7 +477,7 @@ export const BillingPage: React.FC = () => {
               <span className={`billing-hero-status-pill ${status}`}>
                 <span className="billing-hero-pulse-dot" />
                 {status === 'active' && 'Active Subscription'}
-                {status === 'trialing' && `14-Day Free Trial (${entitlements?.days_remaining_in_trial ?? 14} days remaining)`}
+                {status === 'trialing' && `7-Day Free Trial (${entitlements?.days_remaining_in_trial ?? 7} days remaining)`}
                 {status === 'past_due' && '7-Day Grace Dunning Active'}
                 {status === 'suspended' && 'Suspended (Read-Only Mode)'}
               </span>
@@ -512,7 +518,7 @@ export const BillingPage: React.FC = () => {
             <span className="billing-hero-meta-value">
               {currentSub?.current_period_end
                 ? new Date(currentSub.current_period_end).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
-                : '14 Days Free'}
+                : '7 Days Free'}
             </span>
           </div>
         </div>
@@ -782,6 +788,9 @@ export const BillingPage: React.FC = () => {
                 <span className="plan-price-currency">₹</span>
                 <span className="plan-price-amount">{displayPrice.toLocaleString('en-IN')}</span>
                 <span className="plan-price-frequency">/month</span>
+              </div>
+              <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px', marginBottom: '6px' }}>
+                Inclusive of 18% GST
               </div>
 
               {billingCycle === 'annual' && (
@@ -1200,7 +1209,7 @@ export const BillingPage: React.FC = () => {
                 <div className="proration-row total">
                   <span>Net Amount Due Today</span>
                   <span className="proration-due-amount">
-                    {status === 'trialing' ? '₹0 (Free Trial Active)' : `₹${prorationData.net_payable_rupees.toLocaleString('en-IN')}`}
+                    ₹{prorationData.net_payable_rupees.toLocaleString('en-IN')}
                   </span>
                 </div>
               </div>
@@ -1211,14 +1220,14 @@ export const BillingPage: React.FC = () => {
                 style={{
                   marginTop: '12px',
                   padding: '10px 14px',
-                  backgroundColor: '#f0fdf4',
+                  backgroundColor: '#eff6ff',
                   borderRadius: '6px',
-                  border: '1px solid #bbf7d0',
-                  color: '#166534',
+                  border: '1px solid #bfdbfe',
+                  color: '#1e40af',
                   fontSize: '0.8125rem',
                 }}
               >
-                ✓ <strong>Free Trial Plan Switch:</strong> Switching to <strong>{targetPlan?.name}</strong> applies immediately without any payment today. Your trial will continue on the selected plan with its respective feature set and limits.
+                ✓ <strong>Upgrade from Free Trial:</strong> Subscribing to <strong>{targetPlan?.name}</strong> will activate your paid commercial subscription with full access to all included features.
               </div>
             )}
 
@@ -1276,14 +1285,14 @@ export const BillingPage: React.FC = () => {
                     {actionLoading
                       ? 'Processing...'
                       : targetPlan
-                      ? status === 'trialing' && !prorationData?.net_payable_rupees
-                        ? `Switch Trial to ${targetPlan.name} (Free)`
-                        : isDowngradeTier
+                      ? isDowngradeTier
                         ? `Schedule Downgrade to ${targetPlan.name}`
                         : isSamePlanDifferentCycle
                         ? billingCycle === 'annual'
                           ? `Confirm Switch to Annual (${targetPlan.name})`
                           : `Confirm Switch to Monthly (${targetPlan.name})`
+                        : status === 'trialing'
+                        ? `Proceed to Pay & Activate ${targetPlan.name}`
                         : `Proceed to Pay & Upgrade to ${targetPlan.name}`
                       : 'Confirm Plan'}
                   </button>

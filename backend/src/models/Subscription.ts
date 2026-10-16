@@ -26,7 +26,7 @@ export interface ISubscription extends Document {
   company_id: Types.ObjectId;
   plan_id: Types.ObjectId;
   billing_cycle: 'monthly' | 'annual';
-  status: 'trialing' | 'active' | 'past_due' | 'suspended' | 'cancelled';
+  status: 'trialing' | 'active' | 'past_due' | 'suspended' | 'cancelled' | 'expired';
   current_period_start: Date;
   current_period_end: Date;
   trial_ends_at?: Date;
@@ -71,13 +71,13 @@ const SubscriptionSchema = new Schema<ISubscription>(
     billing_cycle: { type: String, enum: ['monthly', 'annual'], default: 'monthly' },
     status: {
       type: String,
-      enum: ['trialing', 'active', 'past_due', 'suspended', 'cancelled'],
+      enum: ['trialing', 'active', 'past_due', 'suspended', 'cancelled', 'expired'],
       default: 'trialing',
       index: true,
     },
     current_period_start: { type: Date, default: () => new Date() },
-    current_period_end: { type: Date, default: () => new Date(Date.now() + 14 * 24 * 60 * 60 * 1000) },
-    trial_ends_at: { type: Date, default: () => new Date(Date.now() + 14 * 24 * 60 * 60 * 1000) },
+    current_period_end: { type: Date, default: () => new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) },
+    trial_ends_at: { type: Date, default: () => new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) },
     active_addons: [
       {
         addon_id: { type: Schema.Types.ObjectId, ref: 'AddOn', required: true },

@@ -20,19 +20,30 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../api/client';
 import { PageHeader } from '../../components/common/PageHeader';
 import { toast } from '../../stores/uiStore';
 import { useAuthStore } from '../../stores/authStore';
-import { Building2, Settings2, Save, ShieldAlert } from 'lucide-react';
+import { Building2, Settings2, Save, ShieldAlert, Sliders } from 'lucide-react';
+import { CompanyModulesSettingsTab } from './CompanyModulesSettingsTab';
 
 export const CompanySettingsPage: React.FC = () => {
   const queryClient = useQueryClient();
   const { role } = useAuthStore();
   const isAdmin = role === 'admin';
 
-  const [activeTab, setActiveTab] = useState<'profile' | 'operations'>('profile');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const [activeTab, setActiveTab] = useState<'profile' | 'operations' | 'modules'>(
+    tabParam === 'modules' ? 'modules' : tabParam === 'operations' ? 'operations' : 'profile'
+  );
+
+  const handleTabChange = (tab: 'profile' | 'operations' | 'modules') => {
+    setActiveTab(tab);
+    setSearchParams({ tab });
+  };
 
   // Form states
   const [formData, setFormData] = useState({
@@ -189,7 +200,7 @@ export const CompanySettingsPage: React.FC = () => {
       >
         <button
           type="button"
-          onClick={() => setActiveTab('profile')}
+          onClick={() => handleTabChange('profile')}
           style={{
             padding: '0.75rem 1.25rem',
             background: 'none',
@@ -210,7 +221,7 @@ export const CompanySettingsPage: React.FC = () => {
 
         <button
           type="button"
-          onClick={() => setActiveTab('operations')}
+          onClick={() => handleTabChange('operations')}
           style={{
             padding: '0.75rem 1.25rem',
             background: 'none',
@@ -228,9 +239,33 @@ export const CompanySettingsPage: React.FC = () => {
           <Settings2 size={16} />
           Operational Formatting
         </button>
+
+        <button
+          type="button"
+          onClick={() => handleTabChange('modules')}
+          style={{
+            padding: '0.75rem 1.25rem',
+            background: 'none',
+            border: 'none',
+            borderBottom: activeTab === 'modules' ? '2px solid var(--color-primary-600)' : '2px solid transparent',
+            color: activeTab === 'modules' ? 'var(--color-primary-700)' : 'var(--text-muted)',
+            fontWeight: activeTab === 'modules' ? 'var(--font-weight-bold)' : 'var(--font-weight-medium)',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            fontSize: 'var(--font-size-sm)',
+          }}
+        >
+          <Sliders size={16} />
+          Workspace Modules
+        </button>
       </div>
 
-      <form onSubmit={handleSubmit}>
+      {activeTab === 'modules' ? (
+        <CompanyModulesSettingsTab />
+      ) : (
+        <form onSubmit={handleSubmit}>
         {activeTab === 'profile' && (
           <div className="card" style={{ padding: '1.75rem' }}>
             <div style={{ marginBottom: '1.5rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '1rem' }}>
@@ -595,7 +630,8 @@ export const CompanySettingsPage: React.FC = () => {
             </button>
           </div>
         )}
-      </form>
+        </form>
+      )}
     </div>
   );
 };

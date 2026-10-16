@@ -83,6 +83,7 @@ import { RefundPage } from './pages/marketing/RefundPage';
 import { StatusPage } from './pages/marketing/StatusPage';
 
 import { ToastContainer } from './components/common/ToastContainer';
+import { FeatureGate } from './components/common/FeatureGate';
 
 /**
  * Route Guard Component:
@@ -210,8 +211,32 @@ export const App: React.FC = () => {
           {/* Phase 2: Master Data Registries & Fleet Engineering */}
           <Route path="fleet/trucks" element={<TruckListPage />} />
           <Route path="fleet/trucks/:id" element={<TruckDetailPage />} />
-          <Route path="fleet/maintenance" element={<MaintenanceDashboardPage />} />
-          <Route path="fleet/tyres" element={<TyreManagementPage />} />
+          <Route
+            path="fleet/maintenance"
+            element={
+              <FeatureGate
+                feature="MOD_MAINTENANCE"
+                pageMode={true}
+                titleOverride="Fleet Maintenance & Garage Work Orders is Locked"
+                descOverride="Preventative maintenance scheduling, garage job cards, service intervals, and vehicle Cost Per KM tracking require the Pro Enterprise plan."
+              >
+                <MaintenanceDashboardPage />
+              </FeatureGate>
+            }
+          />
+          <Route
+            path="fleet/tyres"
+            element={
+              <FeatureGate
+                feature="MOD_MAINTENANCE"
+                pageMode={true}
+                titleOverride="Tyre Lifecycle & Axle Management is Locked"
+                descOverride="Interactive visual chassis axle blueprints, tread wear depth tracking, retread logging, and tyre inventory require the Pro Enterprise plan."
+              >
+                <TyreManagementPage />
+              </FeatureGate>
+            }
+          />
           <Route path="fleet/drivers" element={<DriverListPage />} />
           <Route path="fleet/drivers/:id" element={<DriverDetailPage />} />
           <Route path="parties/billing" element={<BillingPartyListPage />} />

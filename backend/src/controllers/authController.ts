@@ -151,7 +151,9 @@ export async function registerCompany(req: Request, res: Response): Promise<void
         activeUser = users[0];
       }
 
-      // 3. Create Company Workspace with 14-day free trial
+      // 3. Create Company Workspace with 7-day free trial (DEC-001)
+      const trialDurationMs = 7 * 24 * 60 * 60 * 1000;
+      const trialEndsAt = new Date(Date.now() + trialDurationMs);
       const companies = await Company.create(
         [
           {
@@ -161,7 +163,7 @@ export async function registerCompany(req: Request, res: Response): Promise<void
             phone: phone.trim(),
             gstin: gstin ? gstin.toUpperCase().trim() : undefined,
             subscription_status: 'trialing',
-            trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+            trial_ends_at: trialEndsAt,
           },
         ],
         { session }
@@ -182,19 +184,19 @@ export async function registerCompany(req: Request, res: Response): Promise<void
         { session }
       );
 
-      // 5. Initialize Trial Subscription if standard plan or any active plan exists
-      const standardPlan = (await Plan.findOne({ code: 'standard' }).session(session)) || (await Plan.findOne().session(session));
-      if (standardPlan) {
+      // 5. Initialize Trial Subscription with Starter plan (DEC-001)
+      const starterPlan = (await Plan.findOne({ code: 'starter' }).session(session)) || (await Plan.findOne().session(session));
+      if (starterPlan) {
         await Subscription.create(
           [
             {
               company_id: newCompany._id,
-              plan_id: standardPlan._id,
+              plan_id: starterPlan._id,
               billing_cycle: 'monthly',
               status: 'trialing',
               current_period_start: new Date(),
-              current_period_end: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
-              trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+              current_period_end: trialEndsAt,
+              trial_ends_at: trialEndsAt,
             },
           ],
           { session }
@@ -295,6 +297,7 @@ export async function login(req: Request, res: Response): Promise<void> {
         trialEndsAt: company.trial_ends_at,
       },
       role: membership.role,
+      planFeatures: entitlements.plan_features,
       enabledFeatures: entitlements.enabled_features,
       limits: entitlements.limits,
       isReadOnly: entitlements.is_read_only,
@@ -323,6 +326,7 @@ export async function logout(_req: Request, res: Response): Promise<void> {
  */
 export async function getMe(req: Request, res: Response): Promise<void> {
   let enabledFeatures: string[] = [];
+  let planFeatures: string[] = [];
   let limits = { max_trucks: 5, max_drivers: 5, max_users: 2 };
   let isReadOnly = false;
   let planInfo = { code: 'standard', name: 'Standard Plan' };
@@ -330,6 +334,7 @@ export async function getMe(req: Request, res: Response): Promise<void> {
   if (req.company) {
     const entitlements = await getTenantEntitlements(req.company);
     enabledFeatures = entitlements.enabled_features;
+    planFeatures = entitlements.plan_features;
     limits = entitlements.limits;
     isReadOnly = entitlements.is_read_only;
     planInfo = entitlements.plan;
@@ -353,6 +358,7 @@ export async function getMe(req: Request, res: Response): Promise<void> {
       plan: planInfo,
     },
     role: req.member?.role,
+    planFeatures,
     enabledFeatures,
     limits,
     isReadOnly,
@@ -524,7 +530,9 @@ export async function createWorkspace(req: Request, res: Response): Promise<void
 
     const sessionOption = useSession && session ? { session } : undefined;
 
-    // Create Company Workspace with 14-day free trial
+    // Create Company Workspace with 7-day free trial (DEC-001)
+    const trialDurationMs = 7 * 24 * 60 * 60 * 1000;
+    const trialEndsAt = new Date(Date.now() + trialDurationMs);
     const companies = await Company.create(
       [
         {
@@ -534,7 +542,7 @@ export async function createWorkspace(req: Request, res: Response): Promise<void
           phone: (phone || req.user.phone || '').trim(),
           gstin: gstin ? gstin.toUpperCase().trim() : undefined,
           subscription_status: 'trialing',
-          trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+          trial_ends_at: trialEndsAt,
         },
       ],
       sessionOption
@@ -555,19 +563,19 @@ export async function createWorkspace(req: Request, res: Response): Promise<void
       sessionOption
     );
 
-    // Initialize Trial Subscription if standard plan exists
-    const standardPlan = await Plan.findOne({ code: 'standard' });
-    if (standardPlan) {
+    // Initialize Trial Subscription with Starter plan (DEC-001)
+    const starterPlan = (await Plan.findOne({ code: 'starter' }).session(session || null)) || (await Plan.findOne().session(session || null));
+    if (starterPlan) {
       await Subscription.create(
         [
           {
             company_id: company._id,
-            plan_id: standardPlan._id,
+            plan_id: starterPlan._id,
             billing_cycle: 'monthly',
             status: 'trialing',
             current_period_start: new Date(),
-            current_period_end: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
-            trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+            current_period_end: trialEndsAt,
+            trial_ends_at: trialEndsAt,
           },
         ],
         sessionOption

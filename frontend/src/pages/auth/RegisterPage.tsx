@@ -94,7 +94,7 @@ export const RegisterPage: React.FC = () => {
               Create Company Workspace
             </h2>
             <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-              Full operational access with a 14-day free trial. No credit card required.
+              Full operational access with a 7-day free trial. No credit card required.
             </p>
           </div>
 

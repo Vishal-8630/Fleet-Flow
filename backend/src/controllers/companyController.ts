@@ -30,7 +30,10 @@ import mongoose from 'mongoose';
 import { Company } from '../models/Company.js';
 import { CompanyMember } from '../models/CompanyMember.js';
 import { User } from '../models/User.js';
+import { AuditLog } from '../models/AuditLog.js';
 import { validateGSTIN } from '../utils/gstinValidator.js';
+import { getTenantEntitlements } from '../utils/entitlementService.js';
+import { MOD_CATALOG, ModuleKey, validateModuleDependencies } from '../utils/featureCatalog.js';
 
 /**
  * Returns the JWT signing secret dynamically from process.env to guarantee
@@ -515,5 +518,192 @@ export const acceptInvitation = async (req: Request, res: Response): Promise<voi
   } catch (error: any) {
     console.error('Error accepting invitation:', error);
     res.status(500).json({ error: 'Failed to accept invitation.' });
+  }
+};
+
+/**
+ * 8. getCompanyModules
+ * ----------------------------------------------------------------------------
+ * Returns the current company's module configuration:
+ * - plan: Subscription plan code and name.
+ * - plan_features: Full legal feature ceiling permitted by current plan + add-ons.
+ * - enabled_modules: Explicit company preferences (or plan_features if inheriting defaults).
+ * - effective_features: Effective access (PlanEntitlements ∩ CompanyEnabledModules).
+ * - is_customized: Boolean indicating whether explicit preferences have been saved.
+ * - modules: Complete catalog breakdown for frontend display.
+ */
+export const getCompanyModules = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const company = req.company || (req.tenant?.id ? await Company.findById(req.tenant.id) : null);
+    if (!company) {
+      res.status(401).json({ error: 'Company context required.' });
+      return;
+    }
+
+    const entitlements = await getTenantEntitlements(company);
+    const planFeatures = entitlements.plan_features;
+    const effectiveFeatures = entitlements.enabled_features;
+    const savedPreferences = company.settings?.enabled_modules;
+    const isCustomized = Array.isArray(savedPreferences);
+
+    const allModuleKeys = Object.keys(MOD_CATALOG) as ModuleKey[];
+    const moduleList = allModuleKeys.map((key) => {
+      const def = MOD_CATALOG[key];
+      const isEntitled = planFeatures.includes(key);
+      const isEnabled = effectiveFeatures.includes(key);
+
+      return {
+        key,
+        name: def.name,
+        description: def.description,
+        category: def.category,
+        default_tier: def.defaultTier,
+        dependencies: def.dependencies,
+        is_entitled: isEntitled,
+        is_enabled: isEnabled,
+        status: !isEntitled
+          ? 'plan_locked'
+          : isEnabled
+          ? 'enabled'
+          : 'disabled_by_company',
+      };
+    });
+
+    res.json({
+      success: true,
+      plan: entitlements.plan,
+      plan_features: planFeatures,
+      enabled_modules: savedPreferences ?? planFeatures,
+      effective_features: effectiveFeatures,
+      is_customized: isCustomized,
+      modules: moduleList,
+    });
+  } catch (error: any) {
+    console.error('Error fetching company modules:', error);
+    res.status(500).json({ error: error.message || 'Failed to fetch company module configuration.' });
+  }
+};
+
+/**
+ * 9. updateCompanyModules
+ * ----------------------------------------------------------------------------
+ * Updates the company's active module preferences.
+ * 
+ * INVARIANTS & SECURITY:
+ * 1. RBAC: Restricted to Company Admin via route middleware requireRole(['admin']).
+ * 2. Tenant Scoping: Target company derived strictly from authenticated context.
+ * 3. Commercial Ceiling: Rejects any module not included in the company's plan with HTTP 422 UNENTITLED_MODULE.
+ * 4. Dependency Validation: Verifies that prerequisite modules are enabled; rejects with HTTP 422 DEPENDENCY_MISSING.
+ * 5. Core Module Flexibility: Company Admins may enable or disable ANY entitled module.
+ * 6. Audit Trail: Appends immutable AuditLog record before returning success.
+ */
+export const updateCompanyModules = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const company = req.company || (req.tenant?.id ? await Company.findById(req.tenant.id) : null);
+    if (!company) {
+      res.status(401).json({ error: 'Company context required.' });
+      return;
+    }
+
+    const { enabled_modules } = req.body;
+
+    if (!Array.isArray(enabled_modules)) {
+      res.status(400).json({
+        code: 'INVALID_REQUEST_BODY',
+        error: 'enabled_modules must be an array of module keys.',
+      });
+      return;
+    }
+
+    // Validate that each key exists in the authoritative feature catalog
+    for (const key of enabled_modules) {
+      if (!MOD_CATALOG[key as ModuleKey]) {
+        res.status(400).json({
+          code: 'INVALID_MODULE_KEY',
+          error: `Invalid module key: "${key}".`,
+        });
+        return;
+      }
+    }
+
+    const requestedKeys = enabled_modules as ModuleKey[];
+
+    // Fetch plan entitlements ceiling
+    const entitlements = await getTenantEntitlements(company);
+    const planFeaturesSet = new Set<ModuleKey>(entitlements.plan_features);
+
+    // Reject attempts to enable modules outside the current plan
+    const unentitled = requestedKeys.filter((k) => !planFeaturesSet.has(k));
+    if (unentitled.length > 0) {
+      const unentitledNames = unentitled.map((k) => MOD_CATALOG[k]?.name || k);
+      res.status(422).json({
+        code: 'UNENTITLED_MODULE',
+        error: `Cannot enable modules not included in your current subscription plan: ${unentitledNames.join(', ')}. Please upgrade your plan.`,
+        unentitled_modules: unentitled,
+      });
+      return;
+    }
+
+    // Validate module dependencies
+    const depCheck = validateModuleDependencies(requestedKeys);
+    if (!depCheck.valid) {
+      const missingDetails = depCheck.missing.map((m) => {
+        const modName = MOD_CATALOG[m.module]?.name || m.module;
+        const reqNames = m.requires.map((r) => MOD_CATALOG[r]?.name || r).join(', ');
+        return `"${modName}" requires "${reqNames}" to be enabled.`;
+      });
+
+      res.status(422).json({
+        code: 'DEPENDENCY_MISSING',
+        error: `Module dependency validation failed: ${missingDetails.join(' ')}`,
+        details: depCheck.missing,
+      });
+      return;
+    }
+
+    // Capture before snapshot
+    const previousPreferences = company.settings?.enabled_modules ?? undefined;
+
+    // Update Company settings
+    if (!company.settings) {
+      company.settings = {} as any;
+    }
+    company.settings.enabled_modules = requestedKeys;
+    await company.save();
+
+    // Persist immutable audit log with persistence failure rollback
+    try {
+      await AuditLog.create({
+        company_id: company._id,
+        entity_type: 'company_settings',
+        entity_id: company._id,
+        entity_identifier: company.slug || company.name,
+        action: 'UPDATE',
+        actor_id: req.user?._id,
+        actor_name: req.user?.name || req.user?.email || 'Company Administrator',
+        actor_role: (req as any).tenantRole || req.member?.role || 'admin',
+        ip_address: (req.headers['x-forwarded-for'] as string) || req.socket?.remoteAddress || '127.0.0.1',
+        description: 'Updated operational module access preferences',
+        before_snapshot: { enabled_modules: previousPreferences },
+        after_snapshot: { enabled_modules: requestedKeys },
+      });
+    } catch (auditError: any) {
+      company.settings.enabled_modules = previousPreferences;
+      await company.save();
+      throw new Error(`Audit log persistence failed: ${auditError.message}`);
+    }
+
+    // Re-evaluate effective access
+    const updatedEntitlements = await getTenantEntitlements(company);
+
+    res.json({
+      success: true,
+      message: 'Company module preferences updated successfully.',
+      enabled_modules: requestedKeys,
+      effective_features: updatedEntitlements.enabled_features,
+    });
+  } catch (error: any) {
+    console.error('Error updating company modules:', error);
+    res.status(500).json({ error: error.message || 'Failed to update company module preferences.' });
   }
 };

@@ -32,10 +32,14 @@ import {
 import api from '../../api/client';
 import { PageHeader } from '../../components/common/PageHeader';
 import { Modal } from '../../components/common/Modal';
+import { FeatureGate } from '../../components/common/FeatureGate';
+import { useAuthStore } from '../../stores/authStore';
 import { toast } from '../../stores/uiStore';
 
 export const MaintenanceDashboardPage: React.FC = () => {
   const queryClient = useQueryClient();
+  const { enabledFeatures = [] } = useAuthStore();
+  const isUnlocked = enabledFeatures.includes('MOD_MAINTENANCE');
   const [activeTab, setActiveTab] = useState<'orders' | 'schedules' | 'profitability'>('orders');
 
   // Filter States
@@ -80,6 +84,7 @@ export const MaintenanceDashboardPage: React.FC = () => {
       const res = await api.get('/fleet/maintenance/analytics');
       return res.data?.analytics;
     },
+    enabled: isUnlocked,
   });
 
   // 2. Fetch Work Orders
@@ -93,6 +98,7 @@ export const MaintenanceDashboardPage: React.FC = () => {
       const res = await api.get(`/fleet/maintenance/work-orders?${params.toString()}`);
       return res.data;
     },
+    enabled: isUnlocked,
   });
 
   // 3. Fetch Registered Fleet Trucks for Selector
@@ -102,6 +108,7 @@ export const MaintenanceDashboardPage: React.FC = () => {
       const res = await api.get('/fleet/trucks?limit=100');
       return res.data?.trucks || [];
     },
+    enabled: isUnlocked,
   });
 
   // 4. Fetch Vehicle Profitability
@@ -111,7 +118,7 @@ export const MaintenanceDashboardPage: React.FC = () => {
       const res = await api.get('/fleet/maintenance/profitability');
       return res.data?.profitability || [];
     },
-    enabled: activeTab === 'profitability',
+    enabled: isUnlocked && activeTab === 'profitability',
   });
 
   // Calculations for Line Items
@@ -268,6 +275,29 @@ export const MaintenanceDashboardPage: React.FC = () => {
     });
     setIsCreateModalOpen(true);
   };
+
+  if (!isUnlocked) {
+    return (
+      <div className="maintenance-container">
+        <PageHeader
+          title="Fleet Maintenance & Work Orders"
+          subtitle="Manage garage work orders, preventative service intervals, downtime tracking, and Cost per KM (CPK) metrics."
+          breadcrumbs={[
+            { label: 'Fleet Management', href: '/fleet/trucks' },
+            { label: 'Maintenance & Repairs' },
+          ]}
+        />
+        <FeatureGate
+          feature="MOD_MAINTENANCE"
+          pageMode={true}
+          titleOverride="Fleet Maintenance & Garage Work Orders is Locked"
+          descOverride="Preventative maintenance scheduling, garage job cards, service intervals, and vehicle Cost Per KM tracking require the Pro Enterprise plan."
+        >
+          {null}
+        </FeatureGate>
+      </div>
+    );
+  }
 
   return (
     <div className="maintenance-container">

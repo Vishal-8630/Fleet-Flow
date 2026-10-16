@@ -31,6 +31,8 @@ import {
   removeMember,
   verifyInvitationToken,
   acceptInvitation,
+  getCompanyModules,
+  updateCompanyModules,
 } from '../controllers/companyController.js';
 import { requireAuth, resolveTenantContext, requireRole, requireActiveSubscription } from '../middleware/authMiddleware.js';
 import { requireQuota } from '../middleware/entitlementMiddleware.js';
@@ -53,6 +55,10 @@ router.use(requireAuth, resolveTenantContext, requireActiveSubscription);
 // Company Profile & Operational Formatting
 router.get('/profile', getCompanyProfile);
 router.put('/profile', requireRole(['admin']), updateCompanyProfile);
+
+// Company Module Preferences
+router.get('/modules', getCompanyModules);
+router.put('/modules', requireRole(['admin']), updateCompanyModules);
 
 // Team Members & Access Permissions
 router.get('/members', listCompanyMembers);

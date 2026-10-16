@@ -30,10 +30,14 @@ import {
 import api from '../../api/client';
 import { PageHeader } from '../../components/common/PageHeader';
 import { Modal } from '../../components/common/Modal';
+import { FeatureGate } from '../../components/common/FeatureGate';
+import { useAuthStore } from '../../stores/authStore';
 import { toast } from '../../stores/uiStore';
 
 export const TyreManagementPage: React.FC = () => {
   const queryClient = useQueryClient();
+  const { enabledFeatures = [] } = useAuthStore();
+  const isUnlocked = enabledFeatures.includes('MOD_MAINTENANCE');
 
   // Selected Truck for Chassis Visualizer
   const [selectedTruckId, setSelectedTruckId] = useState<string>('');
@@ -89,6 +93,7 @@ export const TyreManagementPage: React.FC = () => {
       }
       return list;
     },
+    enabled: isUnlocked,
   });
 
   // 2. Fetch Tyres
@@ -102,6 +107,7 @@ export const TyreManagementPage: React.FC = () => {
       const res = await api.get(`/fleet/maintenance/tyres?${params.toString()}`);
       return res.data?.tyres || [];
     },
+    enabled: isUnlocked,
   });
 
   // Selected Truck Object
@@ -305,6 +311,29 @@ export const TyreManagementPage: React.FC = () => {
       </div>
     );
   };
+
+  if (!isUnlocked) {
+    return (
+      <div className="maintenance-container">
+        <PageHeader
+          title="Tyre Management & Axle Blueprint"
+          subtitle="Visual chassis mounting, millimeter-precise tread wear tracking, retread cycles, and scrap retirement."
+          breadcrumbs={[
+            { label: 'Fleet Management', href: '/fleet/trucks' },
+            { label: 'Tyre Management' },
+          ]}
+        />
+        <FeatureGate
+          feature="MOD_MAINTENANCE"
+          pageMode={true}
+          titleOverride="Tyre Lifecycle & Axle Management is Locked"
+          descOverride="Interactive visual chassis axle blueprints, tread wear depth tracking, retread logging, and tyre inventory require the Pro Enterprise plan."
+        >
+          {null}
+        </FeatureGate>
+      </div>
+    );
+  }
 
   return (
     <div className="maintenance-container">

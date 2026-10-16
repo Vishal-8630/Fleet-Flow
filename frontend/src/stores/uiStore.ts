@@ -64,7 +64,10 @@ export const useUiStore = create<UiState>((set) => ({
       }
       const id = Math.random().toString(36).substring(2, 9);
       existingId = id;
-      const newToast: Toast = { ...toast, id, duration: toast.duration || 4500 };
+      const defaultDuration = toast.duration !== undefined
+        ? toast.duration
+        : (toast.type === 'error' ? 6000 : 4500);
+      const newToast: Toast = { ...toast, id, duration: defaultDuration };
       return { toasts: [...state.toasts, newToast] };
     });
     return existingId;
@@ -87,12 +90,13 @@ export const useUiStore = create<UiState>((set) => ({
  * Example: `toast.success('Settings saved!')`
  */
 export const toast = {
-  success: (message: string, title?: string) =>
-    useUiStore.getState().addToast({ type: 'success', message, title }),
-  error: (message: string, title?: string) =>
-    useUiStore.getState().addToast({ type: 'error', message, title }),
-  warning: (message: string, title?: string) =>
-    useUiStore.getState().addToast({ type: 'warning', message, title }),
-  info: (message: string, title?: string) =>
-    useUiStore.getState().addToast({ type: 'info', message, title }),
+  success: (message: string, title?: string, duration?: number) =>
+    useUiStore.getState().addToast({ type: 'success', message, title, duration }),
+  error: (message: string, title?: string, duration?: number) =>
+    useUiStore.getState().addToast({ type: 'error', message, title, duration }),
+  warning: (message: string, title?: string, duration?: number) =>
+    useUiStore.getState().addToast({ type: 'warning', message, title, duration }),
+  info: (message: string, title?: string, duration?: number) =>
+    useUiStore.getState().addToast({ type: 'info', message, title, duration }),
 };
+

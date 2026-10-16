@@ -27,7 +27,9 @@ export interface TenantEntitlementSummary {
     code: string;
     name: string;
   };
+  plan_features: ModuleKey[];
   enabled_features: ModuleKey[];
+  company_modules?: ModuleKey[];
   limits: {
     max_trucks: number;
     max_drivers: number;
@@ -70,8 +72,9 @@ export async function getTenantEntitlements(company: ICompany): Promise<TenantEn
     planCode = plan.code;
     planName = plan.name;
     includedFeatures = [...(plan.included_features || [])];
-    maxTrucks = plan.max_trucks;
-    maxDrivers = plan.max_drivers;
+    const isTrial = (subscription.status === 'trialing' || company.subscription_status === 'trialing');
+    maxTrucks = isTrial ? 5 : plan.max_trucks;
+    maxDrivers = isTrial ? 5 : plan.max_drivers;
     maxUsers = plan.max_users;
     maxBranches = plan.max_branches ?? (plan.code === 'standard' ? 3 : plan.code === 'starter' ? 1 : -1);
   } else {
@@ -120,14 +123,33 @@ export async function getTenantEntitlements(company: ICompany): Promise<TenantEn
     }
   }
 
-  // 4. Status and Read-Only Evaluation
-  const status = subscription?.status || company.subscription_status || 'trialing';
+  // 4. Plan Entitlements Ceiling
+  const planFeatures = Array.from(enabledSet) as ModuleKey[];
+
+  // 5. Company Preferences Filter:
+  // EffectiveAccess = PlanEntitlements ∩ CompanyEnabledModules
+  let effectiveFeatures: ModuleKey[];
+  if (company.settings && Array.isArray(company.settings.enabled_modules)) {
+    const preferenceSet = new Set<ModuleKey>(company.settings.enabled_modules as ModuleKey[]);
+    effectiveFeatures = planFeatures.filter((f) => preferenceSet.has(f));
+  } else {
+    // When enabled_modules is undefined, inherit 100% of plan entitlements
+    effectiveFeatures = [...planFeatures];
+  }
+
+  // 6. Status and Read-Only Evaluation
+  let status = subscription?.status || company.subscription_status || 'trialing';
+  if (status === 'trialing' && company.trial_ends_at && new Date(company.trial_ends_at).getTime() < Date.now()) {
+    status = 'expired';
+  }
   const isReadOnly = ['suspended', 'cancelled', 'expired'].includes(status);
 
   let daysRemainingInTrial: number | undefined;
   if (status === 'trialing' && company.trial_ends_at) {
     const diffMs = new Date(company.trial_ends_at).getTime() - Date.now();
     daysRemainingInTrial = Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
+  } else if (status === 'expired') {
+    daysRemainingInTrial = 0;
   }
 
   return {
@@ -136,7 +158,9 @@ export async function getTenantEntitlements(company: ICompany): Promise<TenantEn
       code: planCode,
       name: planName,
     },
-    enabled_features: Array.from(enabledSet),
+    plan_features: planFeatures,
+    enabled_features: effectiveFeatures,
+    company_modules: company.settings?.enabled_modules,
     limits: {
       max_trucks: maxTrucks,
       max_drivers: maxDrivers,

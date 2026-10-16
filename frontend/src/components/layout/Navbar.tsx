@@ -8,7 +8,7 @@
  * The horizontal navigation bar situated at the top of the main viewport.
  * Displays:
  * 1. Current workspace name and active subscription badge.
- * 2. 14-day free trial countdown pill (if status is 'trialing').
+ * 2. 7-day free trial countdown pill (if status is 'trialing').
  * 3. Logged-in user's name and assigned role (clickable link to `/settings/profile`).
  * 4. Sign-out button triggering `logout()` in `authStore`.
  * ============================================================================
@@ -51,10 +51,10 @@ export const Navbar: React.FC = () => {
   }, []);
 
   /**
-   * Calculates remaining days of the 14-day free trial from trialEndsAt timestamp
+   * Calculates remaining days of the 7-day free trial from trialEndsAt timestamp
    */
   const calculateDaysRemaining = (dateStr?: string) => {
-    if (!dateStr) return 14;
+    if (!dateStr) return 7;
     const diff = new Date(dateStr).getTime() - new Date().getTime();
     return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
   };
@@ -369,7 +369,7 @@ export const Navbar: React.FC = () => {
               lineHeight: 1.5,
             }}
           >
-            ℹ️ You will be registered as <strong>Administrator</strong> of this new workspace with an instant 14-day free trial. Your existing company workspace data remains completely isolated and intact.
+            ℹ️ You will be registered as <strong>Administrator</strong> of this new workspace with an instant 7-day free trial. Your existing company workspace data remains completely isolated and intact.
           </div>
         </form>
       </Modal>

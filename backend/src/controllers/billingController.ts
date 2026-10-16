@@ -68,15 +68,16 @@ export async function getCompanySubscription(req: Request, res: Response): Promi
       .populate<{ 'active_addons.addon_id': IAddOn }>('active_addons.addon_id');
 
     if (!subscription) {
-      const standardPlan = await Plan.findOne({ code: 'standard' }) || await Plan.findOne();
+      const starterPlan = (await Plan.findOne({ code: 'starter' })) || (await Plan.findOne());
+      const trialExpiry = req.company.trial_ends_at || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
       subscription = await Subscription.create({
         company_id: companyId,
-        plan_id: standardPlan?._id,
+        plan_id: starterPlan?._id,
         billing_cycle: 'monthly',
         status: req.company.subscription_status || 'trialing',
         current_period_start: req.company.created_at || new Date(),
-        current_period_end: req.company.trial_ends_at || new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
-        trial_ends_at: req.company.trial_ends_at,
+        current_period_end: trialExpiry,
+        trial_ends_at: trialExpiry,
         active_addons: [],
       });
       if (subscription) {
@@ -138,7 +139,7 @@ export async function calculatePlanChangePreview(req: Request, res: Response): P
     }
 
     const currentPlan = subscription.plan_id;
-    const currentPricePaise = subscription.billing_cycle === 'annual'
+    let currentPricePaise = subscription.billing_cycle === 'annual'
       ? currentPlan.annual_price_paise
       : currentPlan.monthly_price_paise;
 
@@ -146,13 +147,30 @@ export async function calculatePlanChangePreview(req: Request, res: Response): P
       ? targetPlan.annual_price_paise
       : targetPlan.monthly_price_paise;
 
-    const proration = calculateProration(
-      currentPricePaise,
-      targetPricePaise,
-      subscription.current_period_start,
-      subscription.current_period_end,
-      new Date()
-    );
+    // Trialing or expired workspaces have no paid credit from previous payments to prorate
+    const isTrialOrExpired = subscription.status === 'trialing' || subscription.status === 'expired';
+    if (isTrialOrExpired) {
+      currentPricePaise = 0;
+    }
+
+    const proration = isTrialOrExpired
+      ? {
+          total_cycle_seconds: billing_cycle === 'annual' ? 365 * 86400 : 30 * 86400,
+          remaining_seconds: billing_cycle === 'annual' ? 365 * 86400 : 30 * 86400,
+          fraction_remaining: 1,
+          current_plan_credit_paise: 0,
+          new_plan_charge_paise: targetPricePaise,
+          net_payable_paise: targetPricePaise,
+          net_payable_rupees: targetPricePaise / 100,
+          is_upgrade: true,
+        }
+      : calculateProration(
+          currentPricePaise,
+          targetPricePaise,
+          subscription.current_period_start,
+          subscription.current_period_end,
+          new Date()
+        );
 
     res.json({
       current_plan: {
@@ -213,11 +231,15 @@ export async function initializeCheckout(req: Request, res: Response): Promise<v
       }
     }
 
-    const subtotalPaise = Math.max(0, basePricePaise - discountPaise);
-    // GST 18% (9% CGST + 9% SGST) for Indian SaaS compliance
-    const cgstPaise = Math.round(subtotalPaise * 0.09);
-    const sgstPaise = Math.round(subtotalPaise * 0.09);
-    const totalPaise = subtotalPaise + cgstPaise + sgstPaise;
+    // Approved DEC-001 pricing: Plan prices are GST-inclusive.
+    // The gross payable amount equals basePricePaise (minus any discount).
+    // The taxable subtotal and 18% GST (9% CGST + 9% SGST) are back-calculated from the inclusive total.
+    const grossTotalPaise = Math.max(0, basePricePaise - discountPaise);
+    const subtotalPaise = Math.round(grossTotalPaise / 1.18);
+    const totalGstPaise = grossTotalPaise - subtotalPaise;
+    const cgstPaise = Math.round(totalGstPaise / 2);
+    const sgstPaise = totalGstPaise - cgstPaise;
+    const totalPaise = grossTotalPaise;
 
     const invoiceNumber = await generateNextInvoiceNumber();
 
@@ -478,8 +500,10 @@ export async function changePlan(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    // Disallow free upgrades when on an active paid subscription
-    if (subscription.status !== 'trialing' && targetPricePaise > currentPricePaise) {
+    // Disallow unverified upgrades and bypasses.
+    // 1. Any plan change by a trialing or expired workspace requires paid checkout conversion.
+    // 2. Any tier switch to a higher-priced plan by an active subscriber requires payment.
+    if (subscription.status === 'trialing' || subscription.status === 'expired' || targetPricePaise > currentPricePaise) {
       res.status(402).json({
         code: 'PAYMENT_REQUIRED',
         error: `Upgrading to ${targetPlan.name} requires payment. Please complete checkout to activate this tier.`,
@@ -487,19 +511,15 @@ export async function changePlan(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    // In trial mode or if immediate change requested (for downgrades or lateral changes):
-    if (subscription.status === 'trialing' || immediate) {
+    // Immediate change requested for active paid subscriptions (downgrades or lateral changes):
+    if (immediate) {
       subscription.plan_id = targetPlan._id as any;
       subscription.billing_cycle = billing_cycle;
-      if (subscription.status !== 'trialing') {
-        subscription.status = 'active';
-      }
+      subscription.status = 'active';
       subscription.scheduled_change = undefined;
       await subscription.save();
 
-      if (subscription.status !== 'trialing') {
-        await Company.findByIdAndUpdate(req.company._id, { subscription_status: 'active' });
-      }
+      await Company.findByIdAndUpdate(req.company._id, { subscription_status: 'active' });
 
       res.json({
         success: true,
@@ -541,7 +561,7 @@ export async function applyScheduledChange(req: Request, res: Response): Promise
     }
 
     const subscription = await Subscription.findOne({ company_id: req.company._id });
-    if (!subscription || !subscription.scheduled_change?.target_plan_id) {
+    if (!subscription || !subscription.scheduled_change?.target_plan_id || subscription.scheduled_change.action !== 'downgrade') {
       res.status(400).json({ error: 'No scheduled plan change found.' });
       return;
     }

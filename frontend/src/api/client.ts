@@ -82,7 +82,12 @@ api.interceptors.response.use(
       }
     }
 
-    return Promise.reject(new Error(message));
+    const enhancedError = new Error(message);
+    (enhancedError as any).response = error.response;
+    (enhancedError as any).status = error.response?.status;
+    (enhancedError as any).code = error.response?.data?.code || error.code;
+
+    return Promise.reject(enhancedError);
   }
 );
 

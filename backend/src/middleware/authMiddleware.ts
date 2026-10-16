@@ -43,6 +43,7 @@ import jwt from 'jsonwebtoken';
 import { User, IUser } from '../models/User.js';
 import { Company, ICompany } from '../models/Company.js';
 import { CompanyMember, ICompanyMember, UserRole } from '../models/CompanyMember.js';
+import { Subscription } from '../models/Subscription.js';
 import { tenantStorage } from '../plugins/tenantPlugin.js';
 import { supportSecurityMiddleware } from './supportSecurityMiddleware.js';
 
@@ -302,7 +303,10 @@ export async function requireActiveSubscription(req: Request, res: Response, nex
       status = 'expired';
       if (req.tenant) req.tenant.status = 'expired';
       company.subscription_status = 'expired';
-      await Company.findByIdAndUpdate(company._id, { subscription_status: 'expired' }).catch(() => {});
+      await Promise.all([
+        Company.findByIdAndUpdate(company._id, { subscription_status: 'expired' }).catch(() => {}),
+        Subscription.findOneAndUpdate({ company_id: company._id }, { status: 'expired' }).catch(() => {}),
+      ]);
     }
   }
 
@@ -311,7 +315,7 @@ export async function requireActiveSubscription(req: Request, res: Response, nex
       code: 'SUBSCRIPTION_EXPIRED',
       status: 'expired',
       is_read_only: true,
-      error: 'Your 14-day free trial has expired. Please upgrade to a paid plan to perform write actions.',
+      error: 'Your 7-day free trial has expired. Please upgrade to a paid plan to perform write actions.',
     });
     return;
   }
