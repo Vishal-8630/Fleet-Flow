@@ -14,10 +14,26 @@
 import mongoose, { Document, Schema, Types } from 'mongoose';
 import { NotificationChannel, NotificationEvent } from './NotificationLog.js';
 
-export type JobStatus = 'pending' | 'processing' | 'delivered' | 'failed' | 'dead_letter' | 'skipped' | 'cancelled' | 'staged';
+export type JobStatus =
+  | 'pending'
+  | 'processing'
+  | 'delivered'
+  | 'failed'
+  | 'dead_letter'
+  | 'skipped'
+  | 'cancelled'
+  | 'staged'
+  | 'staged_unconfirmed'
+  | 'quarantined_unresolved'
+  | 'cancelled_post_quarantine'
+  | 'reconciled_revoked_disclosed'
+  | 'compensation_requested'
+  | 'provider_accepted'
+  | 'provider_ambiguous_timeout';
 
 export interface INotificationJob extends Document {
   company_id: Types.ObjectId;
+  session_id?: Types.ObjectId;
   job_id: string;
   channel: NotificationChannel;
   event_type: NotificationEvent;
@@ -35,6 +51,14 @@ export interface INotificationJob extends Document {
   provider_message_id?: string;
   notification_log_id?: Types.ObjectId;
   locked_at?: Date;
+  lease_expires_at?: Date;
+  worker_id?: string;
+  fencing_token?: string;
+  reconciliation_attempts?: number;
+  first_unconfirmed_at?: Date;
+  compensation_requested_at?: Date;
+  reconciled_at?: Date;
+  resolution_notes?: string;
   created_at: Date;
   updated_at: Date;
 }
@@ -45,6 +69,11 @@ const NotificationJobSchema = new Schema<INotificationJob>(
       type: Schema.Types.ObjectId,
       ref: 'Company',
       required: true,
+      index: true,
+    },
+    session_id: {
+      type: Schema.Types.ObjectId,
+      ref: 'SupportAccessRequest',
       index: true,
     },
     job_id: {
@@ -69,6 +98,8 @@ const NotificationJobSchema = new Schema<INotificationJob>(
         'INVITATION',
         'INVOICE_ISSUED',
         'EMERGENCY_ACCESS_GRANTED',
+        'EMERGENCY_ACCESS_ABORTED_CREDENTIAL_FAILURE',
+        'EMERGENCY_ACCESS_RESOLVED_AFTER_QUARANTINE',
       ],
       required: true,
       index: true,
@@ -84,7 +115,23 @@ const NotificationJobSchema = new Schema<INotificationJob>(
     next_run_at: { type: Date, default: Date.now, index: true },
     status: {
       type: String,
-      enum: ['pending', 'processing', 'delivered', 'failed', 'dead_letter', 'skipped', 'cancelled', 'staged'],
+      enum: [
+        'pending',
+        'processing',
+        'delivered',
+        'failed',
+        'dead_letter',
+        'skipped',
+        'cancelled',
+        'staged',
+        'staged_unconfirmed',
+        'quarantined_unresolved',
+        'cancelled_post_quarantine',
+        'reconciled_revoked_disclosed',
+        'compensation_requested',
+        'provider_accepted',
+        'provider_ambiguous_timeout',
+      ],
       default: 'pending',
       index: true,
     },
@@ -96,6 +143,14 @@ const NotificationJobSchema = new Schema<INotificationJob>(
       index: true,
     },
     locked_at: { type: Date },
+    lease_expires_at: { type: Date, index: true },
+    worker_id: { type: String, trim: true },
+    fencing_token: { type: String, trim: true },
+    reconciliation_attempts: { type: Number, default: 0 },
+    first_unconfirmed_at: { type: Date },
+    compensation_requested_at: { type: Date },
+    reconciled_at: { type: Date },
+    resolution_notes: { type: String, trim: true },
   },
   {
     timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },

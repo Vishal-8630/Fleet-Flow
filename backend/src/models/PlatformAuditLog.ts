@@ -26,11 +26,27 @@ export interface IPlatformAuditLog extends Document {
     | 'addon_modified'
     | 'support_access_requested'
     | 'support_access_approved'
+    | 'support_access_rejected'
     | 'support_access_activated'
     | 'emergency_support_activated'
     | 'support_access_revoked'
     | 'support_access_expired'
-    | 'support_ticket_lockout_created';
+    | 'support_ticket_lockout_created'
+    | 'emergency_access_rejected'
+    | 'emergency_activation_failed'
+    | 'emergency_activation_aborted_post_commit'
+    | 'post_commit_compensation_failed'
+    | 'emergency_access_high_frequency_alert'
+    | 'security_alert_persistence_failed'
+    | 'security_alert_persistence_total_failure'
+    | 'security_alert_dispatch_exhausted'
+    | 'emergency_session_stale_sweep_executed'
+    | 'emergency_session_malformed_expiry_detected'
+    | 'emergency_access_late_quarantine_resolved'
+    | 'support_access_denied_mutation'
+    | 'emergency_notification_worker_failure'
+    | 'notification_outbox_cleanup_failed'
+    | 'outbox_commit_outcome_unresolved';
   target_company_id?: Types.ObjectId;
   target_company_name?: string;
   ip_address?: string;
@@ -56,11 +72,27 @@ const PlatformAuditLogSchema = new Schema<IPlatformAuditLog>(
         'addon_modified',
         'support_access_requested',
         'support_access_approved',
+        'support_access_rejected',
         'support_access_activated',
         'emergency_support_activated',
         'support_access_revoked',
         'support_access_expired',
         'support_ticket_lockout_created',
+        'emergency_access_rejected',
+        'emergency_activation_failed',
+        'emergency_activation_aborted_post_commit',
+        'post_commit_compensation_failed',
+        'emergency_access_high_frequency_alert',
+        'security_alert_persistence_failed',
+        'security_alert_persistence_total_failure',
+        'security_alert_dispatch_exhausted',
+        'emergency_session_stale_sweep_executed',
+        'emergency_session_malformed_expiry_detected',
+        'emergency_access_late_quarantine_resolved',
+        'support_access_denied_mutation',
+        'emergency_notification_worker_failure',
+        'notification_outbox_cleanup_failed',
+        'outbox_commit_outcome_unresolved',
       ],
       index: true,
     },

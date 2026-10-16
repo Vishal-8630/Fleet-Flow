@@ -44,10 +44,13 @@ export interface ISupportAccessRequest extends Document {
   
   // Emergency Break-Glass (Policy A)
   is_emergency: boolean;
+  is_single_admin_emergency?: boolean;
   emergency_approver_two?: Types.ObjectId;
   emergency_approved_at?: Date;
   notification_job_id?: Types.ObjectId;
   notification_dispatched_at?: Date;
+  auto_expired_by_sweep?: boolean;
+  expired_at?: Date;
 
   created_at: Date;
   updated_at: Date;
@@ -78,11 +81,14 @@ const SupportAccessRequestSchema = new Schema<ISupportAccessRequest>(
     activated_at: { type: Date },
     started_at: { type: Date },
     expires_at: { type: Date, index: true },
+    expired_at: { type: Date },
+    auto_expired_by_sweep: { type: Boolean, default: false },
     revoked_by: { type: Schema.Types.ObjectId, ref: 'User' },
     revoked_at: { type: Date },
     revocation_reason: { type: String, trim: true },
 
     is_emergency: { type: Boolean, default: false, index: true },
+    is_single_admin_emergency: { type: Boolean, default: false },
     emergency_approver_two: { type: Schema.Types.ObjectId, ref: 'User' },
     emergency_approved_at: { type: Date },
     notification_job_id: { type: Schema.Types.ObjectId, ref: 'NotificationJob' },
@@ -105,6 +111,19 @@ SupportAccessRequestSchema.pre('validate', function (next) {
   }
   next();
 });
+
+// Partial unique index: at most ONE active emergency session per tenant
+SupportAccessRequestSchema.index(
+  { company_id: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      status: 'active',
+      is_emergency: true,
+    },
+    name: 'unique_active_emergency_session_per_tenant',
+  }
+);
 
 // Compound index for instant verification in middleware (< 2ms lookup target)
 SupportAccessRequestSchema.index({ _id: 1, company_id: 1, status: 1 });

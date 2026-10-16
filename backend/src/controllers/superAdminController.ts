@@ -553,7 +553,7 @@ export async function exitImpersonation(req: Request, res: Response): Promise<vo
  */
 export async function getAuditLogs(req: Request, res: Response): Promise<void> {
   try {
-    const logs = await PlatformAuditLog.find().sort({ created_at: -1 }).limit(50);
+    const logs = await PlatformAuditLog.find().sort({ created_at: -1 }).limit(100);
     res.json({ logs });
   } catch (error: any) {
     res.status(500).json({ error: error.message || 'Failed to fetch audit logs.' });

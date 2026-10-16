@@ -9,7 +9,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { PageHeader } from '../../components/common/PageHeader';
-import { LifeBuoy, Plus, MessageSquare, Clock, CheckCircle, AlertCircle } from 'lucide-react';
+import { LifeBuoy, Plus, MessageSquare, Clock, CheckCircle, AlertCircle, ShieldAlert } from 'lucide-react';
 import api from '../../api/client';
 import { toast } from '../../stores/uiStore';
 
@@ -41,6 +41,17 @@ const STATUS_ICONS: Record<string, React.ReactNode> = {
   closed: <CheckCircle size={14} color="var(--text-muted)" />,
 };
 
+const SUPPORT_SCOPE_LABELS: Record<string, string> = {
+  diagnostics_readonly: 'Read-Only Diagnostics',
+  maintenance_readwrite: 'Operational Support (Read & Write)',
+  emergency_breakglass: 'Emergency Diagnostics',
+};
+
+const getScopeLabel = (scope?: string) => {
+  if (!scope) return 'Standard Diagnostics';
+  return SUPPORT_SCOPE_LABELS[scope] || scope.replace(/_/g, ' ');
+};
+
 export const SupportTicketsPage: React.FC = () => {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
@@ -48,6 +59,7 @@ export const SupportTicketsPage: React.FC = () => {
   const [showCreate, setShowCreate] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [replyText, setReplyText] = useState('');
+  const [supportSessions, setSupportSessions] = useState<any[]>([]);
   const showToast = (message: string, type: 'success' | 'error' | 'warning' | 'info' = 'success') => toast[type](message);
 
   const [form, setForm] = useState({ subject: '', category: 'bug', priority: 'medium', message: '' });
@@ -63,7 +75,49 @@ export const SupportTicketsPage: React.FC = () => {
     }
   };
 
-  useEffect(() => { fetchTickets(); }, []);
+  const fetchSupportSessions = async () => {
+    try {
+      const res = await api.get('/support/sessions');
+      setSupportSessions(res.data.sessions || []);
+    } catch {
+      //
+    }
+  };
+
+  useEffect(() => {
+    fetchTickets();
+    fetchSupportSessions();
+  }, []);
+
+  const handleApproveSupportSession = async (sessionId: string) => {
+    try {
+      await api.post(`/support/sessions/${sessionId}/approve`);
+      showToast('Support access request approved. Platform operator can now access for the approved duration.', 'success');
+      fetchSupportSessions();
+    } catch (err: any) {
+      showToast(err.response?.data?.error || 'Failed to approve support access.', 'error');
+    }
+  };
+
+  const handleRejectSupportSession = async (sessionId: string) => {
+    try {
+      await api.post(`/support/sessions/${sessionId}/reject`, { reason: 'Rejected by workspace administrator' });
+      showToast('Support access request rejected.', 'info');
+      fetchSupportSessions();
+    } catch (err: any) {
+      showToast(err.response?.data?.error || 'Failed to reject support access.', 'error');
+    }
+  };
+
+  const handleRevokeSupportSession = async (sessionId: string) => {
+    try {
+      await api.post(`/support/sessions/${sessionId}/revoke`, { reason: 'Revoked by workspace administrator' });
+      showToast('Support access session revoked immediately.', 'info');
+      fetchSupportSessions();
+    } catch (err: any) {
+      showToast(err.response?.data?.error || 'Failed to revoke support access.', 'error');
+    }
+  };
 
   const handleCreate = async () => {
     if (!form.subject || !form.message) {
@@ -111,6 +165,119 @@ export const SupportTicketsPage: React.FC = () => {
           </button>
         }
       />
+
+      {/* DEC-012 Platform Support Access Authorizations */}
+      {supportSessions.some((s) => ['pending', 'active'].includes(s.status)) && (
+        <div style={{ background: 'var(--bg-card)', borderRadius: 'var(--radius-xl)', border: '1px solid var(--border-default)', overflow: 'hidden' }}>
+          <div
+            style={{
+              padding: '0.875rem 1.25rem',
+              borderBottom: '1px solid var(--border-subtle)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              background: 'var(--bg-subtle)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <ShieldAlert size={16} color="var(--color-primary-600)" />
+              <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                Platform Support Access Requests
+              </span>
+            </div>
+            <span className="badge badge-neutral">
+              {supportSessions.filter((s) => ['pending', 'active'].includes(s.status)).length} Pending
+            </span>
+          </div>
+
+          <div>
+            {supportSessions
+              .filter((s) => ['pending', 'active'].includes(s.status))
+              .map((session, idx, arr) => (
+                <div
+                  key={session._id}
+                  style={{
+                    padding: '1rem 1.25rem',
+                    borderBottom: idx === arr.length - 1 ? 'none' : '1px solid var(--border-subtle)',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    gap: '1rem',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.875rem' }}>
+                    <div
+                      style={{
+                        width: '36px',
+                        height: '36px',
+                        borderRadius: 'var(--radius-md)',
+                        backgroundColor: session.status === 'pending' ? 'var(--color-warning-50, #fffbeb)' : 'var(--color-primary-50, #eff6ff)',
+                        color: session.status === 'pending' ? 'var(--color-warning, #d97706)' : 'var(--color-primary-600, #2563eb)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {session.status === 'pending' ? <Clock size={18} /> : <ShieldAlert size={18} />}
+                    </div>
+
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+                        <span style={{ fontWeight: 600, fontSize: '13px', color: 'var(--text-primary)' }}>
+                          Support Request: {session.requested_by?.name || 'Platform Super-Admin'}
+                        </span>
+                        <span className={`badge ${session.status === 'pending' ? 'badge-warning' : 'badge-info'}`}>
+                          {session.status === 'pending' ? 'Pending Approval' : 'Active Session'}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                        <strong>Operator:</strong> {session.requested_by?.email || 'Platform Super-Admin'} •{' '}
+                        <strong>Access Scope:</strong>{' '}
+                        <span style={{ color: 'var(--color-primary-700)', fontWeight: 600 }}>
+                          {getScopeLabel(session.scope)}
+                        </span>{' '}
+                        • <strong>Duration:</strong> {session.duration_minutes}m
+                      </div>
+                      {session.justification && (
+                        <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px', fontStyle: 'italic' }}>
+                          Reason: "{session.justification}"
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    {session.status === 'pending' ? (
+                      <>
+                        <button
+                          onClick={() => handleRejectSupportSession(session._id)}
+                          className="btn btn-outline btn-sm"
+                        >
+                          Reject
+                        </button>
+                        <button
+                          onClick={() => handleApproveSupportSession(session._id)}
+                          className="btn btn-primary btn-sm"
+                        >
+                          Approve ({session.duration_minutes}m)
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        onClick={() => handleRevokeSupportSession(session._id)}
+                        className="btn btn-danger btn-sm"
+                      >
+                        Revoke Access
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+          </div>
+        </div>
+      )}
 
       {/* Create Ticket Form */}
       {showCreate && (

@@ -850,3 +850,61 @@ export async function changePassword(req: Request, res: Response): Promise<void>
   }
 }
 
+/**
+ * Refreshes an active session JWT.
+ * DEC-012: Strictly blocks refresh attempts for impersonation or emergency access tokens.
+ */
+export async function refreshToken(req: Request, res: Response): Promise<void> {
+  try {
+    const rawToken =
+      req.cookies?.token ||
+      (req.headers.authorization?.startsWith('Bearer ')
+        ? req.headers.authorization.split(' ')[1]
+        : null);
+
+    if (!rawToken) {
+      res.status(401).json({ code: 'TOKEN_REQUIRED', error: 'Authentication token required.' });
+      return;
+    }
+
+    let decoded: any;
+    try {
+      decoded = jwt.verify(rawToken, getJwtSecret());
+    } catch {
+      res.status(401).json({ code: 'TOKEN_INVALID', error: 'Invalid or expired token.' });
+      return;
+    }
+
+    // DEC-012 Section 8.3 & Section 10: Prohibition of Support / Emergency Token Refresh
+    if (decoded.isImpersonation || decoded.isEmergency) {
+      res.status(403).json({
+        code: 'SUPPORT_REFRESH_PROHIBITED',
+        error: 'Token refresh is strictly prohibited for support or emergency access sessions.',
+      });
+      return;
+    }
+
+    const user = await User.findById(decoded.userId);
+    if (!user) {
+      res.status(401).json({ code: 'USER_NOT_FOUND', error: 'User no longer exists.' });
+      return;
+    }
+
+    if (user.token_version !== decoded.token_version) {
+      res.status(401).json({ code: 'SESSION_REVOKED', error: 'Session has been invalidated.' });
+      return;
+    }
+
+    const newToken = jwt.sign(
+      { userId: user._id, companyId: decoded.companyId, token_version: user.token_version },
+      getJwtSecret(),
+      { expiresIn: '7d' }
+    );
+    res.cookie('token', newToken, getCookieOptions());
+
+    res.json({ success: true, token: newToken });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Failed to refresh token.' });
+  }
+}
+

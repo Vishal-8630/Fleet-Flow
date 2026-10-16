@@ -20,7 +20,9 @@ export type NotificationEvent =
   | 'SETTLEMENT_PAYOUT'
   | 'INVITATION'
   | 'INVOICE_ISSUED'
-  | 'EMERGENCY_ACCESS_GRANTED';
+  | 'EMERGENCY_ACCESS_GRANTED'
+  | 'EMERGENCY_ACCESS_ABORTED_CREDENTIAL_FAILURE'
+  | 'EMERGENCY_ACCESS_RESOLVED_AFTER_QUARANTINE';
 export type NotificationStatus = 'queued' | 'sent' | 'delivered' | 'read' | 'failed' | 'skipped';
 
 export interface INotificationLog extends Document {
@@ -66,6 +68,8 @@ const NotificationLogSchema = new Schema<INotificationLog>(
         'INVITATION',
         'INVOICE_ISSUED',
         'EMERGENCY_ACCESS_GRANTED',
+        'EMERGENCY_ACCESS_ABORTED_CREDENTIAL_FAILURE',
+        'EMERGENCY_ACCESS_RESOLVED_AFTER_QUARANTINE',
       ],
       required: true,
       index: true,

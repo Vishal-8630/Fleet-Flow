@@ -9,7 +9,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { PageHeader } from '../../components/common/PageHeader';
-import { CheckSquare, Plus, Clock, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
+import { CheckSquare, Plus, Clock, CheckCircle, XCircle, AlertTriangle, ShieldAlert, ShieldCheck } from 'lucide-react';
 import api from '../../api/client';
 import { toast } from '../../stores/uiStore';
 
@@ -44,13 +44,41 @@ const ENTITY_TYPE_LABELS: Record<string, string> = {
   payment_receipt: 'Payment Receipt',
 };
 
+const SUPPORT_SCOPE_LABELS: Record<string, { title: string; hint: string }> = {
+  diagnostics_readonly: {
+    title: 'Read-Only Diagnostics',
+    hint: 'Investigate system settings & tickets. Financial ledgers and data exports remain strictly blocked.',
+  },
+  maintenance_readwrite: {
+    title: 'Operational Support (Read & Write)',
+    hint: 'Assist with operational troubleshooting. Financial data remains blocked.',
+  },
+  emergency_breakglass: {
+    title: 'Emergency Diagnostics',
+    hint: '15-minute emergency diagnostic access under security alerting.',
+  },
+};
+
+const getScopeLabel = (scope?: string) => {
+  if (!scope) return 'Standard Diagnostics';
+  return SUPPORT_SCOPE_LABELS[scope]?.title || scope.replace(/_/g, ' ');
+};
+
+const getScopeHint = (scope?: string) => {
+  if (!scope) return '';
+  return SUPPORT_SCOPE_LABELS[scope]?.hint || '';
+};
+
 export const ApprovalWorkflowPage: React.FC = () => {
   const [rules, setRules] = useState<ApprovalRule[]>([]);
   const [pending, setPending] = useState<ApprovalRequest[]>([]);
+  const [supportSessions, setSupportSessions] = useState<any[]>([]);
+  const [financialApprovalsLocked, setFinancialApprovalsLocked] = useState(false);
   const [activeTab, setActiveTab] = useState<'rules' | 'pending'>('pending');
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
+  const [processingSupportId, setProcessingSupportId] = useState<string | null>(null);
   const showToast = (message: string, type: 'success' | 'error' | 'warning' | 'info' = 'success') => toast[type](message);
 
   const [newRule, setNewRule] = useState({
@@ -60,15 +88,45 @@ export const ApprovalWorkflowPage: React.FC = () => {
     escalation_timeout_hours: 24,
   });
 
+  const fetchSupportSessions = async () => {
+    try {
+      const res = await api.get('/support/sessions');
+      setSupportSessions(res.data.sessions || []);
+    } catch {
+      //
+    }
+  };
+
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [rulesRes, pendingRes] = await Promise.all([
+        const [rulesRes, pendingRes, supportRes] = await Promise.allSettled([
           api.get('/approvals/rules'),
           api.get('/approvals/pending'),
+          api.get('/support/sessions'),
         ]);
-        setRules(rulesRes.data.rules || []);
-        setPending(pendingRes.data.approvals || []);
+
+        if (rulesRes.status === 'fulfilled') {
+          setRules(rulesRes.value.data.rules || []);
+        } else {
+          setRules([]);
+        }
+
+        if (pendingRes.status === 'fulfilled') {
+          setPending(pendingRes.value.data.approvals || []);
+        } else {
+          setPending([]);
+          const err: any = pendingRes.reason;
+          if (err?.response?.status === 403 || err?.response?.data?.code === 'FEATURE_LOCKED') {
+            setFinancialApprovalsLocked(true);
+          }
+        }
+
+        if (supportRes.status === 'fulfilled') {
+          setSupportSessions(supportRes.value.data?.sessions || []);
+        } else {
+          setSupportSessions([]);
+        }
       } catch {
         // Handle error
       } finally {
@@ -77,6 +135,45 @@ export const ApprovalWorkflowPage: React.FC = () => {
     };
     fetchData();
   }, []);
+
+  const handleApproveSupportSession = async (sessionId: string) => {
+    setProcessingSupportId(sessionId);
+    try {
+      await api.post(`/support/sessions/${sessionId}/approve`);
+      showToast('Support access request approved! Super-admin can now enter workspace.', 'success');
+      await fetchSupportSessions();
+    } catch (err: any) {
+      showToast(err.response?.data?.error || 'Failed to approve support access.', 'error');
+    } finally {
+      setProcessingSupportId(null);
+    }
+  };
+
+  const handleRejectSupportSession = async (sessionId: string) => {
+    setProcessingSupportId(sessionId);
+    try {
+      await api.post(`/support/sessions/${sessionId}/reject`, { reason: 'Rejected by workspace administrator' });
+      showToast('Support access request rejected.', 'info');
+      await fetchSupportSessions();
+    } catch (err: any) {
+      showToast(err.response?.data?.error || 'Failed to reject support access.', 'error');
+    } finally {
+      setProcessingSupportId(null);
+    }
+  };
+
+  const handleRevokeSupportSession = async (sessionId: string) => {
+    setProcessingSupportId(sessionId);
+    try {
+      await api.post(`/support/sessions/${sessionId}/revoke`, { reason: 'Revoked by workspace administrator' });
+      showToast('Support session revoked immediately.', 'info');
+      await fetchSupportSessions();
+    } catch (err: any) {
+      showToast(err.response?.data?.error || 'Failed to revoke support access.', 'error');
+    } finally {
+      setProcessingSupportId(null);
+    }
+  };
 
   const handleCreateRule = async () => {
     if (!newRule.name || !newRule.threshold_amount) {
@@ -138,24 +235,37 @@ export const ApprovalWorkflowPage: React.FC = () => {
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: '0.25rem', background: 'var(--bg-subtle)', borderRadius: 'var(--radius-lg)', padding: '0.25rem', width: 'fit-content' }}>
-        {(['pending', 'rules'] as const).map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            style={{
-              padding: '0.5rem 1.25rem', borderRadius: 'var(--radius-md)', border: 'none', cursor: 'pointer',
-              background: activeTab === tab ? 'var(--bg-card)' : 'transparent',
-              color: activeTab === tab ? 'var(--text-primary)' : 'var(--text-muted)',
-              fontWeight: activeTab === tab ? 600 : 500,
-              fontSize: 'var(--font-size-sm)',
-              boxShadow: activeTab === tab ? 'var(--shadow-sm)' : 'none',
-              display: 'flex', alignItems: 'center', gap: '0.5rem',
-            }}
-          >
-            {tab === 'pending' ? <Clock size={14} /> : <CheckSquare size={14} />}
-            {tab === 'pending' ? `Pending (${pending.length})` : 'Approval Rules'}
-          </button>
-        ))}
+        {(['pending', 'rules'] as const).map((tab) => {
+          const liveSupportPending = supportSessions.filter(
+            (s) => s.status === 'pending'
+          ).length;
+          const liveSupportActive = supportSessions.filter(
+            (s) =>
+              ['approved', 'active'].includes(s.status) &&
+              (!s.expires_at || new Date(s.expires_at).getTime() > Date.now())
+          ).length;
+          const totalPending = pending.length + liveSupportPending;
+          return (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              style={{
+                padding: '0.5rem 1.25rem', borderRadius: 'var(--radius-md)', border: 'none', cursor: 'pointer',
+                background: activeTab === tab ? 'var(--bg-card)' : 'transparent',
+                color: activeTab === tab ? 'var(--text-primary)' : 'var(--text-muted)',
+                fontWeight: activeTab === tab ? 600 : 500,
+                fontSize: 'var(--font-size-sm)',
+                boxShadow: activeTab === tab ? 'var(--shadow-sm)' : 'none',
+                display: 'flex', alignItems: 'center', gap: '0.5rem',
+              }}
+            >
+              {tab === 'pending' ? <Clock size={14} /> : <CheckSquare size={14} />}
+              {tab === 'pending'
+                ? `Pending (${totalPending})${liveSupportActive > 0 ? ` • ${liveSupportActive} Active` : ''}`
+                : 'Approval Rules'}
+            </button>
+          );
+        })}
       </div>
 
       {/* Create Rule Form */}
@@ -219,14 +329,200 @@ export const ApprovalWorkflowPage: React.FC = () => {
         <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>Loading...</div>
       ) : activeTab === 'pending' ? (
         /* Pending Approvals List */
-        <div style={{ background: 'var(--bg-card)', borderRadius: 'var(--radius-xl)', border: '1px solid var(--border-default)' }}>
-          {pending.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--text-muted)' }}>
-              <CheckCircle size={40} style={{ marginBottom: '1rem', color: 'var(--color-success-500)' }} />
-              <div style={{ fontWeight: 600 }}>All caught up!</div>
-              <div style={{ fontSize: 'var(--font-size-sm)', marginTop: '0.25rem' }}>No pending approval requests.</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          {/* DEC-012 Platform Operator Support Access Authorizations */}
+          {supportSessions.filter(
+            (s) =>
+              s.status === 'pending' ||
+              (['approved', 'active'].includes(s.status) &&
+                (!s.expires_at || new Date(s.expires_at).getTime() > Date.now()))
+          ).length > 0 && (
+            <div style={{ background: 'var(--bg-card)', borderRadius: 'var(--radius-xl)', border: '1px solid var(--border-default)', overflow: 'hidden' }}>
+              <div
+                style={{
+                  padding: '1rem 1.5rem',
+                  borderBottom: '1px solid var(--border-subtle)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  background: 'var(--bg-subtle)',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+                  <ShieldCheck size={18} color="var(--color-primary-600)" />
+                  <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                    Platform Support Access Authorizations
+                  </span>
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                    (Super-Admin Diagnostic Sessions)
+                  </span>
+                </div>
+                {(() => {
+                  const live = supportSessions.filter(
+                    (s) =>
+                      s.status === 'pending' ||
+                      (['approved', 'active'].includes(s.status) &&
+                        (!s.expires_at || new Date(s.expires_at).getTime() > Date.now()))
+                  );
+                  const pendingCnt = live.filter((s) => s.status === 'pending').length;
+                  return (
+                    <span className="badge badge-neutral">
+                      {pendingCnt > 0 ? `${pendingCnt} Pending Approval` : `${live.length} Active / Authorized`}
+                    </span>
+                  );
+                })()}
+              </div>
+
+              <div>
+                {supportSessions
+                  .filter(
+                    (s) =>
+                      s.status === 'pending' ||
+                      (['approved', 'active'].includes(s.status) &&
+                        (!s.expires_at || new Date(s.expires_at).getTime() > Date.now()))
+                  )
+                  .map((session, idx, arr) => {
+                    const minsRemaining = session.expires_at
+                      ? Math.max(1, Math.round((new Date(session.expires_at).getTime() - Date.now()) / 60000))
+                      : session.duration_minutes;
+                    return (
+                    <div
+                      key={session._id}
+                      style={{
+                        padding: '1.25rem 1.5rem',
+                        borderBottom: idx === arr.length - 1 ? 'none' : '1px solid var(--border-subtle)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '1.5rem',
+                        flexWrap: 'wrap',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem', flex: 1, minWidth: '280px' }}>
+                        <div
+                          style={{
+                            width: '38px',
+                            height: '38px',
+                            borderRadius: 'var(--radius-md)',
+                            backgroundColor: session.status === 'pending' ? 'var(--color-warning-50, #fffbeb)' : session.status === 'approved' ? 'var(--color-success-50, #f0fdf4)' : 'var(--color-primary-50, #eff6ff)',
+                            color: session.status === 'pending' ? 'var(--color-warning, #d97706)' : session.status === 'approved' ? 'var(--color-success-700, #15803d)' : 'var(--color-primary-600, #2563eb)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0,
+                          }}
+                        >
+                          {session.status === 'pending' ? <Clock size={18} /> : <ShieldCheck size={18} />}
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', flexWrap: 'wrap' }}>
+                            <span style={{ fontWeight: 600, fontSize: 'var(--font-size-sm)', color: 'var(--text-primary)' }}>
+                              Support Access Request: {session.requested_by?.name || 'Platform Super-Admin'}
+                            </span>
+                            {session.status === 'pending' && <span className="badge badge-warning">Pending Approval</span>}
+                            {session.status === 'approved' && <span className="badge badge-success">Approved (Ready to Enter)</span>}
+                            {session.status === 'active' && <span className="badge badge-info">Active Session ({minsRemaining}m left)</span>}
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', flexWrap: 'wrap', fontSize: 'var(--font-size-xs)', color: 'var(--text-secondary)' }}>
+                            <span>
+                              <strong>Operator:</strong> {session.requested_by?.email || 'Platform Super-Admin'}
+                            </span>
+                            <span>•</span>
+                            <span title={getScopeHint(session.scope)}>
+                              <strong>Access Scope:</strong>{' '}
+                              <span style={{ color: 'var(--color-primary-700)', fontWeight: 600 }}>
+                                {getScopeLabel(session.scope)}
+                              </span>
+                            </span>
+                            <span>•</span>
+                            <span>
+                              <strong>Duration:</strong> {session.duration_minutes} minutes
+                            </span>
+                            {session.ticket_id?.ticket_no && (
+                              <>
+                                <span>•</span>
+                                <span>
+                                  <strong>Ticket:</strong> {session.ticket_id.ticket_no}
+                                </span>
+                              </>
+                            )}
+                          </div>
+
+                          {session.justification && (
+                            <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)', marginTop: '2px' }}>
+                              <span>Reason: </span>
+                              <span style={{ fontStyle: 'italic', color: 'var(--text-secondary)' }}>"{session.justification}"</span>
+                              <span style={{ marginLeft: '8px', opacity: 0.7 }}>
+                                · Requested at {new Date(session.created_at).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        {session.status === 'pending' ? (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => handleRejectSupportSession(session._id)}
+                              disabled={processingSupportId === session._id}
+                              className="btn btn-outline btn-sm"
+                            >
+                              <XCircle size={14} />
+                              <span>Reject</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleApproveSupportSession(session._id)}
+                              disabled={processingSupportId === session._id}
+                              className="btn btn-primary btn-sm"
+                            >
+                              <CheckCircle size={14} />
+                              <span>Approve Access ({session.duration_minutes}m)</span>
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleRevokeSupportSession(session._id)}
+                            disabled={processingSupportId === session._id}
+                            className="btn btn-danger btn-sm"
+                          >
+                            Revoke Authorization
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-          ) : (
+          )}
+
+          {/* Standard Financial Pending Approvals */}
+          <div style={{ background: 'var(--bg-card)', borderRadius: 'var(--radius-xl)', border: '1px solid var(--border-default)' }}>
+            {pending.length === 0 &&
+            supportSessions.filter(
+              (s) =>
+                s.status === 'pending' ||
+                (['approved', 'active'].includes(s.status) &&
+                  (!s.expires_at || new Date(s.expires_at).getTime() > Date.now()))
+            ).length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--text-muted)' }}>
+                <CheckCircle size={40} style={{ marginBottom: '1rem', color: 'var(--color-success-500)' }} />
+                <div style={{ fontWeight: 600 }}>All caught up!</div>
+                <div style={{ fontSize: 'var(--font-size-sm)', marginTop: '0.25rem' }}>No pending approval requests.</div>
+              </div>
+            ) : pending.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)', fontSize: '13px' }}>
+                {financialApprovalsLocked
+                  ? 'Financial threshold approval rules are part of the Pro plan. DEC-012 Platform Support Authorizations above are fully active.'
+                  : 'No pending financial threshold approvals.'}
+              </div>
+            ) : (
             pending.map((req) => (
               <div key={req._id} style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', gap: '1rem' }}>
                 <AlertTriangle size={20} color="var(--color-warning)" />
@@ -260,14 +556,37 @@ export const ApprovalWorkflowPage: React.FC = () => {
               </div>
             ))
           )}
+          </div>
         </div>
       ) : (
         /* Rules List */
-        <div style={{ background: 'var(--bg-card)', borderRadius: 'var(--radius-xl)', border: '1px solid var(--border-default)' }}>
-          {rules.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--text-muted)' }}>
-              <CheckSquare size={40} style={{ marginBottom: '1rem', opacity: 0.4 }} />
-              <div style={{ fontWeight: 600 }}>No approval rules configured</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          {financialApprovalsLocked && (
+            <div
+              style={{
+                padding: '1rem 1.25rem',
+                borderRadius: 'var(--radius-xl)',
+                backgroundColor: '#fffbeb',
+                border: '1px solid #fde68a',
+                color: '#92400e',
+                fontSize: '13px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.75rem',
+              }}
+            >
+              <AlertTriangle size={20} color="#d97706" style={{ flexShrink: 0 }} />
+              <div>
+                <strong>Financial Approval Pipelines (Pro Plan):</strong> Creating custom threshold approval rules for driver settlements, credit notes, and invoices requires a Pro plan.
+                However, <strong>Platform Super-Admin Support Access Requests (DEC-012 Policy)</strong> are active for all plans in the <strong>Pending</strong> tab.
+              </div>
+            </div>
+          )}
+          <div style={{ background: 'var(--bg-card)', borderRadius: 'var(--radius-xl)', border: '1px solid var(--border-default)' }}>
+            {rules.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--text-muted)' }}>
+                <CheckSquare size={40} style={{ marginBottom: '1rem', opacity: 0.4 }} />
+                <div style={{ fontWeight: 600 }}>No approval rules configured</div>
               <div style={{ fontSize: 'var(--font-size-sm)', marginTop: '0.25rem' }}>Create a rule to start requiring approvals for high-value operations.</div>
             </div>
           ) : (
@@ -290,6 +609,7 @@ export const ApprovalWorkflowPage: React.FC = () => {
               </div>
             ))
           )}
+          </div>
         </div>
       )}
     </div>

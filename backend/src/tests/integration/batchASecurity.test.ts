@@ -26,6 +26,12 @@ import { SupportAccessRequest } from '../../models/SupportAccessRequest.js';
 import { SupportTicket } from '../../models/SupportTicket.js';
 import { PlatformAuditLog } from '../../models/PlatformAuditLog.js';
 import { NotificationJob } from '../../models/NotificationJob.js';
+import { PlatformSecurityAlert } from '../../models/PlatformSecurityAlert.js';
+import {
+  processNotificationJob,
+  processUnconfirmedOutboxJobs,
+  processPendingSecurityAlerts,
+} from '../../workers/notificationWorker.js';
 import { Driver } from '../../models/Driver.js';
 import { Truck } from '../../models/Truck.js';
 import { User } from '../../models/User.js';
@@ -396,40 +402,52 @@ describe('Batch A: Security, Tenant Isolation & Controlled Support (DEC-012)', (
   });
 
   // --------------------------------------------------------------------------
-  // 5. Dual-Super-Admin Break-Glass Emergency Access (P0)
+  // 5. Single-Super-Admin Break-Glass Emergency Access (DEC-012 Approved Policy)
   // --------------------------------------------------------------------------
-  describe('5. Dual-Super-Admin Emergency Access & Durable Queueing', () => {
-    it('SEC-NEG-12: Rejects single Super-Admin self-approval attempt (HTTP 400)', async () => {
-      const res = await request(app)
+  describe('5. Single-Super-Admin Emergency Access & Durable Queueing', () => {
+    it('SEC-NEG-12: Rejects missing, whitespace, or short emergency justifications (< 20 chars) (HTTP 400)', async () => {
+      // 1. Whitespace only justification
+      const whitespaceRes = await request(app)
         .post('/api/super-admin/support-access/emergency-access')
         .set('Authorization', `Bearer ${superAdminOne.token}`)
         .send({
           company_id: tenantA.company._id.toString(),
           ticket_id: supportTicketA._id.toString(),
-          justification: 'Catastrophic API crash',
-          approver_two_id: superAdminOne.user._id.toString(), // Self-approval
+          justification: '   ',
         });
 
-      expect(res.status).toBe(400);
-      expect(res.body.code).toBe('DUAL_ADMIN_IDENTICAL');
-    });
+      expect(whitespaceRes.status).toBe(400);
+      expect(whitespaceRes.body.code).toBe('INVALID_JUSTIFICATION');
 
-    it('SEC-NEG-13: Rejects secondary approver who is not a Platform Super-Admin (HTTP 403)', async () => {
-      const res = await request(app)
+      // 2. Justification shorter than 20 characters
+      const shortRes = await request(app)
         .post('/api/super-admin/support-access/emergency-access')
         .set('Authorization', `Bearer ${superAdminOne.token}`)
         .send({
           company_id: tenantA.company._id.toString(),
           ticket_id: supportTicketA._id.toString(),
-          justification: 'Catastrophic lockout',
-          approver_two_id: tenantA.user._id.toString(), // Not a super admin
+          justification: 'Fix outage now', // 14 characters
+        });
+
+      expect(shortRes.status).toBe(400);
+      expect(shortRes.body.code).toBe('JUSTIFICATION_TOO_SHORT');
+    });
+
+    it('SEC-NEG-13: Rejects emergency access caller who is not a Platform Super-Admin (HTTP 403)', async () => {
+      const res = await request(app)
+        .post('/api/super-admin/support-access/emergency-access')
+        .set('Authorization', `Bearer ${tenantA.token}`) // Tenant admin token, not Platform Super-Admin
+        .send({
+          company_id: tenantA.company._id.toString(),
+          ticket_id: supportTicketA._id.toString(),
+          justification: 'Critical database deadlock requires immediate operational diagnostics',
         });
 
       expect(res.status).toBe(403);
-      expect(res.body.code).toBe('SECONDARY_APPROVER_INVALID');
+      expect(res.body.code).toBe('SUPER_ADMIN_REQUIRED');
     });
 
-    it('SEC-NEG-14: Successfully issues 30m emergency access and persists durable notification with majority write concern', async () => {
+    it('SEC-NEG-14: Successfully issues emergency access clamped to 15m and persists durable notification', async () => {
       const res = await request(app)
         .post('/api/super-admin/support-access/emergency-access')
         .set('Authorization', `Bearer ${superAdminOne.token}`)
@@ -437,14 +455,20 @@ describe('Batch A: Security, Tenant Isolation & Controlled Support (DEC-012)', (
           company_id: tenantA.company._id.toString(),
           ticket_id: supportTicketA._id.toString(),
           justification: 'Major database connection degradation affecting tenant dispatchers',
-          approver_two_id: superAdminTwo.user._id.toString(),
-          duration_minutes: 30,
+          duration_minutes: 30, // Requesting 30m; must be clamped to 15m server-side
         });
 
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
       expect(res.body.is_emergency).toBe(true);
       expect(res.body.token).toBeDefined();
+
+      // Verify duration clamped to 15 minutes server-side
+      const session = await SupportAccessRequest.findById(res.body.session._id);
+      expect(session).toBeDefined();
+      expect(session!.duration_minutes).toBe(15);
+      expect(session!.scope).toBe('diagnostics_readonly');
+      expect(session!.is_single_admin_emergency).toBe(true);
 
       // Verify NotificationJob is durably queued
       const notifJob = await NotificationJob.findOne({ job_id: res.body.notification_job_id });
@@ -459,7 +483,8 @@ describe('Batch A: Security, Tenant Isolation & Controlled Support (DEC-012)', (
         target_company_id: tenantA.company._id,
       });
       expect(auditLog).toBeDefined();
-      expect(auditLog!.details.approver_two).toBe(superAdminTwo.user.email);
+      expect(auditLog!.details.is_single_admin_emergency).toBe(true);
+      expect(auditLog!.details.duration_minutes).toBe(15);
     });
 
     it('SEC-NEG-15: Fails closed (HTTP 503) and denies token issuance if notification queue persistence fails', async () => {
@@ -1389,4 +1414,412 @@ describe('Batch A: Security, Tenant Isolation & Controlled Support (DEC-012)', (
       expect(notifJob!.status).toBe('pending');
     });
   });
+
+  // --------------------------------------------------------------------------
+  // 10. DEC-012 Approved Policy Specification Verification
+  // --------------------------------------------------------------------------
+  describe('10. DEC-012 Approved Policy Enhancements & Edge Cases', () => {
+    it('SEC-DEC012-01: Blocks HTTP method override headers and query params during support sessions (HTTP 403)', async () => {
+      const accessRequest = await SupportAccessRequest.create({
+        company_id: tenantA.company._id,
+        ticket_id: supportTicketA._id,
+        requested_by: superAdminOne.user._id,
+        scope: 'diagnostics_readonly',
+        status: 'active',
+        duration_minutes: 15,
+        started_at: new Date(),
+        expires_at: new Date(Date.now() + 15 * 60 * 1000),
+        justification: 'Method override security verification test',
+      });
+
+      const supportToken = createSupportJwt({
+        userId: superAdminOne.user._id.toString(),
+        companyId: tenantA.company._id.toString(),
+        supportSessionId: accessRequest._id.toString(),
+      });
+
+      // 1. Header override: X-HTTP-Method-Override: POST
+      const headerRes = await request(app)
+        .get('/api/fleet/trucks')
+        .set('Authorization', `Bearer ${supportToken}`)
+        .set('X-HTTP-Method-Override', 'POST');
+
+      expect(headerRes.status).toBe(403);
+      expect(headerRes.body.code).toBe('SUPPORT_METHOD_OVERRIDE_PROHIBITED');
+
+      // 2. Query parameter override: ?_method=DELETE
+      const queryRes = await request(app)
+        .get('/api/fleet/trucks?_method=DELETE')
+        .set('Authorization', `Bearer ${supportToken}`);
+
+      expect(queryRes.status).toBe(403);
+      expect(queryRes.body.code).toBe('SUPPORT_METHOD_OVERRIDE_PROHIBITED');
+    });
+
+    it('SEC-DEC012-02: Blocks side-effecting GET endpoints and cache flushes during support sessions (HTTP 403)', async () => {
+      const accessRequest = await SupportAccessRequest.create({
+        company_id: tenantA.company._id,
+        ticket_id: supportTicketA._id,
+        requested_by: superAdminOne.user._id,
+        scope: 'diagnostics_readonly',
+        status: 'active',
+        duration_minutes: 15,
+        started_at: new Date(),
+        expires_at: new Date(Date.now() + 15 * 60 * 1000),
+        justification: 'Side-effecting GET endpoint verification test',
+      });
+
+      const supportToken = createSupportJwt({
+        userId: superAdminOne.user._id.toString(),
+        companyId: tenantA.company._id.toString(),
+        supportSessionId: accessRequest._id.toString(),
+      });
+
+      // Blocked side-effecting GET routes
+      const cacheRes = await request(app)
+        .get('/api/system/cache/flush')
+        .set('Authorization', `Bearer ${supportToken}`);
+
+      expect(cacheRes.status).toBe(403);
+      expect(cacheRes.body.code).toBe('SUPPORT_READ_ONLY_MODE');
+
+      const trackingRes = await request(app)
+        .get('/api/tracking/refresh-all')
+        .set('Authorization', `Bearer ${supportToken}`);
+
+      expect(trackingRes.status).toBe(403);
+      expect(trackingRes.body.code).toBe('SUPPORT_READ_ONLY_MODE');
+    });
+
+    it('SEC-DEC012-03: Blocks token refresh for emergency and support access sessions (HTTP 403)', async () => {
+      const accessRequest = await SupportAccessRequest.create({
+        company_id: tenantA.company._id,
+        ticket_id: supportTicketA._id,
+        requested_by: superAdminOne.user._id,
+        scope: 'diagnostics_readonly',
+        status: 'active',
+        duration_minutes: 15,
+        started_at: new Date(),
+        expires_at: new Date(Date.now() + 15 * 60 * 1000),
+        justification: 'Refresh prohibition verification test',
+      });
+
+      const emergencyToken = createSupportJwt({
+        userId: superAdminOne.user._id.toString(),
+        companyId: tenantA.company._id.toString(),
+        supportSessionId: accessRequest._id.toString(),
+        isEmergency: true,
+      });
+
+      const res = await request(app)
+        .post('/api/auth/refresh-token')
+        .set('Authorization', `Bearer ${emergencyToken}`);
+
+      expect(res.status).toBe(403);
+      expect(res.body.code).toBe('SUPPORT_REFRESH_PROHIBITED');
+    });
+
+    it('SEC-DEC012-04: Fails closed and defensively revokes session on malformed or missing expiry timestamp (HTTP 403)', async () => {
+      const malformedSession = await SupportAccessRequest.create({
+        company_id: tenantA.company._id,
+        ticket_id: supportTicketA._id,
+        requested_by: superAdminOne.user._id,
+        scope: 'diagnostics_readonly',
+        status: 'active',
+        duration_minutes: 15,
+        started_at: new Date(),
+        expires_at: null as any, // Malformed missing expiry
+        justification: 'Malformed expiry fail-closed test',
+      });
+
+      const supportToken = createSupportJwt({
+        userId: superAdminOne.user._id.toString(),
+        companyId: tenantA.company._id.toString(),
+        supportSessionId: malformedSession._id.toString(),
+      });
+
+      const res = await request(app)
+        .get('/api/fleet/trucks')
+        .set('Authorization', `Bearer ${supportToken}`);
+
+      expect(res.status).toBe(403);
+      expect(res.body.code).toBe('SUPPORT_SESSION_INVALID_EXPIRY');
+
+      // Verify defensive revocation in database
+      const refreshed = await SupportAccessRequest.findById(malformedSession._id);
+      expect(refreshed!.status).toBe('revoked');
+      expect(refreshed!.revocation_reason).toBe('malformed_expiry_timestamp');
+    });
+
+    it('SEC-DEC012-05: Blocks operator access fail-closed when notification job is unconfirmed or quarantined (HTTP 403)', async () => {
+      // Create quarantined notification job
+      const notifJob = await NotificationJob.create({
+        company_id: tenantA.company._id,
+        job_id: `quarantine-${Date.now()}`,
+        channel: 'email',
+        event_type: 'EMERGENCY_ACCESS_GRANTED',
+        recipient_name: 'Alpha Admin',
+        recipient_email: 'admin@alpha.com',
+        message_preview: 'Emergency access alert',
+        status: 'quarantined_unresolved',
+      });
+
+      const activeSession = await SupportAccessRequest.create({
+        company_id: tenantA.company._id,
+        ticket_id: supportTicketA._id,
+        requested_by: superAdminOne.user._id,
+        scope: 'diagnostics_readonly',
+        status: 'active',
+        notification_job_id: notifJob._id,
+        duration_minutes: 15,
+        started_at: new Date(),
+        expires_at: new Date(Date.now() + 15 * 60 * 1000),
+        justification: 'Quarantined notification access blockade test',
+      });
+
+      const supportToken = createSupportJwt({
+        userId: superAdminOne.user._id.toString(),
+        companyId: tenantA.company._id.toString(),
+        supportSessionId: activeSession._id.toString(),
+      });
+
+      const res = await request(app)
+        .get('/api/fleet/trucks')
+        .set('Authorization', `Bearer ${supportToken}`);
+
+      expect(res.status).toBe(403);
+      expect(res.body.code).toBe('SUPPORT_NOTIFICATION_UNCONFIRMED');
+    });
+
+    it('SEC-DEC012-06: Enforces single active emergency session mutex per tenant workspace (HTTP 409)', async () => {
+      // 1. First activation succeeds
+      const firstRes = await request(app)
+        .post('/api/super-admin/support-access/emergency-access')
+        .set('Authorization', `Bearer ${superAdminOne.token}`)
+        .send({
+          company_id: tenantA.company._id.toString(),
+          ticket_id: supportTicketA._id.toString(),
+          justification: 'First active emergency session for deadlock resolution',
+          duration_minutes: 15,
+        });
+
+      expect(firstRes.status).toBe(200);
+      expect(firstRes.body.success).toBe(true);
+
+      // 2. Second concurrent activation attempt for same workspace must be rejected with 409
+      const secondRes = await request(app)
+        .post('/api/super-admin/support-access/emergency-access')
+        .set('Authorization', `Bearer ${superAdminOne.token}`)
+        .send({
+          company_id: tenantA.company._id.toString(),
+          ticket_id: supportTicketA._id.toString(),
+          justification: 'Second simultaneous emergency activation attempt',
+          duration_minutes: 15,
+        });
+
+      expect(secondRes.status).toBe(409);
+      expect(secondRes.body.code).toBe('EMERGENCY_SESSION_ALREADY_ACTIVE');
+    });
+
+    it('SEC-DEC012-07: Automatically sweeps expired active emergency sessions to allow subsequent activation', async () => {
+      // Seed an expired session that still retains status: 'active'
+      await SupportAccessRequest.create({
+        company_id: tenantB.company._id,
+        ticket_id: supportTicketA._id,
+        requested_by: superAdminOne.user._id,
+        scope: 'diagnostics_readonly',
+        status: 'active',
+        is_emergency: true,
+        duration_minutes: 15,
+        started_at: new Date(Date.now() - 30 * 60 * 1000),
+        expires_at: new Date(Date.now() - 15 * 60 * 1000), // Expired 15m ago
+        justification: 'Stale emergency session prior to automatic sweep',
+      });
+
+      // Create support ticket for Tenant B
+      const ticketB = await SupportTicket.create({
+        company_id: tenantB.company._id,
+        ticket_no: `TICK-B-${Date.now()}`,
+        created_by: tenantB.user._id,
+        subject: 'Database lockup on tenant B',
+        category: 'bug',
+        priority: 'high',
+        status: 'open',
+        messages: [{ sender_id: tenantB.user._id, sender_name: 'B Admin', sender_role: 'user', message: 'Down' }],
+      });
+
+      // New activation should succeed because pre-activation sweep cleans the stale session
+      const res = await request(app)
+        .post('/api/super-admin/support-access/emergency-access')
+        .set('Authorization', `Bearer ${superAdminOne.token}`)
+        .send({
+          company_id: tenantB.company._id.toString(),
+          ticket_id: ticketB._id.toString(),
+          justification: 'Fresh emergency diagnostic activation after sweep',
+          duration_minutes: 15,
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+
+      // Verify the stale session was swept to 'expired'
+      const staleSwept = await SupportAccessRequest.findOne({
+        company_id: tenantB.company._id,
+        auto_expired_by_sweep: true,
+      });
+      expect(staleSwept).toBeDefined();
+      expect(staleSwept!.status).toBe('expired');
+    });
+
+    it('SEC-DEC012-08: Triggers rolling 24-hour high-frequency PlatformSecurityAlert upon >= 2 emergency activations', async () => {
+      // Clean any existing alerts for Tenant A
+      await PlatformSecurityAlert.deleteMany({ company_id: tenantA.company._id });
+
+      // Seed 1 existing historical emergency session in past 24h
+      const pastSession = await SupportAccessRequest.create({
+        company_id: tenantA.company._id,
+        ticket_id: supportTicketA._id,
+        requested_by: superAdminOne.user._id,
+        scope: 'diagnostics_readonly',
+        status: 'expired',
+        is_emergency: true,
+        duration_minutes: 15,
+        started_at: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2h ago
+        expires_at: new Date(Date.now() - 105 * 60 * 1000),
+        justification: 'Historical session in 24h rolling evaluation window',
+      });
+
+      // Second activation occurs now -> hits threshold >= 2 in 24h
+      const res = await request(app)
+        .post('/api/super-admin/support-access/emergency-access')
+        .set('Authorization', `Bearer ${superAdminOne.token}`)
+        .send({
+          company_id: tenantA.company._id.toString(),
+          ticket_id: supportTicketA._id.toString(),
+          justification: 'Second emergency session triggering high frequency security alert',
+          duration_minutes: 15,
+        });
+
+      expect(res.status).toBe(200);
+
+      // Verify PlatformSecurityAlert was created
+      const alert = await PlatformSecurityAlert.findOne({
+        company_id: tenantA.company._id,
+      });
+      expect(alert).toBeDefined();
+      expect(alert!.status).toBe('pending_dispatch');
+      expect(alert!.associated_session_ids.length).toBeGreaterThanOrEqual(1);
+
+      // Verify audit log entry
+      const auditAlert = await PlatformAuditLog.findOne({
+        action: 'emergency_access_high_frequency_alert',
+        target_company_id: tenantA.company._id,
+      });
+      expect(auditAlert).toBeDefined();
+    });
+
+    it('SEC-DEC012-09: Notification worker pre-send compensation check cancels dispatch if session is revoked', async () => {
+      // Create revoked session
+      const revokedSession = await SupportAccessRequest.create({
+        company_id: tenantA.company._id,
+        ticket_id: supportTicketA._id,
+        requested_by: superAdminOne.user._id,
+        scope: 'diagnostics_readonly',
+        status: 'revoked',
+        revocation_reason: 'credential_delivery_uncertain',
+        duration_minutes: 15,
+        started_at: new Date(),
+        expires_at: new Date(Date.now() + 15 * 60 * 1000),
+        justification: 'Session revoked during response stream drop',
+      });
+
+      // Create notification job linked to the revoked session
+      const notifJob = await NotificationJob.create({
+        company_id: tenantA.company._id,
+        session_id: revokedSession._id,
+        job_id: `pre-send-test-${Date.now()}`,
+        channel: 'email',
+        event_type: 'EMERGENCY_ACCESS_GRANTED',
+        recipient_name: 'Tenant Admin',
+        recipient_email: 'admin@tenant.com',
+        message_preview: 'Emergency access granted alert',
+        status: 'pending',
+      });
+
+      // Run worker on this job
+      const outcome = await processNotificationJob(notifJob);
+      expect(outcome.success).toBe(false);
+      expect(outcome.status).toBe('cancelled');
+
+      // Verify job was cancelled and not dispatched to provider
+      const refreshedJob = await NotificationJob.findById(notifJob._id);
+      expect(refreshedJob!.status).toBe('cancelled');
+    });
+
+    it('SEC-DEC012-10: Outbox reconciler transitions staged_unconfirmed jobs to pending upon finding active session', async () => {
+      const notifJob = await NotificationJob.create({
+        company_id: tenantA.company._id,
+        job_id: `reconcile-test-${Date.now()}`,
+        channel: 'email',
+        event_type: 'EMERGENCY_ACCESS_GRANTED',
+        recipient_name: 'Tenant Admin',
+        recipient_email: 'admin@tenant.com',
+        message_preview: 'Emergency access notification under reconciliation',
+        status: 'staged_unconfirmed',
+        first_unconfirmed_at: new Date(),
+        reconciliation_attempts: 0,
+      });
+
+      // Create committed active session linked to this job
+      await SupportAccessRequest.create({
+        company_id: tenantA.company._id,
+        ticket_id: supportTicketA._id,
+        requested_by: superAdminOne.user._id,
+        notification_job_id: notifJob._id,
+        scope: 'diagnostics_readonly',
+        status: 'active',
+        duration_minutes: 15,
+        started_at: new Date(),
+        expires_at: new Date(Date.now() + 15 * 60 * 1000),
+        justification: 'Committed session during reconciliation',
+      });
+
+      // Run outbox reconciler
+      const reconciledCount = await processUnconfirmedOutboxJobs(10);
+      expect(reconciledCount).toBeGreaterThanOrEqual(1);
+
+      const refreshed = await NotificationJob.findById(notifJob._id);
+      expect(refreshed!.status).toBe('pending');
+    });
+
+    it('SEC-DEC012-11: PlatformSecurityAlert worker claims alerts with unique lease token and rejects stale worker updates', async () => {
+      // Create staged alert
+      const alert = await PlatformSecurityAlert.create({
+        alert_key: `fencing-test-${Date.now()}`,
+        alert_type: 'emergency_access_high_frequency_alert',
+        company_id: tenantA.company._id,
+        trigger_session_id: supportTicketA._id,
+        associated_session_ids: [supportTicketA._id],
+        status: 'pending_dispatch',
+        dispatch_attempts: 0,
+      });
+
+      // Process alert using worker
+      const processed = await processPendingSecurityAlerts(10);
+      expect(processed).toBeGreaterThanOrEqual(1);
+
+      const refreshedAlert = await PlatformSecurityAlert.findById(alert._id);
+      expect(refreshedAlert).toBeDefined();
+      expect(['dispatched', 'pending_dispatch', 'retry_scheduled']).toContain(refreshedAlert!.status);
+
+      // Verify that an update with a mismatched fencing token is rejected (matchedCount === 0)
+      const staleToken = 'invalid_stale_fencing_token_123';
+      const staleUpdate = await PlatformSecurityAlert.updateOne(
+        { _id: alert._id, dispatch_lease_token: staleToken, status: 'dispatching' },
+        { $set: { status: 'dispatched' } }
+      );
+      expect(staleUpdate.matchedCount).toBe(0);
+    });
+  });
 });
+

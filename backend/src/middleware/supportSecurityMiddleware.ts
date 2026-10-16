@@ -15,6 +15,8 @@
 
 import { Request, Response, NextFunction } from 'express';
 import { SupportAccessRequest, ISupportAccessRequest } from '../models/SupportAccessRequest.js';
+import { NotificationJob } from '../models/NotificationJob.js';
+import { PlatformAuditLog } from '../models/PlatformAuditLog.js';
 import { TruckJourney } from '../models/TruckJourney.js';
 import { VehicleEntry } from '../models/VehicleEntry.js';
 import { Truck } from '../models/Truck.js';
@@ -440,6 +442,38 @@ export async function isReceiptRequest(req: Request): Promise<boolean> {
 }
 
 /**
+ * Checks if request contains HTTP method override headers or parameters
+ */
+export function hasMethodOverride(req: Request): boolean {
+  const headers = req.headers;
+  if (
+    headers['x-http-method-override'] ||
+    headers['x-method-override'] ||
+    headers['x-http-method']
+  ) {
+    return true;
+  }
+  const queryMethod = req.query?._method;
+  if (typeof queryMethod === 'string' && queryMethod.trim().length > 0) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Checks if GET endpoint triggers state mutations, export generation, or cache flushes
+ */
+export function isSideEffectingGet(path: string): boolean {
+  const clean = path.toLowerCase().split('?')[0];
+  return (
+    clean.includes('/cache/flush') ||
+    clean.includes('/system/cache') ||
+    clean.includes('/tracking/refresh-all') ||
+    clean.includes('/commercial/export/tally')
+  );
+}
+
+/**
  * Support Security Guard Middleware
  * Evaluates session state, validates tenant isolation, blocks restricted operations,
  * and intercepts response serialization.
@@ -449,7 +483,16 @@ export async function supportSecurityMiddleware(req: Request, res: Response, nex
     return next();
   }
 
-  // 1. Validate presence of Support Session ID
+  // 1. Layer 2: Method-Override Interception
+  if (hasMethodOverride(req)) {
+    res.status(403).json({
+      code: 'SUPPORT_METHOD_OVERRIDE_PROHIBITED',
+      error: 'HTTP method overrides are strictly prohibited during support sessions.',
+    });
+    return;
+  }
+
+  // 2. Validate presence of Support Session ID
   if (!req.supportSessionId) {
     res.status(403).json({
       code: 'SUPPORT_SESSION_INVALID',
@@ -467,7 +510,7 @@ export async function supportSecurityMiddleware(req: Request, res: Response, nex
     return;
   }
 
-  // 2. Policy E: Database Unavailability Fail-Closed Verification
+  // 3. Policy E: Database Unavailability Fail-Closed Verification
   let session: ISupportAccessRequest | null = null;
   try {
     session = await SupportAccessRequest.findOne({
@@ -491,7 +534,7 @@ export async function supportSecurityMiddleware(req: Request, res: Response, nex
     return;
   }
 
-  // 3. Status Verification (Immediate Revocation Enforcement)
+  // 4. Status Verification (Immediate Revocation Enforcement)
   if (session.status !== 'active') {
     res.status(403).json({
       code: 'SUPPORT_SESSION_REVOKED',
@@ -500,10 +543,75 @@ export async function supportSecurityMiddleware(req: Request, res: Response, nex
     return;
   }
 
-  // 4. Expiry Verification
-  if (session.expires_at && new Date() > new Date(session.expires_at)) {
+  // 4b. Fail-Closed Outbox Notification Verification
+  if (session.notification_job_id) {
+    try {
+      const job = await NotificationJob.findById(session.notification_job_id);
+      if (job && ['staged', 'staged_unconfirmed', 'quarantined_unresolved'].includes(job.status)) {
+        res.status(403).json({
+          code: 'SUPPORT_NOTIFICATION_UNCONFIRMED',
+          error: 'Support session notification is unconfirmed or quarantined. Operator access is denied fail-closed.',
+        });
+        return;
+      }
+    } catch {
+      res.status(503).json({
+        code: 'SESSION_VERIFICATION_FAILED',
+        error: 'Support session verification service unavailable. Failing closed for security.',
+      });
+      return;
+    }
+  }
+
+  // 5. Expiry Verification & Malformed Expiry Fail-Closed Check
+  const isMalformedExpiry = !session.expires_at || isNaN(new Date(session.expires_at).getTime());
+  if (isMalformedExpiry || new Date() > new Date(session.expires_at!)) {
+    if (isMalformedExpiry) {
+      SupportAccessRequest.updateOne(
+        { _id: session._id, status: 'active' },
+        { $set: { status: 'revoked', revocation_reason: 'malformed_expiry_timestamp' } },
+        { writeConcern: { w: 'majority', j: true } } as any
+      ).catch((err) => {
+        console.error(JSON.stringify({
+          event: 'MALFORMED_EXPIRY_CLEANUP_FAILED',
+          level: 'CRITICAL',
+          session_id: session!._id,
+          company_id: session!.company_id,
+          error: err.message,
+        }));
+      });
+
+      PlatformAuditLog.create({
+        actor_user_id: session.requested_by,
+        actor_email: req.user?.email || 'operator@platform.fleetflow.io',
+        action: 'emergency_session_malformed_expiry_detected',
+        target_company_id: session.company_id,
+        details: { session_id: session._id, raw_expires_at: session.expires_at },
+      }).catch((err) => {
+        console.error('[CRITICAL] Audit log creation failed for malformed expiry:', err.message);
+      });
+
+      res.status(403).json({
+        code: 'SUPPORT_SESSION_INVALID_EXPIRY',
+        error: 'Support session has invalid or missing expiry timestamp; access denied.',
+      });
+      return;
+    }
+
     session.status = 'expired';
-    await session.save().catch(() => {});
+    SupportAccessRequest.updateOne(
+      { _id: session._id },
+      { $set: { status: 'expired', expired_at: new Date() } }
+    ).catch(() => {});
+
+    PlatformAuditLog.create({
+      actor_user_id: session.requested_by,
+      actor_email: req.user?.email || 'operator@platform.fleetflow.io',
+      action: 'support_access_expired',
+      target_company_id: session.company_id,
+      details: { session_id: session._id, expires_at: session.expires_at },
+    }).catch(() => {});
+
     res.status(403).json({
       code: 'SUPPORT_SESSION_EXPIRED',
       error: 'Support session has expired.',
@@ -513,8 +621,18 @@ export async function supportSecurityMiddleware(req: Request, res: Response, nex
 
   req.supportSession = session;
 
-  // 5. Policy B: Block Financial Routes
   const targetUrl = req.originalUrl || req.baseUrl + req.path;
+
+  // 6. Layer 3: Side-Effecting GET Blockade
+  if (isSideEffectingGet(targetUrl)) {
+    res.status(403).json({
+      code: 'SUPPORT_READ_ONLY_MODE',
+      error: 'Side-effecting GET endpoints and cache flushes are strictly prohibited during support sessions.',
+    });
+    return;
+  }
+
+  // 7. Policy B: Block Financial Routes
   if (isFinancialRoute(targetUrl)) {
     res.status(403).json({
       code: 'FINANCIAL_RECORDS_LOCKED',
@@ -523,7 +641,7 @@ export async function supportSecurityMiddleware(req: Request, res: Response, nex
     return;
   }
 
-  // 6. Policy B: Block Exports
+  // 8. Policy B: Block Exports
   if (isExportRequest(req)) {
     res.status(403).json({
       code: 'SUPPORT_EXPORT_BLOCKED',
@@ -532,7 +650,7 @@ export async function supportSecurityMiddleware(req: Request, res: Response, nex
     return;
   }
 
-  // 7. Policy B: Block Receipt Access
+  // 9. Policy B: Block Receipt Access
   if (await isReceiptRequest(req)) {
     res.status(403).json({
       code: 'RECEIPT_ACCESS_BLOCKED_DURING_SUPPORT',
@@ -541,8 +659,22 @@ export async function supportSecurityMiddleware(req: Request, res: Response, nex
     return;
   }
 
-  // 8. Policy A: Strictly Read-Only Mode (allow only GET, HEAD, OPTIONS during diagnostics_readonly)
+  // 10. Policy A: Strictly Read-Only Mode (allow only GET, HEAD, OPTIONS during diagnostics_readonly)
   if (session.scope === 'diagnostics_readonly' && !['GET', 'HEAD', 'OPTIONS'].includes(req.method.toUpperCase())) {
+    PlatformAuditLog.create({
+      actor_user_id: req.user?._id || session.requested_by,
+      actor_email: req.user?.email || 'operator@platform.fleetflow.io',
+      action: 'support_access_denied_mutation',
+      target_company_id: session.company_id,
+      ip_address: req.ip,
+      user_agent: req.headers['user-agent'],
+      details: {
+        attempted_path: targetUrl,
+        attempted_method: req.method,
+        session_id: session._id.toString(),
+      },
+    }).catch(() => {});
+
     res.status(403).json({
       code: 'SUPPORT_READ_ONLY_MODE',
       error: 'This support session is restricted to read-only diagnostics. Mutation operations are prohibited.',
@@ -550,7 +682,7 @@ export async function supportSecurityMiddleware(req: Request, res: Response, nex
     return;
   }
 
-  // 9. Policies B & C: Intercept Response Serialization for Masking & Redaction
+  // 11. Policies B & C: Intercept Response Serialization for Masking & Redaction
   attachSupportSanitizer(res);
 
   next();

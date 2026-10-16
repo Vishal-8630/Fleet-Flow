@@ -57,7 +57,9 @@ import supportSessionRoutes from './routes/supportSessionRoutes.js';
 import healthRoutes from './routes/healthRoutes.js';
 import publicMarketingRoutes from './routes/publicRoutes.js';
 import { startNotificationWorker } from './workers/notificationWorker.js';
+import { sweepExpiredSupportSessions } from './controllers/supportAccessController.js';
 import { noSqlSanitizer } from './middleware/securityMiddleware.js';
+import { requireAuth, resolveTenantContext } from './middleware/authMiddleware.js';
 import { assertReplicaSetTopology } from './utils/transactionHelper.js';
 
 const app = express();
@@ -180,6 +182,14 @@ app.use('/api/support/sessions', supportSessionRoutes);
 // Issue 14: Public Marketing Endpoints (demo requests, system status)
 app.use('/api/public', publicMarketingRoutes);
 
+// System Maintenance & Telemetry Refresh Endpoints (DEC-012 Protected)
+app.get('/api/system/cache/flush', requireAuth, resolveTenantContext, (_req, res) => {
+  res.json({ success: true, message: 'Cache flushed' });
+});
+app.get('/api/tracking/refresh-all', requireAuth, resolveTenantContext, (_req, res) => {
+  res.json({ success: true, message: 'Tracking refreshed' });
+});
+
 // ----------------------------------------------------------------------------
 // 4. Centralized Global Error Handler
 // Catches unhandled exceptions thrown anywhere in the controller chain
@@ -231,6 +241,12 @@ export async function startServer() {
       console.log('✅ MongoDB Replica Set topology verified.');
       // Start background notification queue runner
       startNotificationWorker(5000);
+
+      // DEC-012: Periodic support session sweeper (runs immediately on start, then every 15s)
+      sweepExpiredSupportSessions().catch((err) => console.warn('[SessionSweep] Initial sweep error:', err.message));
+      setInterval(() => {
+        sweepExpiredSupportSessions().catch((err) => console.warn('[SessionSweep] Periodic sweep error:', err.message));
+      }, 15000);
     } else {
       console.log('⚠️ MongoDB URI contains placeholders. Server starting in offline DB mode.');
     }

@@ -21,6 +21,7 @@ import { SupportTicket } from '../models/SupportTicket.js';
 import { Company } from '../models/Company.js';
 import { User } from '../models/User.js';
 import { PlatformAuditLog } from '../models/PlatformAuditLog.js';
+import { PlatformSecurityAlert } from '../models/PlatformSecurityAlert.js';
 import { NotificationJob } from '../models/NotificationJob.js';
 import { getCookieOptions } from './authController.js';
 
@@ -32,8 +33,8 @@ export async function requestSupportAccess(req: Request, res: Response): Promise
   try {
     const { company_id, ticket_id, scope = 'diagnostics_readonly', duration_minutes = 30, justification } = req.body;
 
-    if (!company_id || !ticket_id || !justification?.trim()) {
-      res.status(400).json({ error: 'company_id, ticket_id, and justification are required.' });
+    if (!company_id || !justification?.trim()) {
+      res.status(400).json({ error: 'company_id and justification are required.' });
       return;
     }
 
@@ -50,15 +51,48 @@ export async function requestSupportAccess(req: Request, res: Response): Promise
       return;
     }
 
-    const ticket = await SupportTicket.findOne({ _id: ticket_id, company_id });
-    if (!ticket) {
-      res.status(404).json({ error: 'Support ticket not found or does not belong to the target workspace.' });
-      return;
-    }
+    let ticket: any;
+    if (ticket_id) {
+      ticket = await SupportTicket.findOne({ _id: ticket_id, company_id });
+      if (!ticket) {
+        res.status(404).json({ error: 'Support ticket not found or does not belong to the target workspace.' });
+        return;
+      }
 
-    if (['resolved', 'closed'].includes(ticket.status)) {
-      res.status(400).json({ error: 'Cannot request support access against a resolved or closed ticket.' });
-      return;
+      if (['resolved', 'closed'].includes(ticket.status)) {
+        res.status(400).json({ error: 'Cannot request support access against a resolved or closed ticket.' });
+        return;
+      }
+    } else {
+      ticket = await SupportTicket.findOne({
+        company_id,
+        status: { $in: ['open', 'in_progress', 'pending_customer'] },
+      }).sort({ created_at: -1 });
+
+      if (!ticket) {
+        const count = await SupportTicket.countDocuments({}, { skipTenantCheck: true } as any);
+        const year = new Date().getFullYear();
+        const ticket_no = `TICK-${year}-ADM-${String(count + 1).padStart(4, '0')}`;
+        ticket = await SupportTicket.create({
+          company_id: company._id,
+          ticket_no,
+          created_by: req.user!._id,
+          subject: `Admin Support Request: ${justification.trim().substring(0, 60)}`,
+          category: 'other',
+          priority: 'high',
+          status: 'open',
+          intake_channel: 'platform_super_admin',
+          messages: [
+            {
+              sender_id: req.user!._id,
+              sender_name: req.user!.name || req.user!.email,
+              sender_role: 'super_admin',
+              message: justification.trim(),
+              sent_at: new Date(),
+            },
+          ],
+        });
+      }
     }
 
     const accessRequest = await SupportAccessRequest.create({
@@ -90,10 +124,27 @@ export async function requestSupportAccess(req: Request, res: Response): Promise
       },
     });
 
+    // Dispatch notification to workspace administrator outbox
+    const notifJobId = `supp-req-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    await NotificationJob.create({
+      company_id: company._id,
+      job_id: notifJobId,
+      channel: 'email',
+      event_type: 'SUPPORT_ACCESS_REQUESTED',
+      recipient_name: company.name || 'Workspace Administrator',
+      recipient_email: company.email || 'admin@tenant.fleetflow.io',
+      message_preview: `Support Access Requested: Super-Admin ${req.user!.email} has requested ${scope} access (${duration} mins) to workspace ${company.name}. Justification: ${justification.trim()}`,
+      status: 'pending',
+      next_run_at: new Date(),
+    }).catch((notifErr) => {
+      console.warn('[Support access notification outbox warning]:', notifErr.message);
+    });
+
     res.status(201).json({
       success: true,
-      message: 'Support access request submitted. Awaiting tenant-admin approval.',
+      message: `Support access request sent to ${company.name} administrator. Awaiting tenant-admin approval.`,
       request: accessRequest,
+      ticket_no: ticket.ticket_no,
     });
   } catch (error: any) {
     res.status(500).json({ error: error.message || 'Failed to request support access.' });
@@ -183,6 +234,25 @@ export async function rejectSupportAccess(req: Request, res: Response): Promise<
     accessRequest.status = 'rejected';
     accessRequest.revocation_reason = reason || 'Rejected by tenant administrator';
     await accessRequest.save();
+
+    const company = await Company.findById(companyId);
+
+    PlatformAuditLog.create({
+      actor_user_id: req.user!._id,
+      actor_email: req.user!.email,
+      action: 'support_access_rejected',
+      target_company_id: accessRequest.company_id,
+      target_company_name: company?.name || 'Workspace',
+      ip_address: req.ip,
+      user_agent: req.headers['user-agent'],
+      details: {
+        access_request_id: accessRequest._id.toString(),
+        reason: accessRequest.revocation_reason,
+        scope: accessRequest.scope,
+        duration_minutes: accessRequest.duration_minutes,
+        requested_by: accessRequest.requested_by,
+      },
+    }).catch((err) => console.warn('[PlatformAuditLog error]:', err.message));
 
     res.json({
       success: true,
@@ -295,197 +365,466 @@ export async function activateSupportAccess(req: Request, res: Response): Promis
 
 /**
  * 5. POST /api/super-admin/support-access/emergency-access
- * Dual-Super-Admin Break-Glass Emergency Support Access.
+ * Single Super-Admin Break-Glass Emergency Support Access (Approved DEC-012 Policy).
  * 
  * Rules:
- * - Two distinct Super-Admins required (req.user._id !== approver_two_id).
- * - Strictly read-only diagnostics ('diagnostics_readonly').
- * - Maximum 30 minutes, zero renewal.
- * - Synchronously persist NotificationJob with majority write concern BEFORE token issuance.
+ * - Single Platform Super-Admin break-glass activation (no second admin required).
+ * - Meaningful incident justification of >= 20 characters strictly mandatory.
+ * - Maximum 15 minutes session duration, zero renewal, strictly read-only diagnostics.
+ * - Pre-activation stale/malformed session sweep with majority write concern.
+ * - Synchronously persist NotificationJob ('staged') with majority write concern BEFORE token issuance.
  * - Fail closed (HTTP 503 EMERGENCY_NOTIFICATION_FAILED) if durable queue persistence fails.
- * - Atomically persist session activation and audit log in MongoDB ACID transaction.
+ * - Atomic session activation, PlatformAuditLog, and rolling 24h PlatformSecurityAlert in MongoDB transaction.
+ * - Traps E11000 duplicate-key conflicts, terminates aborted session, sweeps stale records on clean context,
+ *   re-validates single-active invariant, and retries once on a valid fresh transaction.
+ * - Compensatory revocation on post-commit token issuance or response transmission drop.
  */
 export async function emergencySupportAccess(req: Request, res: Response): Promise<void> {
+  // 1. Super-Admin Authorization Check
+  if (req.user?.is_platform_super_admin !== true) {
+    res.status(403).json({
+      code: 'SUPER_ADMIN_REQUIRED',
+      error: 'Only Platform Super-Administrators may activate emergency break-glass access.',
+    });
+    return;
+  }
+
+  const {
+    company_id,
+    ticket_id,
+    justification,
+    duration_minutes = 15,
+  } = req.body;
+
+  // 2. Mandatory Input Validation
+  if (!company_id || !ticket_id || !justification) {
+    res.status(400).json({
+      code: 'INVALID_JUSTIFICATION',
+      error: 'company_id, ticket_id, and justification are strictly mandatory for emergency break-glass access.',
+    });
+    return;
+  }
+
+  const trimmedJustification = String(justification).trim();
+  if (!trimmedJustification) {
+    res.status(400).json({
+      code: 'INVALID_JUSTIFICATION',
+      error: 'Emergency justification cannot be empty or whitespace only.',
+    });
+    return;
+  }
+
+  if (trimmedJustification.length < 20) {
+    res.status(400).json({
+      code: 'JUSTIFICATION_TOO_SHORT',
+      error: 'Emergency justification must be at least 20 characters in length.',
+    });
+    return;
+  }
+
+  // 3. Verify Target Company Exists and is Active
+  const company = await Company.findById(company_id);
+  if (!company || company.is_deleted) {
+    res.status(404).json({ error: 'Target workspace not found or decommissioned.' });
+    return;
+  }
+
+  // 4. Verify Support Ticket Exists and Belongs to Company
+  const ticket = await SupportTicket.findOne({ _id: ticket_id, company_id });
+  if (!ticket) {
+    res.status(404).json({
+      code: 'TICKET_NOT_FOUND',
+      error: 'Support ticket not found or does not belong to the target workspace.',
+    });
+    return;
+  }
+
+  if (['resolved', 'closed'].includes(ticket.status)) {
+    res.status(400).json({
+      code: 'TICKET_INACTIVE',
+      error: 'Cannot activate emergency access against a resolved or closed ticket.',
+    });
+    return;
+  }
+
+  // 5. Hard Duration Constraint: Max 15 Minutes, Read-Only Diagnostics
+  const requestedMinutes = Number(duration_minutes) || 15;
+  const finalDuration = Math.min(Math.max(requestedMinutes, 1), 15);
+  const scope = 'diagnostics_readonly';
+
+  const startedAt = new Date();
+  const expiresAt = new Date(startedAt.getTime() + finalDuration * 60 * 1000);
+
+  // 6. Pre-Activation Stale Session Sweep (freeing partial unique index slot)
   try {
-    const {
-      company_id,
-      ticket_id,
-      justification,
-      approver_two_id,
-      duration_minutes = 30,
-    } = req.body;
-
-    // 1. Mandatory input validation
-    if (!company_id || !ticket_id || !justification?.trim() || !approver_two_id) {
-      res.status(400).json({
-        error: 'company_id, ticket_id, justification, and approver_two_id are all strictly mandatory for emergency break-glass access.',
-      });
-      return;
-    }
-
-    // 2. Dual-Super-Admin Distinctness Constraint
-    if (req.user!._id.toString() === approver_two_id.toString()) {
-      res.status(400).json({
-        code: 'DUAL_ADMIN_IDENTICAL',
-        error: 'Dual-Super-Admin emergency access requires two distinct Super-Administrators. Operator cannot self-approve.',
-      });
-      return;
-    }
-
-    // 3. Verify secondary approver is an active Super-Admin
-    const approverTwo = await User.findById(approver_two_id);
-    if (!approverTwo || !approverTwo.is_platform_super_admin) {
-      res.status(403).json({
-        code: 'SECONDARY_APPROVER_INVALID',
-        error: 'Secondary approver must be an active Platform Super-Administrator.',
-      });
-      return;
-    }
-
-    // 4. Verify company exists
-    const company = await Company.findById(company_id);
-    if (!company || company.is_deleted) {
-      res.status(404).json({ error: 'Target workspace not found or decommissioned.' });
-      return;
-    }
-
-    // 5. Verify ticket exists and belongs to company
-    const ticket = await SupportTicket.findOne({ _id: ticket_id, company_id });
-    if (!ticket) {
-      res.status(404).json({ error: 'Support ticket not found or does not belong to the target workspace.' });
-      return;
-    }
-
-    // 6. Hard constraint: Maximum 30 minutes, zero renewal, strictly read-only
-    const requestedMinutes = Number(duration_minutes) || 30;
-    const finalDuration = Math.min(Math.max(requestedMinutes, 1), 30);
-    const scope = 'diagnostics_readonly';
-
-    const startedAt = new Date();
-    const expiresAt = new Date(startedAt.getTime() + finalDuration * 60 * 1000);
-
-    // 7. Policy A2: Synchronous Durable Notification Queueing with Majority Write Concern
-    let notificationJob;
-    try {
-      const jobId = `emg-notif-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      notificationJob = new NotificationJob({
+    await SupportAccessRequest.updateMany(
+      {
         company_id: company._id,
-        job_id: jobId,
-        channel: 'email',
-        event_type: 'EMERGENCY_ACCESS_GRANTED',
-        recipient_name: company.name || 'Workspace Administrator',
-        recipient_email: company.email || 'admin@tenant.fleetflow.io',
-        message_preview: `CRITICAL ALERT: Emergency Break-Glass support access was activated for workspace ${company.name} by Super-Admins ${req.user!.email} and ${approverTwo.email}. Justification: ${justification.trim()}`,
-        template_name: 'EMERGENCY_ACCESS_ALERT',
-        template_variables: {
-          company_name: company.name,
-          super_admin_one: req.user!.email,
-          super_admin_two: approverTwo.email,
-          ticket_no: ticket.ticket_no,
-          justification: justification.trim(),
-          started_at: startedAt.toISOString(),
-          expires_at: expiresAt.toISOString(),
-          duration_minutes: finalDuration,
+        status: 'active',
+        is_emergency: true,
+        $or: [
+          { expires_at: { $lte: new Date() } },
+          { expires_at: { $exists: false } },
+          { expires_at: null },
+        ],
+      },
+      {
+        $set: {
+          status: 'expired',
+          expired_at: new Date(),
+          auto_expired_by_sweep: true,
         },
-        attempts: 0,
-        max_attempts: 5,
-        next_run_at: new Date(),
-        status: 'staged',
-      });
+      },
+      { writeConcern: { w: 'majority', j: true } } as any
+    );
+  } catch (sweepErr: any) {
+    console.warn('[Pre-activation stale session sweep warning]:', sweepErr.message);
+  }
 
-      // Synchronously enforce majority write concern before token issuance
-      await notificationJob.save({ w: 'majority', j: true });
-    } catch (notifError: any) {
-      // Policy A2: Fail closed. Deny emergency access if durable queue persistence fails.
-      res.status(503).json({
-        code: 'EMERGENCY_NOTIFICATION_FAILED',
-        error: 'Emergency access denied: Failed to durably queue urgent notification job with majority write concern.',
-      });
-      return;
+  // 7. Phase 2: Synchronous Durable Notification Staging with Majority Write Concern
+  let notificationJob: any;
+  try {
+    const jobId = `emg-notif-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    notificationJob = new NotificationJob({
+      company_id: company._id,
+      job_id: jobId,
+      channel: 'email',
+      event_type: 'EMERGENCY_ACCESS_GRANTED',
+      recipient_name: company.name || 'Workspace Administrator',
+      recipient_email: company.email || 'admin@tenant.fleetflow.io',
+      message_preview: `CRITICAL ALERT: Emergency Break-Glass support access was activated for workspace ${company.name} by Super-Admin ${req.user!.email}. Justification: ${trimmedJustification}`,
+      template_name: 'EMERGENCY_ACCESS_ALERT',
+      template_variables: {
+        company_name: company.name,
+        super_admin_one: req.user!.email,
+        ticket_no: ticket.ticket_no,
+        justification: trimmedJustification,
+        started_at: startedAt.toISOString(),
+        expires_at: expiresAt.toISOString(),
+        duration_minutes: finalDuration,
+      },
+      attempts: 0,
+      max_attempts: 5,
+      next_run_at: new Date(),
+      status: 'staged',
+    });
+
+    await notificationJob.save({ w: 'majority', j: true });
+  } catch (notifError: any) {
+    res.status(503).json({
+      code: 'EMERGENCY_NOTIFICATION_FAILED',
+      error: 'Emergency access denied: Failed to durably queue urgent notification job with majority write concern.',
+    });
+    return;
+  }
+
+  // Helper function to execute activation transaction sequence
+  const executeActivationSequence = async (session: mongoose.ClientSession): Promise<any> => {
+    // Re-verify single active session invariant inside transaction
+    const existingActive = await SupportAccessRequest.findOne({
+      company_id: company._id,
+      status: 'active',
+      is_emergency: true,
+      expires_at: { $gt: new Date() },
+    }).session(session);
+
+    if (existingActive) {
+      const err: any = new Error('An active emergency session already exists for this workspace.');
+      err.code = 'EMERGENCY_SESSION_ALREADY_ACTIVE';
+      err.statusCode = 409;
+      throw err;
     }
 
-    // 8. Atomic Session Activation & Audit Log Persistence in MongoDB Transaction
-    const mongoSession = await mongoose.startSession();
-    let accessRequest: any;
-    try {
-      await mongoSession.withTransaction(async () => {
-        const [createdRequest] = await SupportAccessRequest.create(
-          [
-            {
-              company_id: company._id,
-              ticket_id: ticket._id,
-              requested_by: req.user!._id,
-              scope,
-              status: 'active',
-              duration_minutes: finalDuration,
-              justification: justification.trim(),
-              is_emergency: true,
-              emergency_approver_two: approverTwo._id,
-              notification_job_id: notificationJob._id,
-              approved_by: approverTwo._id,
-              approved_at: startedAt,
-              started_at: startedAt,
-              expires_at: expiresAt,
-            },
-          ],
-          { session: mongoSession }
-        );
-        accessRequest = createdRequest;
-
-        await PlatformAuditLog.create(
-          [
-            {
-              actor_user_id: req.user!._id,
-              actor_email: req.user!.email,
-              action: 'emergency_support_activated',
-              target_company_id: company._id,
-              target_company_name: company.name,
-              ip_address: req.ip,
-              user_agent: req.headers['user-agent'],
-              details: {
-                access_request_id: accessRequest._id.toString(),
-                ticket_id: ticket._id.toString(),
-                ticket_no: ticket.ticket_no,
-                scope,
-                duration_minutes: finalDuration,
-                justification: justification.trim(),
-                approver_one: req.user!.email,
-                approver_two: approverTwo.email,
-                notification_job_id: notificationJob.job_id,
-                started_at: startedAt.toISOString(),
-                expires_at: expiresAt.toISOString(),
-              },
-            },
-          ],
-          { session: mongoSession }
-        );
-
-        // Transactional outbox transition: Release notification job from 'staged' to 'pending'
-        // atomically when the activation and audit records commit together.
-        await NotificationJob.updateOne(
-          { _id: notificationJob._id },
-          { $set: { status: 'pending' } },
-          { session: mongoSession }
-        );
-      });
-    } catch (txnError: any) {
-      // Reliable lifecycle: If activation transaction rolls back, cancel the pre-persisted notification job
-      // to avoid phantom notification dispatch claiming an active session was created.
-      await NotificationJob.findByIdAndUpdate(
-        notificationJob._id,
+    const [createdRequest] = await SupportAccessRequest.create(
+      [
         {
-          status: 'cancelled',
-          last_error: `Activation transaction rolled back: ${txnError.message || txnError}`,
+          company_id: company._id,
+          ticket_id: ticket._id,
+          requested_by: req.user!._id,
+          approved_by: req.user!._id,
+          scope,
+          status: 'active',
+          duration_minutes: finalDuration,
+          justification: trimmedJustification,
+          is_emergency: true,
+          is_single_admin_emergency: true,
+          notification_job_id: notificationJob._id,
+          approved_at: startedAt,
+          started_at: startedAt,
+          expires_at: expiresAt,
         },
-        { w: 'majority', j: true }
+      ],
+      { session }
+    );
+
+    await PlatformAuditLog.create(
+      [
+        {
+          actor_user_id: req.user!._id,
+          actor_email: req.user!.email,
+          action: 'emergency_support_activated',
+          target_company_id: company._id,
+          target_company_name: company.name,
+          ip_address: req.ip,
+          user_agent: req.headers['user-agent'],
+          details: {
+            access_request_id: createdRequest._id.toString(),
+            ticket_id: ticket._id.toString(),
+            ticket_no: ticket.ticket_no,
+            scope,
+            duration_minutes: finalDuration,
+            justification: trimmedJustification,
+            approver_one: req.user!.email,
+            is_single_admin_emergency: true,
+            notification_job_id: notificationJob.job_id,
+            started_at: startedAt.toISOString(),
+            expires_at: expiresAt.toISOString(),
+          },
+        },
+      ],
+      { session }
+    );
+
+    // Evaluate 24-hour rolling window for high-frequency alerts
+    const rolling24hAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const emergencyCount = await SupportAccessRequest.countDocuments({
+      company_id: company._id,
+      is_emergency: true,
+      started_at: { $gte: rolling24hAgo },
+    }).session(session);
+
+    if (emergencyCount >= 2) {
+      await PlatformAuditLog.create(
+        [
+          {
+            actor_user_id: req.user!._id,
+            actor_email: req.user!.email,
+            action: 'emergency_access_high_frequency_alert',
+            target_company_id: company._id,
+            target_company_name: company.name,
+            ip_address: req.ip,
+            user_agent: req.headers['user-agent'],
+            details: {
+              emergency_sessions_count_24h: emergencyCount,
+              trigger_session_id: createdRequest._id.toString(),
+              timestamp: new Date().toISOString(),
+            },
+          },
+        ],
+        { session }
+      );
+
+      // Upsert PlatformSecurityAlert idempotently using unique alert_key and $addToSet
+      try {
+        const alertKey = `emg-alert-${company._id}`;
+        await PlatformSecurityAlert.findOneAndUpdate(
+          { alert_key: alertKey },
+          {
+            $setOnInsert: {
+              alert_type: 'emergency_access_high_frequency_alert',
+              company_id: company._id,
+              trigger_session_id: createdRequest._id,
+              first_triggered_at: new Date(),
+              suppress_external_alerts_until: new Date(Date.now() + 60 * 60 * 1000),
+              status: 'pending_dispatch',
+            },
+            $addToSet: { associated_session_ids: createdRequest._id },
+            $set: { last_session_at: new Date() },
+          },
+          { upsert: true, new: true, setDefaultsOnInsert: true, session }
+        );
+      } catch (alertErr: any) {
+        // Fallback audit event if primary alert persistence degrades
+        try {
+          await PlatformAuditLog.create(
+            [
+              {
+                actor_user_id: req.user!._id,
+                actor_email: req.user!.email,
+                action: 'security_alert_persistence_failed',
+                target_company_id: company._id,
+                target_company_name: company.name,
+                details: { error: alertErr.message },
+              },
+            ],
+            { session }
+          );
+        } catch (fallbackErr: any) {
+          console.error(JSON.stringify({
+            event: 'SECURITY_ALERT_PERSISTENCE_TOTAL_FAILURE',
+            level: 'CRITICAL',
+            company_id: company._id,
+            session_id: createdRequest._id,
+            error: alertErr.message,
+          }));
+        }
+      }
+    }
+
+    // Release staged notification job to pending and link session ID
+    await NotificationJob.updateOne(
+      { _id: notificationJob._id },
+      { $set: { status: 'pending', session_id: createdRequest._id } },
+      { session }
+    );
+
+    return createdRequest;
+  };
+
+  // 8. Phase 3: Execute Activation Transaction with E11000 Conflict & Stale Sweep Retry Handling
+  let accessRequest: any;
+  let mongoSession = await mongoose.startSession();
+  try {
+    mongoSession.startTransaction();
+    accessRequest = await executeActivationSequence(mongoSession);
+    await mongoSession.commitTransaction();
+  } catch (txnError: any) {
+    await mongoSession.abortTransaction().catch(() => {});
+    await mongoSession.endSession().catch(() => {});
+
+    if (txnError.code === 'EMERGENCY_SESSION_ALREADY_ACTIVE' || txnError.statusCode === 409) {
+      await NotificationJob.updateOne(
+        { _id: notificationJob._id, status: 'staged' },
+        { $set: { status: 'cancelled', last_error: 'Active emergency session already exists.' } },
+        { writeConcern: { w: 'majority', j: true } } as any
       ).catch(() => {});
 
-      throw txnError;
-    } finally {
-      await mongoSession.endSession();
+      res.status(409).json({
+        code: 'EMERGENCY_SESSION_ALREADY_ACTIVE',
+        error: 'An active emergency support session is already running for this workspace.',
+      });
+      return;
     }
 
-    // 9. Issue strictly constrained 30-minute JWT token
+    // Trapped Duplicate-Key Error (E11000) on partial unique index
+    const isDuplicateKey = txnError.code === 11000 || String(txnError.message).includes('E11000');
+    if (isDuplicateKey) {
+      // Inspect conflicting record on clean connection outside the aborted transaction
+      const conflicting = await SupportAccessRequest.findOne({
+        company_id: company._id,
+        status: 'active',
+        is_emergency: true,
+      });
+
+      if (conflicting && conflicting.expires_at && conflicting.expires_at > new Date()) {
+        // Genuine active unexpired session running
+        await NotificationJob.updateOne(
+          { _id: notificationJob._id, status: 'staged' },
+          { $set: { status: 'cancelled', last_error: 'Conflicting active emergency session exists.' } },
+          { writeConcern: { w: 'majority', j: true } } as any
+        ).catch(() => {});
+
+        res.status(409).json({
+          code: 'EMERGENCY_SESSION_ALREADY_ACTIVE',
+          error: 'An active emergency support session is already running for this workspace.',
+        });
+        return;
+      }
+
+      // Sweep stale / malformed record on fresh context with majority write concern
+      await SupportAccessRequest.updateMany(
+        {
+          company_id: company._id,
+          status: 'active',
+          is_emergency: true,
+          $or: [
+            { expires_at: { $lte: new Date() } },
+            { expires_at: { $exists: false } },
+            { expires_at: null },
+          ],
+        },
+        {
+          $set: {
+            status: 'expired',
+            expired_at: new Date(),
+            auto_expired_by_sweep: true,
+          },
+        },
+        { writeConcern: { w: 'majority', j: true } } as any
+      );
+
+      // Start fresh transaction session for retry (bounded to 1 retry)
+      const retrySession = await mongoose.startSession();
+      try {
+        retrySession.startTransaction();
+        accessRequest = await executeActivationSequence(retrySession);
+        await retrySession.commitTransaction();
+      } catch (retryErr: any) {
+        await retrySession.abortTransaction().catch(() => {});
+        await retrySession.endSession().catch(() => {});
+
+        await NotificationJob.updateOne(
+          { _id: notificationJob._id, status: 'staged' },
+          { $set: { status: 'cancelled', last_error: `Retry failed: ${retryErr.message}` } },
+          { writeConcern: { w: 'majority', j: true } } as any
+        ).catch(() => {});
+
+        if (retryErr.code === 11000 || String(retryErr.message).includes('E11000') || retryErr.statusCode === 409) {
+          res.status(409).json({
+            code: 'EMERGENCY_SESSION_ALREADY_ACTIVE',
+            error: 'An active emergency support session is already running for this workspace.',
+          });
+          return;
+        }
+        res.status(500).json({ error: retryErr.message || 'Failed to activate emergency support access on retry.' });
+        return;
+      } finally {
+        await retrySession.endSession().catch(() => {});
+      }
+    } else {
+      // Check for unknown commit outcome (socket drop / network error during commitTransaction)
+      const isCommitError = txnError.name === 'MongoNetworkError' || String(txnError.message).includes('commit');
+      if (isCommitError) {
+        await NotificationJob.updateOne(
+          { _id: notificationJob._id },
+          {
+            $set: {
+              status: 'staged_unconfirmed',
+              first_unconfirmed_at: new Date(),
+              reconciliation_attempts: 0,
+              last_error: txnError.message,
+            },
+          },
+          { writeConcern: { w: 'majority', j: true } } as any
+        ).catch(() => {});
+
+        res.status(503).json({
+          code: 'ACTIVATION_COMMIT_UNKNOWN',
+          error: 'Transaction commit outcome is unconfirmed. Emergency session status is under reconciliation.',
+        });
+        return;
+      }
+
+      // Confirmed Abort: Cancel pre-saved staged notification job
+      await NotificationJob.updateOne(
+        { _id: notificationJob._id, status: 'staged' },
+        {
+          $set: {
+            status: 'cancelled',
+            last_error: `Activation transaction rolled back: ${txnError.message || txnError}`,
+          },
+        },
+        { writeConcern: { w: 'majority', j: true } } as any
+      ).catch((cleanErr) => {
+        console.error('[CRITICAL] Notification outbox cancellation failed:', cleanErr);
+        PlatformAuditLog.create({
+          actor_user_id: req.user!._id,
+          actor_email: req.user!.email,
+          action: 'notification_outbox_cleanup_failed',
+          target_company_id: company._id,
+          details: { notification_job_id: notificationJob._id, error: cleanErr.message },
+        }).catch(() => {});
+      });
+
+      res.status(500).json({ error: txnError.message || 'Failed to activate emergency support access.' });
+      return;
+    }
+  } finally {
+    await mongoSession.endSession().catch(() => {});
+  }
+
+  // 9. Phase 4: Token Issuance & Post-Commit Compensation Recovery
+  try {
     const secret = process.env.JWT_SECRET || 'dev_secret_fallback_key';
     const supportToken = jwt.sign(
       {
@@ -512,8 +851,55 @@ export async function emergencySupportAccess(req: Request, res: Response): Promi
       session: accessRequest,
       notification_job_id: notificationJob.job_id,
     });
-  } catch (error: any) {
-    res.status(500).json({ error: error.message || 'Failed to activate emergency support access.' });
+  } catch (tokenErr: any) {
+    // Treat as uncertain credential state (presumed inaccessible)
+    await SupportAccessRequest.updateOne(
+      { _id: accessRequest._id, status: 'active' },
+      {
+        $set: {
+          status: 'revoked',
+          revocation_reason: 'credential_delivery_uncertain',
+          revoked_at: new Date(),
+          revoked_by: req.user!._id,
+        },
+      },
+      { writeConcern: { w: 'majority', j: true } } as any
+    ).catch((err) => {
+      console.error('[CRITICAL] Post-commit compensatory revocation failed:', err);
+      PlatformAuditLog.create({
+        actor_user_id: req.user!._id,
+        actor_email: req.user!.email,
+        action: 'post_commit_compensation_failed',
+        target_company_id: company._id,
+        details: { session_id: accessRequest._id, error: err.message },
+      }).catch(() => {});
+    });
+
+    // Conditional outbox state update
+    const jobUpdate = await NotificationJob.findOneAndUpdate(
+      { _id: notificationJob._id, status: 'pending' },
+      { $set: { status: 'cancelled', last_error: 'Revoked: credential delivery uncertain' } }
+    );
+
+    if (!jobUpdate) {
+      await NotificationJob.updateOne(
+        { _id: notificationJob._id, status: 'processing' },
+        { $set: { status: 'compensation_requested', compensation_requested_at: new Date() } }
+      ).catch(() => {});
+    }
+
+    await PlatformAuditLog.create({
+      actor_user_id: req.user!._id,
+      actor_email: req.user!.email,
+      action: 'emergency_activation_aborted_post_commit',
+      target_company_id: company._id,
+      details: { session_id: accessRequest._id, error: tokenErr.message },
+    }).catch(() => {});
+
+    res.status(500).json({
+      code: 'CREDENTIAL_DELIVERY_FAILED',
+      error: 'Emergency session activation failed during credential issuance. Session defensively revoked.',
+    });
   }
 }
 
@@ -680,6 +1066,101 @@ export async function createLockoutTicket(req: Request, res: Response): Promise<
 }
 
 /**
+ * Sweeps all active support sessions whose expiration timestamp has passed,
+ * atomically transitioning them to 'expired' and recording expired_at.
+ */
+export async function sweepExpiredSupportSessions(): Promise<number> {
+  try {
+    const now = new Date();
+    const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const fortyEightHoursAgo = new Date(now.getTime() - 48 * 60 * 60 * 1000);
+
+    let expiredCount = 0;
+
+    // 1. Stale Active Sessions (past expires_at)
+    const staleActiveSessions = await SupportAccessRequest.find({
+      status: 'active',
+      $or: [
+        { expires_at: { $lte: now } },
+        { expires_at: { $exists: false } },
+        { expires_at: null },
+      ],
+    });
+
+    for (const session of staleActiveSessions) {
+      session.status = 'expired';
+      session.expired_at = now;
+      session.auto_expired_by_sweep = true;
+      await session.save();
+
+      PlatformAuditLog.create({
+        actor_user_id: session.requested_by,
+        actor_email: 'system@platform.fleetflow.io',
+        action: 'support_access_expired',
+        target_company_id: session.company_id,
+        details: {
+          access_request_id: session._id.toString(),
+          expires_at: session.expires_at,
+          reason: 'Session duration expired',
+          auto_expired_by_sweep: true,
+        },
+      }).catch(() => {});
+      expiredCount++;
+    }
+
+    // 2. Stale Approved Sessions that were never activated within 24 hours
+    const staleApprovedSessions = await SupportAccessRequest.find({
+      status: 'approved',
+      $or: [
+        { approved_at: { $lte: twentyFourHoursAgo } },
+        { created_at: { $lte: twentyFourHoursAgo } },
+      ],
+    });
+
+    for (const session of staleApprovedSessions) {
+      session.status = 'expired';
+      session.expired_at = now;
+      session.auto_expired_by_sweep = true;
+      session.revocation_reason = 'Approval window expired (unactivated within 24h)';
+      await session.save();
+
+      PlatformAuditLog.create({
+        actor_user_id: session.requested_by,
+        actor_email: 'system@platform.fleetflow.io',
+        action: 'support_access_expired',
+        target_company_id: session.company_id,
+        details: {
+          access_request_id: session._id.toString(),
+          reason: 'Approval window expired (unactivated within 24h)',
+          auto_expired_by_sweep: true,
+        },
+      }).catch(() => {});
+      expiredCount++;
+    }
+
+    // 3. Stale Pending Requests older than 48 hours
+    const stalePendingSessions = await SupportAccessRequest.find({
+      status: 'pending',
+      created_at: { $lte: fortyEightHoursAgo },
+    });
+
+    for (const session of stalePendingSessions) {
+      session.status = 'expired';
+      session.expired_at = now;
+      session.auto_expired_by_sweep = true;
+      session.revocation_reason = 'Request expired without approval after 48h';
+      await session.save();
+      expiredCount++;
+    }
+
+    return expiredCount;
+  } catch (err: any) {
+    console.warn('[sweepExpiredSupportSessions error]:', err.message);
+    return 0;
+  }
+}
+
+/**
  * 8. GET /api/support/sessions
  * Lists support access requests for the authenticated tenant workspace.
  */
@@ -691,11 +1172,18 @@ export async function listTenantSupportSessions(req: Request, res: Response): Pr
       return;
     }
 
+    // Automatically sweep expired active sessions before listing
+    await sweepExpiredSupportSessions();
+
     const sessions = await SupportAccessRequest.find({ company_id: companyId })
       .sort({ created_at: -1 })
       .populate('requested_by', 'name email')
       .populate('approved_by', 'name email')
-      .populate('ticket_id', 'ticket_no subject')
+      .populate({
+        path: 'ticket_id',
+        select: 'ticket_no subject',
+        options: { skipTenantCheck: true },
+      })
       .lean();
 
     res.json({ sessions, total: sessions.length });
@@ -710,12 +1198,23 @@ export async function listTenantSupportSessions(req: Request, res: Response): Pr
  */
 export async function listPlatformSupportSessions(req: Request, res: Response): Promise<void> {
   try {
-    const sessions = await SupportAccessRequest.find({})
+    // Automatically sweep expired active sessions before listing
+    await sweepExpiredSupportSessions();
+
+    const filter: any = {};
+    if (req.query.company_id) {
+      filter.company_id = req.query.company_id;
+    }
+    const sessions = await SupportAccessRequest.find(filter)
       .sort({ created_at: -1 })
       .populate('company_id', 'name slug')
       .populate('requested_by', 'name email')
       .populate('approved_by', 'name email')
-      .populate('ticket_id', 'ticket_no subject')
+      .populate({
+        path: 'ticket_id',
+        select: 'ticket_no subject',
+        options: { skipTenantCheck: true },
+      })
       .limit(100)
       .lean();
 
@@ -731,12 +1230,17 @@ export async function listPlatformSupportSessions(req: Request, res: Response): 
  */
 export async function getSupportSessionById(req: Request, res: Response): Promise<void> {
   try {
+    await sweepExpiredSupportSessions();
     const { id } = req.params;
     const session = await SupportAccessRequest.findById(id)
       .populate('company_id', 'name slug')
       .populate('requested_by', 'name email')
       .populate('approved_by', 'name email')
-      .populate('ticket_id', 'ticket_no subject status')
+      .populate({
+        path: 'ticket_id',
+        select: 'ticket_no subject status',
+        options: { skipTenantCheck: true },
+      })
       .lean();
 
     if (!session) {

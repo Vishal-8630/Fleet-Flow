@@ -31,6 +31,7 @@ import {
   forgotPassword,
   resetPassword,
   changePassword,
+  refreshToken,
   listWorkspaces,
   switchCompany,
   createWorkspace,
@@ -52,6 +53,7 @@ router.post('/register-company', registerLimiter, registerCompany);
 router.post('/register', registerLimiter, registerCompany);
 router.post('/login', authLimiter, login);
 router.post('/logout', logout);
+router.post('/refresh-token', refreshToken);
 router.post('/forgot-password', passwordResetLimiter, forgotPassword);
 router.post('/reset-password', passwordResetLimiter, resetPassword);
 
