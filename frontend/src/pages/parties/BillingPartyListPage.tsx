@@ -50,6 +50,7 @@ export interface BillingPartyRecord {
   };
   payment_terms_days: number;
   credit_limit: number;
+  enforce_credit_limit?: boolean;
   outstanding_receivables: number;
   status: 'active' | 'inactive';
   created_at: string;
@@ -81,6 +82,7 @@ export const BillingPartyListPage: React.FC = () => {
     postal_code: '',
     payment_terms_days: '30',
     credit_limit: '0',
+    enforce_credit_limit: false,
     status: 'active',
   };
 
@@ -165,6 +167,7 @@ export const BillingPartyListPage: React.FC = () => {
       },
       payment_terms_days: Number(formData.payment_terms_days) || 30,
       credit_limit: Number(formData.credit_limit) || 0,
+      enforce_credit_limit: !!formData.enforce_credit_limit,
       status: formData.status,
     });
   };
@@ -201,6 +204,7 @@ export const BillingPartyListPage: React.FC = () => {
       postal_code: party.billing_address?.postal_code || '',
       payment_terms_days: party.payment_terms_days?.toString() || '30',
       credit_limit: party.credit_limit?.toString() || '0',
+      enforce_credit_limit: !!party.enforce_credit_limit,
       status: party.status,
     });
     setIsModalOpen(true);
@@ -378,7 +382,17 @@ export const BillingPartyListPage: React.FC = () => {
                     <td>
                       <span className="badge badge-neutral">{party.payment_terms_days} Days</span>
                     </td>
-                    <td>₹{(party.credit_limit || 0).toLocaleString()}</td>
+                    <td>
+                      {party.enforce_credit_limit ? (
+                        <span style={{ fontWeight: 'var(--font-weight-medium)' }}>
+                          ₹{(party.credit_limit || 0).toLocaleString('en-IN')}
+                        </span>
+                      ) : (
+                        <span style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-xs)' }}>
+                          Unrestricted
+                        </span>
+                      )}
+                    </td>
                     <td>
                       <span style={{ fontWeight: 'var(--font-weight-semibold)', color: party.outstanding_receivables > 0 ? 'var(--color-danger)' : 'inherit' }}>
                         ₹{(party.outstanding_receivables || 0).toLocaleString()}
@@ -558,13 +572,27 @@ export const BillingPartyListPage: React.FC = () => {
               />
             </div>
             <div className="form-group">
-              <label className="form-label">Credit Limit (₹)</label>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                <label className="form-label" style={{ marginBottom: 0 }}>Credit Limit (₹)</label>
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', cursor: 'pointer', fontSize: 'var(--font-size-xs)', fontWeight: 'normal', textTransform: 'none' }}>
+                  <input
+                    type="checkbox"
+                    checked={formData.enforce_credit_limit}
+                    onChange={(e) => setFormData({ ...formData, enforce_credit_limit: e.target.checked })}
+                  />
+                  Enforce limit
+                </label>
+              </div>
               <input
                 type="number"
                 className="form-control"
+                placeholder={formData.enforce_credit_limit ? "0" : "Unrestricted (no limit)"}
                 value={formData.credit_limit}
                 onChange={(e) => setFormData({ ...formData, credit_limit: e.target.value })}
               />
+              <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                {formData.enforce_credit_limit ? 'Explicit limit enforced strictly server-side (₹0 = no credit).' : 'Unenforced: Customer has unrestricted credit limit.'}
+              </div>
             </div>
             <div className="form-group">
               <label className="form-label">Account Status</label>

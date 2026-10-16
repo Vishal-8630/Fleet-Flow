@@ -18,7 +18,7 @@
 import mongoose, { Document, Schema, Types } from 'mongoose';
 import { tenantPlugin } from '../plugins/tenantPlugin.js';
 
-export type AuditAction = 'CREATE' | 'UPDATE' | 'DELETE' | 'STATUS_CHANGE';
+export type AuditAction = 'CREATE' | 'UPDATE' | 'DELETE' | 'STATUS_CHANGE' | 'OVERRIDE';
 export type AuditEntityType =
   | 'journey'
   | 'entry'
@@ -70,7 +70,7 @@ const AuditLogSchema = new Schema<IAuditLog>(
     },
     action: {
       type: String,
-      enum: ['CREATE', 'UPDATE', 'DELETE', 'STATUS_CHANGE'],
+      enum: ['CREATE', 'UPDATE', 'DELETE', 'STATUS_CHANGE', 'OVERRIDE'],
       required: true,
       index: true,
     },

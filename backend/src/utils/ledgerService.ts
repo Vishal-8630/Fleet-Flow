@@ -447,3 +447,127 @@ export async function postCreditNoteJournal(params: {
   });
 }
 
+/**
+ * Posts paired double-entry journal for en-route diesel fuel fill-ups (FF-ISSUE-044).
+ * Leg 1 (Debit): 'diesel_expense' (Operating Expense)
+ * Leg 2 (Credit):
+ *   - 'payment_made' if payment_mode === 'credit' (Pump Vendor Accounts Payable)
+ *   - 'driver_advance' if payment_mode === 'cash' (Driver Advance Asset Reduction)
+ *   - 'bank_transfer' if payment_mode === 'fuel_card' (Fleet Card Clearing / Bank Liability)
+ */
+export async function postFuelExpenseJournal(params: {
+  company_id: Types.ObjectId | string;
+  session: ClientSession;
+  journey_id: Types.ObjectId | string;
+  journey_number: string;
+  truck_id?: Types.ObjectId | string;
+  driver_id?: Types.ObjectId | string;
+  petrol_pump_name: string;
+  fuel_quantity_litres: number;
+  rate_per_litre: number;
+  total_cost: number;
+  payment_mode: 'cash' | 'fuel_card' | 'credit';
+  slip_number?: string;
+  balance_party_id?: Types.ObjectId | string;
+  created_by?: any;
+}): Promise<{ journal_id: string; entries: ILedger[] }> {
+  const {
+    company_id,
+    session,
+    journey_id,
+    journey_number,
+    truck_id,
+    driver_id,
+    petrol_pump_name,
+    fuel_quantity_litres,
+    rate_per_litre,
+    total_cost,
+    payment_mode,
+    slip_number,
+    balance_party_id,
+    created_by,
+  } = params;
+
+  const validAmount = roundMoney(Number(total_cost) || 0);
+  if (validAmount <= 0) {
+    throw new Error('Fuel total cost must be greater than zero.');
+  }
+
+  // Leg 1: Debit Operating Diesel Expense
+  const legs: IJournalLeg[] = [
+    {
+      category: 'diesel_expense',
+      balance_type: 'debit',
+      amount: validAmount,
+      payment_mode: payment_mode === 'cash' ? 'cash' : payment_mode === 'fuel_card' ? 'fuel_card' : 'credit',
+      party_name: petrol_pump_name,
+      reference_number: slip_number || journey_number,
+      description: `Diesel fuel fill at ${petrol_pump_name} (${fuel_quantity_litres}L @ ₹${rate_per_litre}/L) for journey ${journey_number}`,
+      journey_id,
+      truck_id,
+      driver_id,
+      balance_party_id,
+    },
+  ];
+
+  // Leg 2: Credit Funding Source according to payment mode
+  if (payment_mode === 'credit') {
+    legs.push({
+      category: 'payment_made',
+      balance_type: 'credit',
+      amount: validAmount,
+      payment_mode: 'credit',
+      party_name: petrol_pump_name,
+      reference_number: slip_number || journey_number,
+      description: `Credit liability payable to pump vendor ${petrol_pump_name} for fuel slip ${slip_number || 'N/A'}`,
+      journey_id,
+      truck_id,
+      driver_id,
+      balance_party_id,
+    });
+  } else if (payment_mode === 'cash') {
+    legs.push({
+      category: 'driver_advance',
+      balance_type: 'credit',
+      amount: validAmount,
+      payment_mode: 'cash',
+      party_name: petrol_pump_name,
+      reference_number: slip_number || journey_number,
+      description: `Driver cash advance reduction for fuel purchased at ${petrol_pump_name}`,
+      journey_id,
+      truck_id,
+      driver_id,
+    });
+  } else {
+    // payment_mode === 'fuel_card'
+    legs.push({
+      category: 'bank_transfer',
+      balance_type: 'credit',
+      amount: validAmount,
+      payment_mode: 'fuel_card',
+      party_name: petrol_pump_name,
+      reference_number: slip_number || journey_number,
+      description: `Corporate fuel card clearing credit for fill at ${petrol_pump_name}`,
+      journey_id,
+      truck_id,
+      driver_id,
+    });
+  }
+
+  return postDoubleEntryJournal({
+    company_id,
+    session,
+    transaction_type: 'journey',
+    description: `Diesel stop at ${petrol_pump_name} (₹${validAmount}) for ${journey_number}`,
+    reference_number: slip_number || journey_number,
+    party_name: petrol_pump_name,
+    legs,
+    journey_id,
+    truck_id,
+    driver_id,
+    balance_party_id,
+    created_by,
+    is_auto_generated: true,
+  });
+}
+

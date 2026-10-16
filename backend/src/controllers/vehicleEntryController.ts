@@ -19,6 +19,8 @@ import { Request, Response } from 'express';
 import { Types } from 'mongoose';
 import { VehicleEntry } from '../models/VehicleEntry.js';
 import { BalanceParty } from '../models/BalanceParty.js';
+import { evaluateCustomerCreditExposure } from '../services/creditExposureService.js';
+import { logAuditEvent } from '../utils/auditService.js';
 
 /**
  * ----------------------------------------------------------------------------
@@ -211,6 +213,68 @@ export const createVehicleEntry = async (req: Request, res: Response) => {
     const count = await VehicleEntry.countDocuments({ company_id: companyId });
     const entry_number = `MKT-${String(count + 1).padStart(4, '0')}`;
 
+    let overrideAuditParams: any = null;
+
+    // FF-ISSUE-045 & DEC-007 Option B: Evaluate customer credit exposure if billing_party_id is provided
+    if (billing_party_id) {
+      const exposureResult = await evaluateCustomerCreditExposure({
+        company_id: companyId!,
+        customer_id: billing_party_id,
+        new_order_amount: freight_amount || 0,
+      });
+
+      if (exposureResult.is_breached) {
+        if (!req.body.credit_override) {
+          return res.status(409).json({
+            code: 'CREDIT_LIMIT_EXCEEDED',
+            error: `Credit limit exceeded for customer ${exposureResult.customer_name}. Company Admin authorization required under DEC-007 Option B.`,
+            exposure: exposureResult.exposure,
+            details: exposureResult,
+          });
+        }
+
+        const userRole = req.tenant?.role || req.member?.role || (req as any).membership?.role || (req as any).user?.role;
+        const isCompanyAdmin =
+          userRole === 'admin' || (req as any).user?.is_superadmin || (req as any).user?.role === 'superadmin';
+
+        if (!isCompanyAdmin) {
+          return res.status(403).json({
+            code: 'CREDIT_OVERRIDE_UNAUTHORIZED',
+            error: 'Forbidden: Company Administrator authorization required to override credit limit breaches under DEC-007 Option B.',
+            details: exposureResult,
+          });
+        }
+
+        const overrideReason = (req.body.override_reason || '').trim();
+        if (overrideReason.length < 10) {
+          return res.status(400).json({
+            code: 'JUSTIFICATION_REQUIRED',
+            error: 'A valid business justification (minimum 10 characters) is required to override credit limit.',
+          });
+        }
+
+        overrideAuditParams = {
+          company_id: companyId!,
+          entity_type: 'entry',
+          entity_id: new Types.ObjectId(String(billing_party_id)),
+          entity_identifier: entry_number,
+          action: 'OVERRIDE',
+          description: `Credit limit override authorized for ${exposureResult.customer_name} on entry ${entry_number}: ${overrideReason}`,
+          req,
+          after_snapshot: {
+            policy: 'DEC-007_OPTION_B',
+            customer_id: billing_party_id,
+            credit_limit: exposureResult.exposure.credit_limit,
+            current_exposure: exposureResult.exposure.current_exposure,
+            order_amount: exposureResult.exposure.order_amount,
+            projected_exposure: exposureResult.exposure.projected_exposure,
+            excess_amount: exposureResult.exposure.excess_amount,
+            justification: overrideReason,
+          },
+        };
+      }
+    }
+
     const entry = new VehicleEntry({
       company_id: companyId,
       entry_number,
@@ -234,6 +298,10 @@ export const createVehicleEntry = async (req: Request, res: Response) => {
     });
 
     await entry.save();
+
+    if (overrideAuditParams) {
+      await logAuditEvent(overrideAuditParams);
+    }
 
     return res.status(201).json({
       message: 'Market vehicle entry created successfully.',

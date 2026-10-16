@@ -28,9 +28,15 @@ import { TruckJourney, JourneyStatus } from '../models/TruckJourney.js';
 import { Truck } from '../models/Truck.js';
 import { Driver } from '../models/Driver.js';
 import { Company } from '../models/Company.js';
+import { BalanceParty } from '../models/BalanceParty.js';
+import { BillingParty } from '../models/BillingParty.js';
 import { notifyTripDispatched, notifyDeliveryCompleted } from '../utils/notificationService.js';
 import { logAuditEvent } from '../utils/auditService.js';
 import { validateTenantOwnership, TenantOwnershipError } from '../utils/ownershipValidator.js';
+import { postFuelExpenseJournal } from '../utils/ledgerService.js';
+import { runInTransaction, ConfigurationError } from '../utils/transactionHelper.js';
+import { evaluateCustomerCreditExposure } from '../services/creditExposureService.js';
+import { roundMoney } from '../utils/settlementCalculator.js';
 
 /**
  * ----------------------------------------------------------------------------
@@ -269,6 +275,8 @@ export const createJourney = async (req: Request, res: Response) => {
       });
     }
 
+    let overrideAuditParams: any = null;
+
     // 5. Check compliance if immediately dispatching
     if (status === 'active') {
       const compliance = truck.calculateComplianceStatus();
@@ -276,6 +284,64 @@ export const createJourney = async (req: Request, res: Response) => {
         return res.status(422).json({
           error: `Compliance Alert: Vehicle ${truck.truck_no} has expired statutory documents. Renew certificates before dispatching.`,
         });
+      }
+
+      // Check Customer Credit Exposure (DEC-007 Option B)
+      if (billing_party_id) {
+        const exposureResult = await evaluateCustomerCreditExposure({
+          company_id: companyId!,
+          customer_id: billing_party_id,
+          new_order_amount: freight_rate || 0,
+        });
+
+        if (exposureResult.is_breached) {
+          if (!req.body.credit_override) {
+            return res.status(409).json({
+              code: 'CREDIT_LIMIT_EXCEEDED',
+              error: `Credit limit exceeded for customer ${exposureResult.customer_name}. Company Admin authorization required to dispatch.`,
+              details: exposureResult,
+            });
+          }
+
+          const userRole = req.tenant?.role || req.member?.role || (req as any).membership?.role || (req as any).user?.role;
+          const isCompanyAdmin =
+            userRole === 'admin' || (req as any).user?.is_superadmin || (req as any).user?.role === 'superadmin';
+
+          if (!isCompanyAdmin) {
+            return res.status(403).json({
+              code: 'CREDIT_OVERRIDE_UNAUTHORIZED',
+              error: 'Credit limit exceeded. Company Admin authorization required to dispatch.',
+              details: exposureResult,
+            });
+          }
+
+          const overrideReason = (req.body.override_reason || '').trim();
+          if (overrideReason.length < 10) {
+            return res.status(400).json({
+              code: 'JUSTIFICATION_REQUIRED',
+              error: 'A valid business justification (minimum 10 characters) is required to override credit limit.',
+            });
+          }
+
+          overrideAuditParams = {
+            company_id: companyId!,
+            entity_type: 'party',
+            entity_id: billing_party_id,
+            entity_identifier: exposureResult.customer_name,
+            action: 'OVERRIDE',
+            description: `Credit limit override authorized for ${exposureResult.customer_name} on new journey: ${overrideReason}`,
+            req,
+            before_snapshot: {
+              credit_limit: exposureResult.credit_limit,
+              current_exposure: exposureResult.current_exposure,
+            },
+            after_snapshot: {
+              projected_exposure: exposureResult.projected_exposure,
+              overage_amount: exposureResult.overage_amount,
+              override_reason: overrideReason,
+            },
+          };
+        }
       }
     }
 
@@ -323,6 +389,10 @@ export const createJourney = async (req: Request, res: Response) => {
     });
 
     await journey.save();
+
+    if (overrideAuditParams) {
+      await logAuditEvent(overrideAuditParams);
+    }
 
     // 7. If dispatched as active, update vehicle and driver status
     if (status === 'active') {
@@ -373,6 +443,8 @@ export const dispatchJourney = async (req: Request, res: Response) => {
     if (!journey || journey.is_deleted) {
       return res.status(404).json({ error: 'Journey not found.' });
     }
+
+    let overrideAuditParams: any = null;
 
     if (journey.status !== 'draft') {
       return res.status(400).json({
@@ -428,6 +500,64 @@ export const dispatchJourney = async (req: Request, res: Response) => {
       });
     }
 
+    // Verify Customer Credit Exposure (DEC-007 Option B)
+    if (journey.billing_party_id) {
+      const exposureResult = await evaluateCustomerCreditExposure({
+        company_id: journey.company_id,
+        customer_id: journey.billing_party_id,
+        new_order_amount: journey.freight_rate || 0,
+      });
+
+      if (exposureResult.is_breached) {
+        if (!req.body.credit_override) {
+          return res.status(409).json({
+            code: 'CREDIT_LIMIT_EXCEEDED',
+            error: `Credit limit exceeded for customer ${exposureResult.customer_name}. Company Admin authorization required to dispatch.`,
+            details: exposureResult,
+          });
+        }
+
+        const userRole = req.tenant?.role || req.member?.role || (req as any).membership?.role || (req as any).user?.role;
+        const isCompanyAdmin =
+          userRole === 'admin' || (req as any).user?.is_superadmin || (req as any).user?.role === 'superadmin';
+
+        if (!isCompanyAdmin) {
+          return res.status(403).json({
+            code: 'CREDIT_OVERRIDE_UNAUTHORIZED',
+            error: 'Credit limit exceeded. Company Admin authorization required to dispatch.',
+            details: exposureResult,
+          });
+        }
+
+        const overrideReason = (req.body.override_reason || '').trim();
+        if (overrideReason.length < 10) {
+          return res.status(400).json({
+            code: 'JUSTIFICATION_REQUIRED',
+            error: 'A valid business justification (minimum 10 characters) is required to override credit limit.',
+          });
+        }
+
+        overrideAuditParams = {
+          company_id: journey.company_id,
+          entity_type: 'party',
+          entity_id: journey.billing_party_id,
+          entity_identifier: exposureResult.customer_name,
+          action: 'OVERRIDE',
+          description: `Credit limit override authorized for ${exposureResult.customer_name} on journey ${journey.journey_number}: ${overrideReason}`,
+          req,
+          before_snapshot: {
+            credit_limit: exposureResult.credit_limit,
+            current_exposure: exposureResult.current_exposure,
+          },
+          after_snapshot: {
+            projected_exposure: exposureResult.projected_exposure,
+            overage_amount: exposureResult.overage_amount,
+            override_reason: overrideReason,
+          },
+        };
+      }
+    }
+
     // Execute dispatch
     journey.status = 'active';
     journey.start_date = new Date();
@@ -439,6 +569,10 @@ export const dispatchJourney = async (req: Request, res: Response) => {
     });
 
     await journey.save();
+
+    if (overrideAuditParams) {
+      await logAuditEvent(overrideAuditParams);
+    }
 
     // Lock truck
     truck.status = 'on_trip';
@@ -575,12 +709,14 @@ export const recordDelay = async (req: Request, res: Response) => {
  */
 export const addDieselStop = async (req: Request, res: Response) => {
   try {
+    const companyId = req.tenant?.id;
     const {
       petrol_pump_name,
       slip_number,
       fuel_quantity_litres,
       rate_per_litre,
       payment_mode = 'credit',
+      balance_party_id,
       slip_image_url,
       filling_date,
     } = req.body;
@@ -591,33 +727,144 @@ export const addDieselStop = async (req: Request, res: Response) => {
       });
     }
 
-    const journey = await TruckJourney.findById(req.params.id);
-    if (!journey || journey.is_deleted) {
+    const journey = await TruckJourney.findOne({
+      _id: req.params.id,
+      company_id: companyId,
+      is_deleted: false,
+    });
+    if (!journey) {
       return res.status(404).json({ error: 'Journey not found.' });
     }
 
-    const total_cost = Math.round(Number(fuel_quantity_litres) * Number(rate_per_litre) * 100) / 100;
+    if (journey.is_settled) {
+      return res.status(409).json({
+        error: `Conflict: Cannot record diesel fuel stop for journey '${journey.journey_number}' as it has already been settled in a completed driver payout.`,
+      });
+    }
 
-    journey.diesel_expenses.push({
-      filling_date: filling_date ? new Date(filling_date) : new Date(),
-      petrol_pump_name,
-      slip_number,
-      fuel_quantity_litres: Number(fuel_quantity_litres),
-      rate_per_litre: Number(rate_per_litre),
-      total_cost,
-      payment_mode,
-      slip_image_url,
+    if (balance_party_id) {
+      await validateTenantOwnership(companyId!, { balance_party_id });
+    }
+
+    const total_cost = roundMoney(Number(fuel_quantity_litres) * Number(rate_per_litre));
+    if (total_cost <= 0) {
+      return res.status(400).json({ error: 'Calculated fuel cost must be greater than zero.' });
+    }
+
+    const result = await runInTransaction(async (session) => {
+      const sessJourney = await TruckJourney.findOne({
+        _id: journey._id,
+        company_id: companyId,
+        is_deleted: false,
+      }).session(session);
+
+      if (!sessJourney) {
+        throw new Error('Journey not found within transaction session.');
+      }
+
+      if (sessJourney.is_settled) {
+        const err: any = new Error(
+          `Conflict: Cannot record diesel fuel stop for journey '${sessJourney.journey_number}' as it has already been settled in a completed driver payout.`
+        );
+        err.statusCode = 409;
+        throw err;
+      }
+
+      if (slip_number && slip_number.trim()) {
+        const cleanSlip = slip_number.trim().toLowerCase();
+        const existingSlip = sessJourney.diesel_expenses?.find(
+          (d) => d.slip_number && d.slip_number.trim().toLowerCase() === cleanSlip
+        );
+        if (existingSlip) {
+          const err: any = new Error(
+            `Conflict: Fuel slip number '${slip_number.trim()}' has already been recorded for journey '${sessJourney.journey_number}'.`
+          );
+          err.statusCode = 409;
+          throw err;
+        }
+      }
+
+      sessJourney.diesel_expenses.push({
+        filling_date: filling_date ? new Date(filling_date) : new Date(),
+        petrol_pump_name: petrol_pump_name.trim(),
+        slip_number: slip_number?.trim(),
+        fuel_quantity_litres: Number(fuel_quantity_litres),
+        rate_per_litre: Number(rate_per_litre),
+        total_cost,
+        payment_mode,
+        balance_party_id: balance_party_id ? new Types.ObjectId(String(balance_party_id)) : undefined,
+        slip_image_url,
+      });
+
+      await sessJourney.save({ session });
+
+      if (balance_party_id && payment_mode === 'credit') {
+        const vendorParty = await BalanceParty.findOne({
+          _id: balance_party_id,
+          company_id: companyId,
+          is_deleted: false,
+        }).session(session);
+
+        if (vendorParty) {
+          vendorParty.current_balance = roundMoney(vendorParty.current_balance + total_cost);
+          await vendorParty.save({ session });
+        }
+      }
+
+      // Post balanced double-entry ledger vouchers
+      const journalResult = await postFuelExpenseJournal({
+        company_id: companyId!,
+        session,
+        journey_id: sessJourney._id,
+        journey_number: sessJourney.journey_number,
+        truck_id: sessJourney.truck_id,
+        driver_id: sessJourney.driver_id,
+        petrol_pump_name: petrol_pump_name.trim(),
+        fuel_quantity_litres: Number(fuel_quantity_litres),
+        rate_per_litre: Number(rate_per_litre),
+        total_cost,
+        payment_mode,
+        slip_number: slip_number?.trim(),
+        balance_party_id: balance_party_id ? new Types.ObjectId(String(balance_party_id)) : undefined,
+        created_by: req.user?._id,
+      });
+
+      return {
+        journey: sessJourney,
+        journal_id: journalResult.journal_id,
+        entries: journalResult.entries,
+      };
     });
 
-    await journey.save();
+    logAuditEvent({
+      company_id: companyId,
+      entity_type: 'journey',
+      entity_id: journey._id,
+      entity_identifier: journey.journey_number,
+      action: 'UPDATE',
+      description: `Fuel stop logged at ${petrol_pump_name} (${fuel_quantity_litres}L @ ₹${rate_per_litre}, total: ₹${total_cost}, mode: ${payment_mode})`,
+      req,
+      after_snapshot: {
+        total_diesel_cost: result.journey.total_diesel_cost,
+        advance_funded_diesel_cost: result.journey.advance_funded_diesel_cost,
+      },
+    });
 
     return res.json({
       message: 'Diesel fuel stop logged successfully.',
-      journey,
+      journey: result.journey,
+      journal_id: result.journal_id,
+      entries: result.entries,
     });
   } catch (error: any) {
+    if (error instanceof TenantOwnershipError) {
+      return res.status(error.statusCode).json({ error: error.message, entityType: error.entityType });
+    }
+    if (error instanceof ConfigurationError) {
+      return res.status(500).json({ error: error.message, code: 'CONFIGURATION_ERROR' });
+    }
     console.error('addDieselStop error:', error);
-    return res.status(500).json({ error: error.message || 'Failed to log diesel stop.' });
+    return res.status(error.statusCode || 500).json({ error: error.message || 'Failed to log diesel stop.' });
   }
 };
 
@@ -761,6 +1008,10 @@ export const cancelJourney = async (req: Request, res: Response) => {
     const journey = await TruckJourney.findById(req.params.id);
     if (!journey || journey.is_deleted) {
       return res.status(404).json({ error: 'Journey not found.' });
+    }
+
+    if (journey.is_settled) {
+      return res.status(400).json({ error: 'Settled journeys cannot be cancelled.' });
     }
 
     if (journey.status === 'completed') {

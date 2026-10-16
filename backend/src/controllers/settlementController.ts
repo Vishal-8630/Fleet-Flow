@@ -140,6 +140,7 @@ export const getPendingJourneysForDriver = async (req: Request, res: Response) =
 
     const totalKms = journeys.reduce((sum, j) => sum + (j.total_distance_kms || 0), 0);
     const totalAdvances = journeys.reduce((sum, j) => sum + (j.starting_cash_advance || 0), 0);
+    const totalAdvanceFundedDiesel = journeys.reduce((sum, j) => sum + (j.advance_funded_diesel_cost || 0), 0);
     const totalReimbursements = journeys.reduce((sum, j) => sum + (j.total_driver_expenses || 0), 0);
     const totalDieselLitres = journeys.reduce((sum, j) => sum + (j.total_diesel_litres || 0), 0);
     const avgMileage = totalDieselLitres > 0 ? Math.round((totalKms / totalDieselLitres) * 100) / 100 : 0;
@@ -157,6 +158,8 @@ export const getPendingJourneysForDriver = async (req: Request, res: Response) =
         unsettled_trips_count: journeys.length,
         total_kms: totalKms,
         total_advances: totalAdvances,
+        total_advance_funded_diesel: totalAdvanceFundedDiesel,
+        reconciled_advances: Math.round((totalAdvances - totalAdvanceFundedDiesel) * 100) / 100,
         total_reimbursements: totalReimbursements,
         total_diesel_litres: totalDieselLitres,
         actual_fleet_mileage: avgMileage,
@@ -189,6 +192,13 @@ export const previewSettlement = async (req: Request, res: Response) => {
       driver_id,
       is_deleted: false,
     });
+
+    const alreadySettled = journeys.filter((j) => j.is_settled);
+    if (alreadySettled.length > 0) {
+      return res.status(409).json({
+        error: `Conflict: Journey '${alreadySettled[0].journey_number}' has already been settled in a previous payout.`,
+      });
+    }
 
     const calculation = calculateDriverSettlement({
       journeys: journeys as any,
@@ -286,6 +296,8 @@ export const confirmSettlement = async (req: Request, res: Response) => {
         total_reimbursements,
         gross_earnings,
         total_advances,
+        advance_funded_diesel_cost,
+        reconciled_advances,
         actual_diesel_litres,
         actual_mileage,
         fuel_variance_penalty,
@@ -326,6 +338,7 @@ export const confirmSettlement = async (req: Request, res: Response) => {
           start_date: j.start_date,
           end_date: j.actual_end_date,
           advances_received: j.starting_cash_advance,
+          advance_funded_diesel_cost: j.advance_funded_diesel_cost || 0,
           reimbursements_claimed: j.total_driver_expenses,
           actual_diesel_litres: j.total_diesel_litres,
           actual_mileage: j.actual_mileage_km_per_litre,
@@ -336,6 +349,8 @@ export const confirmSettlement = async (req: Request, res: Response) => {
         total_reimbursements,
         gross_earnings,
         total_advances,
+        advance_funded_diesel_cost,
+        reconciled_advances,
         benchmark_mileage: Number(benchmark_mileage),
         fuel_variance_penalty,
         other_deductions: Number(other_deductions),

@@ -8,7 +8,7 @@
  */
 
 import { Request } from 'express';
-import { Types } from 'mongoose';
+import { Types, ClientSession } from 'mongoose';
 import { AuditLog, AuditAction, AuditEntityType } from '../models/AuditLog.js';
 
 interface AuditLogParams {
@@ -24,6 +24,7 @@ interface AuditLogParams {
   actor_role?: string;
   before_snapshot?: Record<string, any>;
   after_snapshot?: Record<string, any>;
+  session?: ClientSession;
 }
 
 export async function logAuditEvent(params: AuditLogParams): Promise<void> {
@@ -38,6 +39,7 @@ export async function logAuditEvent(params: AuditLogParams): Promise<void> {
       req,
       before_snapshot,
       after_snapshot,
+      session,
     } = params;
 
     const resolvedCompanyId = company_id || (req as any)?.tenant?.id;
@@ -50,7 +52,7 @@ export async function logAuditEvent(params: AuditLogParams): Promise<void> {
     const actor_role = params.actor_role || (req as any)?.tenantRole || (req as any)?.membership?.role || 'operator';
     const ip_address = (req?.headers['x-forwarded-for'] as string) || req?.socket?.remoteAddress || '127.0.0.1';
 
-    await AuditLog.create({
+    const logEntry = new AuditLog({
       company_id: new Types.ObjectId(resolvedCompanyId as any),
       entity_type,
       entity_id: new Types.ObjectId(entity_id as any),
@@ -64,7 +66,17 @@ export async function logAuditEvent(params: AuditLogParams): Promise<void> {
       before_snapshot,
       after_snapshot,
     });
+
+    if (session) {
+      await logEntry.save({ session });
+    } else {
+      await logEntry.save();
+    }
   } catch (err: any) {
+    if (params.session) {
+      // Re-throw in transactional context to ensure ACID rollback of the surrounding operation
+      throw err;
+    }
     console.error('[Audit Log Service Error]:', err.message);
   }
 }

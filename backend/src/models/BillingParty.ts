@@ -41,6 +41,7 @@ export interface IBillingParty extends Document {
   billing_address: IBillingAddress;
   payment_terms_days: number;
   credit_limit: number;
+  enforce_credit_limit: boolean;
   outstanding_receivables: number;
   status: 'active' | 'inactive';
   is_deleted: boolean;
@@ -80,6 +81,7 @@ const BillingPartySchema = new Schema<IBillingParty>(
     billing_address: { type: BillingAddressSchema, default: () => ({}) },
     payment_terms_days: { type: Number, default: 30, min: 0 },
     credit_limit: { type: Number, default: 0, min: 0 },
+    enforce_credit_limit: { type: Boolean, default: false },
     outstanding_receivables: { type: Number, default: 0 },
     status: {
       type: String,

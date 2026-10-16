@@ -23,6 +23,7 @@ import { Pagination } from '../../components/common/Pagination';
 import { Modal } from '../../components/common/Modal';
 import { toast } from '../../stores/uiStore';
 import { useAuthStore } from '../../stores/authStore';
+import { CreditLimitWarningModal, CreditExposureData } from '../../components/common/CreditLimitWarningModal';
 import {
   Truck,
   Plus,
@@ -37,6 +38,7 @@ import {
   Edit2,
   Trash2,
   ExternalLink,
+  Eye,
 } from 'lucide-react';
 
 export const VehicleEntryListPage: React.FC = () => {
@@ -48,6 +50,14 @@ export const VehicleEntryListPage: React.FC = () => {
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+
+  // View Financial Breakdown Modal State
+  const [viewEntry, setViewEntry] = useState<any>(null);
+
+  // Credit Limit Warning Modal State (DEC-007 Option B)
+  const [isCreditWarningOpen, setIsCreditWarningOpen] = useState(false);
+  const [creditExposureData, setCreditExposureData] = useState<CreditExposureData | null>(null);
+  const [creditErrorMessage, setCreditErrorMessage] = useState('');
 
   // Create Modal State
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -121,7 +131,7 @@ export const VehicleEntryListPage: React.FC = () => {
 
   // 5. Create Entry Mutation
   const createMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (overrideData?: { credit_override?: boolean; override_reason?: string }) => {
       const payload = {
         vehicle_number: formData.vehicle_number,
         driver_name: formData.driver_name,
@@ -140,18 +150,28 @@ export const VehicleEntryListPage: React.FC = () => {
         halting_amount: Number(formData.halting_amount) || 0,
         pod_received: formData.pod_received,
         notes: formData.notes,
+        credit_override: overrideData?.credit_override,
+        override_reason: overrideData?.override_reason,
       };
       const res = await api.post('/operations/vehicle-entries', payload);
       return res.data;
     },
     onSuccess: (data) => {
       toast.success(data.message || 'Market vehicle movement recorded.');
+      setIsCreditWarningOpen(false);
+      setCreditExposureData(null);
       handleCancelCreate();
       queryClient.invalidateQueries({ queryKey: ['vehicle-entries'] });
       queryClient.invalidateQueries({ queryKey: ['vehicle-entry-metrics'] });
     },
     onError: (err: any) => {
-      toast.error(err.response?.data?.error || err.message || 'Failed to record entry.');
+      if (err.response?.status === 409 && err.response?.data?.code === 'CREDIT_LIMIT_EXCEEDED') {
+        setCreditExposureData(err.response?.data?.exposure || null);
+        setCreditErrorMessage(err.response?.data?.error || 'Customer credit limit exceeded.');
+        setIsCreditWarningOpen(true);
+      } else {
+        toast.error(err.response?.data?.error || err.message || 'Failed to record entry.');
+      }
     },
   });
 
@@ -389,6 +409,8 @@ export const VehicleEntryListPage: React.FC = () => {
                 <th>Route</th>
                 <th>Agreed Freight</th>
                 <th>Advances</th>
+                <th>Dala (₹)</th>
+                <th>Kamisan (₹)</th>
                 <th>Net Balance Due</th>
                 <th>POD Status</th>
                 <th>Status</th>
@@ -398,13 +420,13 @@ export const VehicleEntryListPage: React.FC = () => {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={11} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+                  <td colSpan={13} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
                     Loading market movements...
                   </td>
                 </tr>
               ) : !entriesData?.entries || entriesData.entries.length === 0 ? (
                 <tr>
-                  <td colSpan={11} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+                  <td colSpan={13} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
                     No market vehicle movements found.
                   </td>
                 </tr>
@@ -454,6 +476,12 @@ export const VehicleEntryListPage: React.FC = () => {
                         Cash: ₹{entry.driver_cash_advance} | Fuel: ₹{entry.diesel_advance_amount}
                       </div>
                     </td>
+                    <td style={{ color: 'var(--color-amber-700)', fontWeight: 'var(--font-weight-medium)' }}>
+                      ₹{(entry.dala_charges || 0).toLocaleString('en-IN')}
+                    </td>
+                    <td style={{ color: 'var(--color-amber-700)', fontWeight: 'var(--font-weight-medium)' }}>
+                      ₹{(entry.kamisan_amount || 0).toLocaleString('en-IN')}
+                    </td>
                     <td style={{ fontWeight: 'var(--font-weight-bold)', color: 'var(--color-rose-600)' }}>
                       ₹{entry.net_balance_due?.toLocaleString('en-IN')}
                     </td>
@@ -475,6 +503,15 @@ export const VehicleEntryListPage: React.FC = () => {
                     </td>
                     <td style={{ textAlign: 'right' }}>
                       <div style={{ display: 'inline-flex', gap: '0.375rem', alignItems: 'center' }}>
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          style={{ padding: '0.375rem 0.5rem', fontSize: 'var(--font-size-xs)' }}
+                          onClick={() => setViewEntry(entry)}
+                          title="View Financial Breakdown & Arithmetic"
+                        >
+                          <Eye size={14} />
+                        </button>
                         {!entry.pod_received && canEdit && (
                           <button
                             type="button"
@@ -797,6 +834,108 @@ export const VehicleEntryListPage: React.FC = () => {
           </div>
         </form>
       </Modal>
+
+      {/* MODAL: VIEW FINANCIAL BREAKDOWN & DEDUCTION ARITHMETIC */}
+      <Modal
+        isOpen={Boolean(viewEntry)}
+        onClose={() => setViewEntry(null)}
+        title={`Movement Financial Breakdown — ${viewEntry?.entry_number || ''}`}
+        subtitle="Transparent line-by-line settlement arithmetic payable to vehicle supplier."
+      >
+        {viewEntry && (
+          <div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.75rem', marginBottom: '1.25rem', padding: '0.75rem', backgroundColor: 'var(--color-slate-50)', borderRadius: 'var(--radius-sm)' }}>
+              <div>
+                <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>Vehicle & Driver:</span>
+                <div style={{ fontWeight: 'var(--font-weight-semibold)' }}>{viewEntry.vehicle_number} ({viewEntry.driver_name || 'Unassigned'})</div>
+              </div>
+              <div>
+                <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>Supplier (Balance Party):</span>
+                <div style={{ fontWeight: 'var(--font-weight-semibold)' }}>{viewEntry.balance_party_id?.party_name || 'N/A'}</div>
+              </div>
+              <div>
+                <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>Route:</span>
+                <div style={{ fontWeight: 'var(--font-weight-medium)' }}>{viewEntry.from_location} → {viewEntry.to_location}</div>
+              </div>
+              <div>
+                <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>Date:</span>
+                <div style={{ fontWeight: 'var(--font-weight-medium)' }}>{new Date(viewEntry.entry_date).toLocaleDateString()}</div>
+              </div>
+            </div>
+
+            <div style={{ border: '1px solid var(--border-light)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
+              <table className="table" style={{ margin: 0 }}>
+                <tbody>
+                  <tr>
+                    <td style={{ fontWeight: 'var(--font-weight-medium)' }}>Agreed Total Freight</td>
+                    <td style={{ textAlign: 'right', fontWeight: 'var(--font-weight-semibold)' }}>
+                      ₹{viewEntry.freight_amount?.toLocaleString('en-IN')}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style={{ color: 'var(--color-rose-600)' }}>− Driver Cash Advance</td>
+                    <td style={{ textAlign: 'right', color: 'var(--color-rose-600)' }}>
+                      − ₹{(viewEntry.driver_cash_advance || 0).toLocaleString('en-IN')}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style={{ color: 'var(--color-rose-600)' }}>− Diesel Fuel Advance</td>
+                    <td style={{ textAlign: 'right', color: 'var(--color-rose-600)' }}>
+                      − ₹{(viewEntry.diesel_advance_amount || 0).toLocaleString('en-IN')}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style={{ color: 'var(--color-amber-700)' }}>− Dala / Loading Charges</td>
+                    <td style={{ textAlign: 'right', color: 'var(--color-amber-700)' }}>
+                      − ₹{(viewEntry.dala_charges || 0).toLocaleString('en-IN')}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style={{ color: 'var(--color-amber-700)' }}>− Brokerage Commission (Kamisan)</td>
+                    <td style={{ textAlign: 'right', color: 'var(--color-amber-700)' }}>
+                      − ₹{(viewEntry.kamisan_amount || 0).toLocaleString('en-IN')}
+                    </td>
+                  </tr>
+                  {Boolean(viewEntry.halting_amount) && (
+                    <tr>
+                      <td style={{ color: 'var(--color-emerald-600)' }}>+ Halting / Demurrage Compensation</td>
+                      <td style={{ textAlign: 'right', color: 'var(--color-emerald-600)' }}>
+                        + ₹{(viewEntry.halting_amount || 0).toLocaleString('en-IN')}
+                      </td>
+                    </tr>
+                  )}
+                  <tr style={{ backgroundColor: 'var(--color-slate-100)', borderTop: '2px solid var(--border-light)' }}>
+                    <td style={{ fontWeight: 'var(--font-weight-bold)', fontSize: 'var(--font-size-base)' }}>
+                      = Net Balance Due to Supplier
+                    </td>
+                    <td style={{ textAlign: 'right', fontWeight: 'var(--font-weight-bold)', fontSize: 'var(--font-size-base)', color: 'var(--color-rose-600)' }}>
+                      ₹{viewEntry.net_balance_due?.toLocaleString('en-IN')}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1.25rem' }}>
+              <button type="button" className="btn btn-secondary" onClick={() => setViewEntry(null)}>
+                Close
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* DEC-007 OPTION B CREDIT LIMIT WARNING & OVERRIDE MODAL */}
+      <CreditLimitWarningModal
+        isOpen={isCreditWarningOpen}
+        onClose={() => setIsCreditWarningOpen(false)}
+        exposure={creditExposureData}
+        errorMessage={creditErrorMessage}
+        onAuthorizeOverride={async (reason) => {
+          await createMutation.mutateAsync({ credit_override: true, override_reason: reason });
+        }}
+        isSubmitting={createMutation.isPending}
+      />
     </div>
   );
 };

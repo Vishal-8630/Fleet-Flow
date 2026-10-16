@@ -16,6 +16,7 @@ import { Company } from '../models/Company.js';
 import { notifyLRGenerated } from '../utils/notificationService.js';
 import { logAuditEvent } from '../utils/auditService.js';
 import { validateTenantOwnership, TenantOwnershipError } from '../utils/ownershipValidator.js';
+import { evaluateCustomerCreditExposure } from '../services/creditExposureService.js';
 
 export const getEntries = async (req: Request, res: Response) => {
   try {
@@ -147,6 +148,66 @@ export const createEntry = async (req: Request, res: Response) => {
       journey_id: req.body.journey_id,
     });
 
+    let overrideAuditParams: any = null;
+
+    // 1.5. Customer Credit Limit Enforcement (DEC-007 Option B)
+    if (req.body.billing_party_id) {
+      const exposureResult = await evaluateCustomerCreditExposure({
+        company_id: companyId!,
+        billing_party_id: req.body.billing_party_id,
+        planned_freight: Number(req.body.freight_amount) || 0,
+      });
+
+      if (exposureResult.is_breached) {
+        if (!req.body.credit_override) {
+          return res.status(409).json({
+            code: 'CREDIT_LIMIT_EXCEEDED',
+            error: `Credit limit exceeded for customer ${exposureResult.customer_name}. Company Admin authorization required to issue LR.`,
+            details: exposureResult,
+          });
+        }
+
+        const userRole = req.tenant?.role || req.member?.role || (req as any).membership?.role || (req as any).user?.role;
+        const isCompanyAdmin =
+          userRole === 'admin' || (req as any).user?.is_superadmin || (req as any).user?.role === 'superadmin';
+
+        if (!isCompanyAdmin) {
+          return res.status(403).json({
+            code: 'CREDIT_OVERRIDE_UNAUTHORIZED',
+            error: 'Credit limit exceeded. Company Admin authorization required to issue LR.',
+            details: exposureResult,
+          });
+        }
+
+        const overrideReason = (req.body.override_reason || '').trim();
+        if (overrideReason.length < 10) {
+          return res.status(400).json({
+            code: 'JUSTIFICATION_REQUIRED',
+            error: 'A valid business justification (minimum 10 characters) is required to override credit limit.',
+          });
+        }
+
+        overrideAuditParams = {
+          company_id: companyId!,
+          entity_type: 'party',
+          entity_id: req.body.billing_party_id,
+          entity_identifier: exposureResult.customer_name,
+          action: 'OVERRIDE',
+          description: `Credit limit override authorized for ${exposureResult.customer_name} on new LR: ${overrideReason}`,
+          req,
+          before_snapshot: {
+            credit_limit: exposureResult.credit_limit,
+            current_exposure: exposureResult.current_exposure,
+          },
+          after_snapshot: {
+            projected_exposure: exposureResult.projected_exposure,
+            overage_amount: exposureResult.overage_amount,
+            override_reason: overrideReason,
+          },
+        };
+      }
+    }
+
     // Fetch company defaults for prefix
     const company = await Company.findById(companyId);
     const lrPrefix = company?.settings?.lr_prefix || 'LR-';
@@ -200,6 +261,10 @@ export const createEntry = async (req: Request, res: Response) => {
         }
         throw saveErr;
       }
+    }
+
+    if (overrideAuditParams) {
+      await logAuditEvent(overrideAuditParams);
     }
 
     if (company) {

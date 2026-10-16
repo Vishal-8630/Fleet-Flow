@@ -39,6 +39,7 @@ export interface IJourneySettlementSnapshot {
   start_date: Date;
   end_date?: Date;
   advances_received: number;
+  advance_funded_diesel_cost?: number;
   reimbursements_claimed: number;
   actual_diesel_litres: number;
   actual_mileage: number;
@@ -70,6 +71,8 @@ export interface ISettlement extends Document {
 
   // Advances & Deductions
   total_advances: number;
+  advance_funded_diesel_cost?: number;
+  reconciled_advances?: number;
   benchmark_mileage: number;
   fuel_variance_penalty: number;
   other_deductions: number;
@@ -143,6 +146,7 @@ const SettlementSchema = new Schema<ISettlement>(
         start_date: { type: Date, required: true },
         end_date: { type: Date },
         advances_received: { type: Number, default: 0 },
+        advance_funded_diesel_cost: { type: Number, default: 0 },
         reimbursements_claimed: { type: Number, default: 0 },
         actual_diesel_litres: { type: Number, default: 0 },
         actual_mileage: { type: Number, default: 0 },
@@ -156,11 +160,13 @@ const SettlementSchema = new Schema<ISettlement>(
     gross_earnings: { type: Number, required: true, min: 0 },
 
     total_advances: { type: Number, default: 0, min: 0 },
+    advance_funded_diesel_cost: { type: Number, default: 0 },
+    reconciled_advances: { type: Number, default: 0 },
     benchmark_mileage: { type: Number, default: 4.0 },
     fuel_variance_penalty: { type: Number, default: 0, min: 0 },
     other_deductions: { type: Number, default: 0, min: 0 },
     other_deductions_notes: { type: String, trim: true },
-    total_deductions: { type: Number, required: true, min: 0 },
+    total_deductions: { type: Number, required: true },
 
     net_amount: { type: Number, required: true },
     settlement_type: {

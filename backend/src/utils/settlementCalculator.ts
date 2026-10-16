@@ -40,6 +40,7 @@ export interface IJourneyTripData {
   total_distance_kms?: number;
   starting_cash_advance?: number;
   total_driver_expenses?: number;
+  advance_funded_diesel_cost?: number;
   total_diesel_litres?: number;
   actual_mileage_km_per_litre?: number;
   from_location?: { city?: string };
@@ -64,6 +65,8 @@ export interface IDriverSettlementResult {
   total_reimbursements: number;
   gross_earnings: number;
   total_advances: number;
+  advance_funded_diesel_cost: number;
+  reconciled_advances: number;
   benchmark_mileage: number;
   actual_diesel_litres: number;
   actual_mileage: number;
@@ -102,6 +105,9 @@ export function calculateDriverSettlement(params: IDriverSettlementParams): IDri
   const total_advances = roundMoney(
     journeys.reduce((sum, j) => sum + (Number(j.starting_cash_advance) || 0), 0)
   );
+  const advance_funded_diesel_cost = roundMoney(
+    journeys.reduce((sum, j) => sum + (Number(j.advance_funded_diesel_cost) || 0), 0)
+  );
   const total_reimbursements = roundMoney(
     journeys.reduce((sum, j) => sum + (Number(j.total_driver_expenses) || 0), 0)
   );
@@ -124,8 +130,10 @@ export function calculateDriverSettlement(params: IDriverSettlementParams): IDri
     }
   }
 
-  // 4. Deductions Math
-  const total_deductions = roundMoney(total_advances + fuel_variance_penalty + validOtherDeductions);
+  // 4. Deductions Math:
+  // Cash fuel purchased by driver from advance reduces the advance deduction
+  const reconciled_advances = roundMoney(total_advances - advance_funded_diesel_cost);
+  const total_deductions = roundMoney(reconciled_advances + fuel_variance_penalty + validOtherDeductions);
 
   // 5. Net Amount Math
   const net_amount = roundMoney(gross_earnings - total_deductions);
@@ -152,6 +160,8 @@ export function calculateDriverSettlement(params: IDriverSettlementParams): IDri
     total_reimbursements,
     gross_earnings,
     total_advances,
+    advance_funded_diesel_cost,
+    reconciled_advances,
     benchmark_mileage: validBenchmark,
     actual_diesel_litres: total_diesel_litres,
     actual_mileage,

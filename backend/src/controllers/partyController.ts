@@ -23,6 +23,9 @@ import { Request, Response } from 'express';
 import { BillingParty, IBillingParty } from '../models/BillingParty.js';
 import { BalanceParty, IBalanceParty, BalancePartyType } from '../models/BalanceParty.js';
 import { validateGSTIN, validatePAN } from '../utils/gstinValidator.js';
+import { roundMoney } from '../utils/settlementCalculator.js';
+import { logAuditEvent } from '../utils/auditService.js';
+import { runInTransaction } from '../utils/transactionHelper.js';
 
 // ============================================================================
 // PART A: BILLING PARTIES (CUSTOMERS / SHIPPERS / CONSIGNEES)
@@ -167,7 +170,8 @@ export async function createBillingParty(req: Request, res: Response): Promise<v
       phone: phone?.trim(),
       billing_address: billing_address || {},
       payment_terms_days: Number(payment_terms_days) || 30,
-      credit_limit: Number(credit_limit) || 0,
+      credit_limit: roundMoney(Number(credit_limit) || 0),
+      enforce_credit_limit: req.body.enforce_credit_limit !== undefined ? Boolean(req.body.enforce_credit_limit) : ((Number(credit_limit) || 0) > 0),
       status: status || 'active',
     });
 
@@ -242,7 +246,15 @@ export async function updateBillingParty(req: Request, res: Response): Promise<v
     if (phone !== undefined) party.phone = phone?.trim();
     if (billing_address) party.billing_address = billing_address;
     if (payment_terms_days !== undefined) party.payment_terms_days = Number(payment_terms_days);
-    if (credit_limit !== undefined) party.credit_limit = Number(credit_limit);
+    if (credit_limit !== undefined) {
+      party.credit_limit = roundMoney(Number(credit_limit) || 0);
+      if (req.body.enforce_credit_limit === undefined) {
+        party.enforce_credit_limit = (party.credit_limit > 0);
+      }
+    }
+    if (req.body.enforce_credit_limit !== undefined) {
+      party.enforce_credit_limit = Boolean(req.body.enforce_credit_limit);
+    }
     if (status) party.status = status;
 
     await party.save();
@@ -415,7 +427,9 @@ export async function createBalanceParty(req: Request, res: Response): Promise<v
       }
     }
 
+    const initialOpening = roundMoney(Number(opening_balance) || 0);
     const party = await BalanceParty.create({
+      company_id: req.tenant?.id,
       party_name: party_name.trim(),
       party_type: party_type || 'supplier',
       contact_person: contact_person?.trim(),
@@ -423,9 +437,20 @@ export async function createBalanceParty(req: Request, res: Response): Promise<v
       email: email?.toLowerCase().trim(),
       pan_number: cleanPan,
       bank_details: bank_details || {},
-      opening_balance: Number(opening_balance) || 0,
-      current_balance: Number(opening_balance) || 0,
+      opening_balance: initialOpening,
+      current_balance: initialOpening,
       status: status || 'active',
+    });
+
+    logAuditEvent({
+      company_id: req.tenant?.id,
+      entity_type: 'party',
+      entity_id: party._id,
+      entity_identifier: party.party_name,
+      action: 'CREATE',
+      description: `Balance party ${party.party_name} created with opening balance ₹${initialOpening}`,
+      req,
+      after_snapshot: { opening_balance: initialOpening, current_balance: initialOpening },
     });
 
     res.status(201).json({
@@ -455,44 +480,94 @@ export async function updateBalanceParty(req: Request, res: Response): Promise<v
       pan_number,
       bank_details,
       status,
+      opening_balance,
     } = req.body;
 
-    const party = await BalanceParty.findOne({ _id: id, is_deleted: false });
-    if (!party) {
-      res.status(404).json({ error: 'Balance party not found.' });
+    const companyId = req.tenant?.id;
+    if (!companyId) {
+      res.status(401).json({ error: 'Tenant context required.' });
       return;
     }
 
-    if (party_name) party.party_name = party_name.trim();
-    if (party_type) party.party_type = party_type;
-    if (contact_person !== undefined) party.contact_person = contact_person?.trim();
-    if (phone) party.phone = phone.trim();
-    if (email !== undefined) party.email = email?.toLowerCase().trim();
-    if (pan_number !== undefined) {
-      if (pan_number && pan_number.trim()) {
-        const cleanPan = pan_number.toUpperCase().trim();
-        const panValidation = validatePAN(cleanPan);
-        if (!panValidation.isValid) {
-          res.status(400).json({ error: panValidation.error });
-          return;
-        }
-        party.pan_number = cleanPan;
-      } else {
-        party.pan_number = undefined;
+    // FF-ISSUE-042: Pre-check RBAC if opening balance modification is requested
+    if (opening_balance !== undefined) {
+      const userRole = req.tenant?.role || req.member?.role || (req as any).membership?.role || (req as any).user?.role;
+      const isAuthorized = userRole === 'admin' || userRole === 'accountant' || (req as any).user?.is_superadmin;
+      if (!isAuthorized) {
+        res.status(403).json({
+          error: 'Forbidden: Only administrators and accountants are authorized to modify party opening balances.',
+        });
+        return;
       }
     }
-    if (bank_details) party.bank_details = bank_details;
-    if (status) party.status = status;
 
-    await party.save();
+    const cleanPan = pan_number !== undefined && pan_number.trim() ? pan_number.toUpperCase().trim() : undefined;
+    if (cleanPan) {
+      const panValidation = validatePAN(cleanPan);
+      if (!panValidation.isValid) {
+        res.status(400).json({ error: panValidation.error });
+        return;
+      }
+    }
+
+    // ACID Transaction for opening balance and current balance synchronization
+    const result = await runInTransaction(async (session) => {
+      const party = await BalanceParty.findOne({ _id: id, company_id: companyId, is_deleted: false }).session(session);
+      if (!party) {
+        const err: any = new Error('Balance party not found.');
+        err.statusCode = 404;
+        throw err;
+      }
+
+      if (party_name) party.party_name = party_name.trim();
+      if (party_type) party.party_type = party_type;
+      if (contact_person !== undefined) party.contact_person = contact_person?.trim();
+      if (phone) party.phone = phone.trim();
+      if (email !== undefined) party.email = email?.toLowerCase().trim();
+      if (pan_number !== undefined) {
+        party.pan_number = cleanPan;
+      }
+      if (bank_details) party.bank_details = bank_details;
+      if (status) party.status = status;
+
+      let auditParams: any = null;
+
+      if (opening_balance !== undefined) {
+        const newOpening = roundMoney(Number(opening_balance) || 0);
+        const oldOpening = roundMoney(Number(party.opening_balance) || 0);
+        const oldCurrent = roundMoney(Number(party.current_balance) || 0);
+
+        if (newOpening !== oldOpening) {
+          const delta = roundMoney(newOpening - oldOpening);
+          party.opening_balance = newOpening;
+          party.current_balance = roundMoney(oldCurrent + delta);
+
+          await logAuditEvent({
+            company_id: companyId,
+            entity_type: 'party',
+            entity_id: party._id,
+            entity_identifier: party.party_name,
+            action: 'UPDATE',
+            description: `Opening balance for ${party.party_name} updated from ₹${oldOpening} to ₹${newOpening} (Delta: ₹${delta})`,
+            req,
+            before_snapshot: { opening_balance: oldOpening, current_balance: oldCurrent },
+            after_snapshot: { opening_balance: newOpening, current_balance: party.current_balance },
+            session,
+          });
+        }
+      }
+
+      await party.save({ session });
+      return { party };
+    });
 
     res.json({
-      message: `Balance party ${party.party_name} updated successfully.`,
-      party,
+      message: `Balance party ${result.party.party_name} updated successfully.`,
+      party: result.party,
     });
   } catch (error: any) {
     console.error('Error updating balance party:', error);
-    res.status(500).json({ error: error.message || 'Failed to update balance party.' });
+    res.status(error.statusCode || 500).json({ error: error.message || 'Failed to update balance party.' });
   }
 }
 

@@ -22,6 +22,7 @@ import { PageHeader } from '../../components/common/PageHeader';
 import { Modal } from '../../components/common/Modal';
 import { toast } from '../../stores/uiStore';
 import { useAuthStore } from '../../stores/authStore';
+import { CreditLimitWarningModal, CreditExposureData } from '../../components/common/CreditLimitWarningModal';
 import {
   Navigation,
   Clock,
@@ -65,6 +66,9 @@ export const JourneyDetailPage: React.FC = () => {
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
   const [isDelayModalOpen, setIsDelayModalOpen] = useState(false);
   const [isPodModalOpen, setIsPodModalOpen] = useState(false);
+  const [isCreditWarningOpen, setIsCreditWarningOpen] = useState(false);
+  const [creditExposureData, setCreditExposureData] = useState<CreditExposureData | null>(null);
+  const [creditErrorMessage, setCreditErrorMessage] = useState('');
 
   // Modal Form States
   const [milestoneForm, setMilestoneForm] = useState({ location: '', notes: '' });
@@ -74,6 +78,7 @@ export const JourneyDetailPage: React.FC = () => {
     litres: '',
     rate: '',
     payment_mode: 'fuel_card',
+    balance_party_id: '',
     slip_url: '',
   });
   const [expenseForm, setExpenseForm] = useState({
@@ -110,20 +115,39 @@ export const JourneyDetailPage: React.FC = () => {
 
   const journey = data;
 
+  // 1.5 Fetch Balance Parties for Credit Pump Vendor Selection
+  const { data: balancePartiesData } = useQuery({
+    queryKey: ['balance-parties-select'],
+    queryFn: async () => {
+      const res = await api.get('/parties/balance?limit=100');
+      return res.data;
+    },
+  });
+
   // 2. Dispatch Mutation
   const dispatchMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (overrideData?: { credit_override?: boolean; override_reason?: string }) => {
       const res = await api.put(`/operations/journeys/${id}/dispatch`, {
         note: 'Vehicle flagged active from trip command center.',
+        credit_override: overrideData?.credit_override,
+        override_reason: overrideData?.override_reason,
       });
       return res.data;
     },
     onSuccess: () => {
       toast.success('Vehicle successfully dispatched.');
+      setIsCreditWarningOpen(false);
+      setCreditExposureData(null);
       queryClient.invalidateQueries({ queryKey: ['journey-detail', id] });
     },
     onError: (err: any) => {
-      toast.error(err.response?.data?.error || err.message || 'Dispatch failed.');
+      if (err.response?.status === 409 && err.response?.data?.code === 'CREDIT_LIMIT_EXCEEDED') {
+        setCreditExposureData(err.response?.data?.exposure || null);
+        setCreditErrorMessage(err.response?.data?.error || 'Customer credit limit exceeded.');
+        setIsCreditWarningOpen(true);
+      } else {
+        toast.error(err.response?.data?.error || err.message || 'Dispatch failed.');
+      }
     },
   });
 
@@ -156,6 +180,7 @@ export const JourneyDetailPage: React.FC = () => {
         fuel_quantity_litres: Number(dieselForm.litres),
         rate_per_litre: Number(dieselForm.rate),
         payment_mode: dieselForm.payment_mode,
+        balance_party_id: dieselForm.balance_party_id || undefined,
         slip_image_url: dieselForm.slip_url,
       });
       return res.data;
@@ -169,6 +194,7 @@ export const JourneyDetailPage: React.FC = () => {
         litres: '',
         rate: '',
         payment_mode: 'fuel_card',
+        balance_party_id: '',
         slip_url: '',
       });
       queryClient.invalidateQueries({ queryKey: ['journey-detail', id] });
@@ -330,8 +356,11 @@ export const JourneyDetailPage: React.FC = () => {
   const totalDriverExpenses =
     journey?.total_driver_expenses ??
     (journey?.driver_expenses?.reduce((sum: number, exp: any) => sum + (exp.amount || 0), 0) || 0);
+  const advanceFundedDieselCost =
+    journey?.advance_funded_diesel_cost ??
+    (journey?.diesel_expenses?.filter((d: any) => d.payment_mode === 'cash')?.reduce((sum: number, d: any) => sum + (d.total_cost || 0), 0) || 0);
   const startingAdvance = journey?.starting_cash_advance || 0;
-  const driverCashBalance = startingAdvance - totalDriverExpenses;
+  const driverCashBalance = startingAdvance - totalDriverExpenses - advanceFundedDieselCost;
   const totalDelayHours =
     journey?.delays?.reduce((sum: number, dl: any) => sum + (Number(dl.delay_hours) || 0), 0) || 0;
 
@@ -1080,7 +1109,7 @@ export const JourneyDetailPage: React.FC = () => {
       {activeTab === 'expenses' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
           {/* Top Cash Advance Reconciliation Bar */}
-          <div className="grid grid-cols-1 md:grid-cols-3" style={{ gap: '1rem' }}>
+          <div className="grid grid-cols-1 md:grid-cols-4" style={{ gap: '1rem' }}>
             <div className="card" style={{ padding: '1.25rem' }}>
               <div className="metric-tile-label">Starting Cash Advance</div>
               <div className="metric-tile-value" style={{ fontSize: 'var(--font-size-xl)' }}>
@@ -1092,12 +1121,22 @@ export const JourneyDetailPage: React.FC = () => {
             </div>
 
             <div className="card" style={{ padding: '1.25rem' }}>
-              <div className="metric-tile-label">Total Logged Expenses</div>
+              <div className="metric-tile-label">En-Route Trip Expenses</div>
               <div className="metric-tile-value" style={{ fontSize: 'var(--font-size-xl)' }}>
                 ₹{totalDriverExpenses.toLocaleString('en-IN')}
               </div>
               <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
                 Tolls, weighbridges, tipping & repairs
+              </div>
+            </div>
+
+            <div className="card" style={{ padding: '1.25rem' }}>
+              <div className="metric-tile-label">Advance-Funded Diesel (Cash)</div>
+              <div className="metric-tile-value" style={{ fontSize: 'var(--font-size-xl)', color: 'var(--color-amber-700)' }}>
+                ₹{advanceFundedDieselCost.toLocaleString('en-IN')}
+              </div>
+              <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                Fuel bought with driver cash advance
               </div>
             </div>
 
@@ -1525,6 +1564,27 @@ export const JourneyDetailPage: React.FC = () => {
             </div>
           </div>
 
+          {dieselForm.payment_mode === 'credit' && (
+            <div className="form-group" style={{ marginBottom: '1rem' }}>
+              <label className="form-label">
+                Pump Vendor / Balance Party Account <span style={{ color: 'var(--color-danger)' }}>*</span>
+              </label>
+              <select
+                className="form-control"
+                value={dieselForm.balance_party_id}
+                onChange={(e) => setDieselForm({ ...dieselForm, balance_party_id: e.target.value })}
+                required
+              >
+                <option value="">Select Pump Vendor / Supplier</option>
+                {balancePartiesData?.parties?.map((p: any) => (
+                  <option key={p._id} value={p._id}>
+                    {p.name} {p.type ? `(${p.type.toUpperCase()})` : ''} — Bal: ₹{(p.current_balance || 0).toLocaleString('en-IN')}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: '1rem', marginBottom: '1rem' }}>
             <div className="form-group" style={{ marginBottom: 0 }}>
               <label className="form-label">
@@ -1582,7 +1642,7 @@ export const JourneyDetailPage: React.FC = () => {
               type="button"
               className="btn btn-secondary"
               onClick={() => {
-                setDieselForm({ pump_name: '', slip_number: '', litres: '', rate: '', payment_mode: 'fuel_card', slip_url: '' });
+                setDieselForm({ pump_name: '', slip_number: '', litres: '', rate: '', payment_mode: 'fuel_card', balance_party_id: '', slip_url: '' });
                 setIsDieselModalOpen(false);
               }}
               disabled={dieselMutation.isPending}
@@ -1858,6 +1918,18 @@ export const JourneyDetailPage: React.FC = () => {
           </div>
         </form>
       </Modal>
+
+      {/* DEC-007 OPTION B CREDIT LIMIT WARNING & OVERRIDE MODAL */}
+      <CreditLimitWarningModal
+        isOpen={isCreditWarningOpen}
+        onClose={() => setIsCreditWarningOpen(false)}
+        exposure={creditExposureData}
+        errorMessage={creditErrorMessage}
+        onAuthorizeOverride={async (reason) => {
+          await dispatchMutation.mutateAsync({ credit_override: true, override_reason: reason });
+        }}
+        isSubmitting={dispatchMutation.isPending}
+      />
     </div>
   );
 };

@@ -114,6 +114,7 @@ export interface IDieselExpense {
   rate_per_litre: number;
   total_cost: number;
   payment_mode: FuelPaymentMode;
+  balance_party_id?: Types.ObjectId;
   slip_image_url?: string;
 }
 
@@ -196,6 +197,7 @@ export interface ITruckJourney extends Document {
   // Computed Totals (Stored for high-speed indexing & queries)
   total_diesel_litres: number;
   total_diesel_cost: number;
+  advance_funded_diesel_cost: number;
   total_driver_expenses: number;
   actual_mileage_km_per_litre: number;
 
@@ -400,6 +402,10 @@ const TruckJourneySchema = new Schema<ITruckJourney>(
           enum: ['cash', 'fuel_card', 'credit'],
           default: 'credit',
         },
+        balance_party_id: {
+          type: Schema.Types.ObjectId,
+          ref: 'BalanceParty',
+        },
         slip_image_url: { type: String, trim: true },
       },
     ],
@@ -454,6 +460,10 @@ const TruckJourneySchema = new Schema<ITruckJourney>(
       default: 0,
     },
     total_diesel_cost: {
+      type: Number,
+      default: 0,
+    },
+    advance_funded_diesel_cost: {
       type: Number,
       default: 0,
     },
@@ -522,14 +532,19 @@ TruckJourneySchema.pre('save', function (next) {
   // 2. Compute diesel totals
   let litresSum = 0;
   let costSum = 0;
+  let advanceFundedFuelSum = 0;
   if (this.diesel_expenses && this.diesel_expenses.length > 0) {
     for (const fuel of this.diesel_expenses) {
       litresSum += fuel.fuel_quantity_litres || 0;
       costSum += fuel.total_cost || 0;
+      if (fuel.payment_mode === 'cash') {
+        advanceFundedFuelSum += fuel.total_cost || 0;
+      }
     }
   }
   this.total_diesel_litres = Math.round(litresSum * 100) / 100;
   this.total_diesel_cost = Math.round(costSum * 100) / 100;
+  this.advance_funded_diesel_cost = Math.round(advanceFundedFuelSum * 100) / 100;
 
   // 3. Compute driver expense totals
   let expenseSum = 0;
