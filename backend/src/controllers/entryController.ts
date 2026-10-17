@@ -13,6 +13,8 @@ import { Types } from 'mongoose';
 import crypto from 'crypto';
 import { Entry } from '../models/Entry.js';
 import { Company } from '../models/Company.js';
+import { Branch } from '../models/Branch.js';
+import { TruckJourney } from '../models/TruckJourney.js';
 import { notifyLRGenerated } from '../utils/notificationService.js';
 import { logAuditEvent } from '../utils/auditService.js';
 import { validateTenantOwnership, TenantOwnershipError } from '../utils/ownershipValidator.js';
@@ -59,10 +61,19 @@ export const getEntries = async (req: Request, res: Response) => {
       if (req.query.to_date) query.lr_date.$lte = new Date(req.query.to_date as string);
     }
 
+    if (req.query.branch_id) {
+      const branch = await Branch.findOne({ _id: req.query.branch_id, company_id: companyId });
+      if (!branch) {
+        return res.status(404).json({ error: 'Selected regional branch not found in your workspace.' });
+      }
+      query.branch_id = branch._id;
+    }
+
     const [entries, total] = await Promise.all([
       Entry.find(query)
         .populate('billing_party_id', 'name gstin')
         .populate('journey_id', 'journey_number status')
+        .populate('branch_id', 'branch_name branch_code is_head_office')
         .sort({ lr_date: -1, created_at: -1 })
         .skip(skip)
         .limit(limit)
@@ -124,7 +135,8 @@ export const getEntryById = async (req: Request, res: Response) => {
       is_deleted: false,
     })
       .populate('billing_party_id')
-      .populate('journey_id');
+      .populate('journey_id')
+      .populate('branch_id', 'branch_name branch_code is_head_office');
 
     if (!entry) {
       return res.status(404).json({ error: 'Lorry Receipt not found.' });
@@ -208,20 +220,50 @@ export const createEntry = async (req: Request, res: Response) => {
       }
     }
 
-    // Fetch company defaults for prefix
+    // Validate branch if branch_id is supplied, or inherit from associated journey (trip/LR workflow)
+    let branch: any = null;
+    if (req.body.branch_id) {
+      branch = await Branch.findOne({ _id: req.body.branch_id, company_id: companyId });
+      if (!branch) {
+        return res.status(404).json({ error: 'Selected regional branch not found in your workspace.' });
+      }
+      if (!branch.is_active) {
+        return res.status(400).json({ error: 'Cannot issue Lorry Receipt for an inactive regional branch.' });
+      }
+    } else if (req.body.journey_id) {
+      const journey = await TruckJourney.findOne({ _id: req.body.journey_id, company_id: companyId });
+      if (journey && journey.branch_id) {
+        const journeyBranch = await Branch.findOne({ _id: journey.branch_id, company_id: companyId });
+        if (journeyBranch && journeyBranch.is_active) {
+          branch = journeyBranch;
+        }
+      }
+    }
+
     const company = await Company.findById(companyId);
-    const lrPrefix = company?.settings?.lr_prefix || 'LR-';
 
     // 2. Concurrency-Safe Atomic LR Numbering
     let lr_no = req.body.lr_no?.trim()?.toUpperCase();
     if (!lr_no) {
-      const updatedCompany = await Company.findByIdAndUpdate(
-        companyId,
-        { $inc: { 'counters.lr_seq': 1 } },
-        { new: true, upsert: false }
-      );
-      const seq = updatedCompany?.counters?.lr_seq || 1;
-      lr_no = `${lrPrefix}${String(seq).padStart(4, '0')}`;
+      if (branch) {
+        const lrPrefix = branch.lr_prefix || `${branch.branch_code}-LR-`;
+        const updatedBranch = await Branch.findOneAndUpdate(
+          { _id: branch._id, company_id: companyId },
+          { $inc: { 'counters.lr_seq': 1 } },
+          { new: true, upsert: false }
+        );
+        const seq = updatedBranch?.counters?.lr_seq || 1;
+        lr_no = `${lrPrefix}${String(seq).padStart(4, '0')}`;
+      } else {
+        const lrPrefix = company?.settings?.lr_prefix || 'LR-';
+        const updatedCompany = await Company.findByIdAndUpdate(
+          companyId,
+          { $inc: { 'counters.lr_seq': 1 } },
+          { new: true, upsert: false }
+        );
+        const seq = updatedCompany?.counters?.lr_seq || 1;
+        lr_no = `${lrPrefix}${String(seq).padStart(4, '0')}`;
+      }
     }
 
     // Check uniqueness
@@ -240,6 +282,7 @@ export const createEntry = async (req: Request, res: Response) => {
     const newEntry = new Entry({
       ...req.body,
       company_id: companyId,
+      branch_id: branch?._id || undefined,
       bill_no,
       lr_no,
       status: 'active',

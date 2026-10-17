@@ -5,12 +5,12 @@
 - **ID:** FF-ISSUE-051
 - **Category:** UI-UX
 - **Priority:** Medium
-- **Status:** Observed
+- **Status:** **Resolved (Batch G)**
 - **Affected module:** Regional Branches & Hubs
 - **Source:** `docs/testing/FLEET_FLOW_MANUAL_TESTING_AND_DECISION_HANDOFF.md` (Section 4.E, Regional Branch creation form UI)
 - **Related issues:** [FF-ISSUE-052](FF-ISSUE-052-branch-listing-ui-layout.md), [FF-ISSUE-053](FF-ISSUE-053-branch-hub-operational-integration.md)
 - **Related decisions:** [DEC-010](../../decisions/DEC-010-branches-and-hubs-tenancy-model.md)
-- **Implementation status:** Not implemented
+- **Implementation status:** **Implemented & Verified (Batch G Phase G4)**
 
 ## 1. Summary
 
@@ -50,19 +50,23 @@ Degraded visual consistency and ergonomic friction for company administrators co
 Refactor branch creation form into a standard card container (`max-w-3xl mx-auto`) with clear fieldsets and design token borders.
 
 ## 9. Acceptance criteria
-
-- [ ] Branch creation form renders inside a structured, bounded card container.
-- [ ] Inputs have visible, accessible borders and focus states.
-- [ ] Save and Cancel buttons are cleanly aligned.
-
+ 
+- [x] Branch creation form renders inside a structured, bounded card container (`maxWidth: 840px`).
+- [x] Inputs have visible, accessible borders and focus states (`.form-control`, 3px blue focus ring).
+- [x] Save and Cancel buttons are cleanly aligned at bottom right in `.card-footer`.
+ 
 ## 10. Required tests
-
-- Component visual test across standard desktop resolutions.
-
+ 
+- Component visual and responsive layout verification across desktop and mobile viewports.
+- TypeScript compilation and Vite build (`npm --prefix frontend run build`).
+- Backend branch creation integration suite (`npm --prefix backend run test -- src/tests/integration/phase7BatchG2ControllerAndNumbering.test.ts`).
+ 
 ## 11. Dependencies and related issues
-
+ 
 - Related to [FF-ISSUE-052](FF-ISSUE-052-branch-listing-ui-layout.md), [DEC-010](../../decisions/DEC-010-branches-and-hubs-tenancy-model.md).
-
+ 
 ## 12. Verification evidence
-
-- Implementation and verification evidence pending.
+ 
+- Implemented and audited in [`BATCH_G4_AUDIT_REPORT.md`](../../audit/BATCH_G4_AUDIT_REPORT.md).
+- Frontend builds with 0 errors (`npm --prefix frontend run build`).
+- Backend branch controller tests pass (23/23).

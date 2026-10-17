@@ -53,6 +53,7 @@ export const JourneyListPage: React.FC = () => {
   // State
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState('all');
+  const [branchFilter, setBranchFilter] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
 
   // Quick Milestone Modal state
@@ -70,9 +71,22 @@ export const JourneyListPage: React.FC = () => {
     },
   });
 
+  // 1.5 Fetch company branches for operational filtering (DEC-010)
+  const { data: branchesData } = useQuery({
+    queryKey: ['company-branches'],
+    queryFn: async () => {
+      const res = await api.get('/company/branches');
+      return res.data?.branches || [];
+    },
+  });
+
+  const activeBranches = Array.isArray(branchesData)
+    ? branchesData.filter((b: any) => b.is_active)
+    : [];
+
   // 2. Fetch Journeys List
   const { data: journeysData, isLoading } = useQuery({
-    queryKey: ['journeys', page, statusFilter, searchQuery],
+    queryKey: ['journeys', page, statusFilter, searchQuery, branchFilter],
     queryFn: async () => {
       const params = new URLSearchParams({
         page: page.toString(),
@@ -80,6 +94,9 @@ export const JourneyListPage: React.FC = () => {
         status: statusFilter,
         search: searchQuery,
       });
+      if (branchFilter) {
+        params.append('branch_id', branchFilter);
+      }
       const res = await api.get(`/operations/journeys?${params.toString()}`);
       return res.data;
     },
@@ -293,9 +310,28 @@ export const JourneyListPage: React.FC = () => {
             ))}
           </div>
 
-          {/* Search Box */}
-          <div className="filter-toolbar-right" style={{ minWidth: '240px' }}>
-            <div style={{ position: 'relative', width: '100%' }}>
+          {/* Branch & Search Controls */}
+          <div className="filter-toolbar-right" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+            {activeBranches.length > 0 && (
+              <select
+                className="form-control"
+                value={branchFilter}
+                onChange={(e) => {
+                  setBranchFilter(e.target.value);
+                  setPage(1);
+                }}
+                style={{ fontSize: 'var(--font-size-xs)', height: '38px', minWidth: '160px', padding: '0.375rem 0.75rem' }}
+              >
+                <option value="">All Branches</option>
+                {activeBranches.map((b: any) => (
+                  <option key={b._id} value={b._id}>
+                    {b.branch_name} ({b.branch_code})
+                  </option>
+                ))}
+              </select>
+            )}
+
+            <div style={{ position: 'relative', minWidth: '240px' }}>
               <Search
                 size={16}
                 style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }}
@@ -323,6 +359,7 @@ export const JourneyListPage: React.FC = () => {
             <thead>
               <tr>
                 <th>Journey ID</th>
+                <th>Origin Branch</th>
                 <th>Commercial Asset</th>
                 <th>Assigned Driver</th>
                 <th>Freight Route</th>
@@ -335,13 +372,13 @@ export const JourneyListPage: React.FC = () => {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={8} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+                  <td colSpan={9} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
                     Loading dispatch roster...
                   </td>
                 </tr>
               ) : !journeysData?.journeys || journeysData.journeys.length === 0 ? (
                 <tr>
-                  <td colSpan={8} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+                  <td colSpan={9} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
                     No trips match your current filter criteria.
                   </td>
                 </tr>
@@ -368,6 +405,22 @@ export const JourneyListPage: React.FC = () => {
                         <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
                           {j.billing_party_id.name}
                         </div>
+                      )}
+                    </td>
+                    <td>
+                      {j.branch_id ? (
+                        <div>
+                          <span className="badge badge-info" style={{ fontSize: '0.6875rem' }}>
+                            {j.branch_id.branch_code}
+                          </span>
+                          <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: '0.125rem' }}>
+                            {j.branch_id.branch_name}
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="badge badge-neutral" style={{ fontSize: '0.6875rem' }}>
+                          Company Direct
+                        </span>
                       )}
                     </td>
                     <td>

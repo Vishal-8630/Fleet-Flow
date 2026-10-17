@@ -63,6 +63,7 @@ export interface IInvoice extends Document {
   invoice_number: string;
   invoice_date: Date;
   due_date: Date;
+  branch_id?: Types.ObjectId; // Responsible / issuing regional branch (DEC-010)
 
   // Billing Party (Shipper)
   billing_party_id: Types.ObjectId;
@@ -134,6 +135,11 @@ const InvoiceSchema = new Schema<IInvoice>(
     due_date: {
       type: Date,
       required: true,
+    },
+    branch_id: {
+      type: Schema.Types.ObjectId,
+      ref: 'Branch',
+      index: true,
     },
 
     billing_party_id: {
@@ -275,6 +281,7 @@ const InvoiceSchema = new Schema<IInvoice>(
 // Compound unique index per tenant company
 InvoiceSchema.index({ company_id: 1, invoice_number: 1 }, { unique: true });
 InvoiceSchema.index({ company_id: 1, invoice_date: -1 });
+InvoiceSchema.index({ company_id: 1, branch_id: 1, invoice_date: -1 });
 InvoiceSchema.index({ company_id: 1, status: 1, due_date: 1 });
 
 // Multi-tenant isolation plugin

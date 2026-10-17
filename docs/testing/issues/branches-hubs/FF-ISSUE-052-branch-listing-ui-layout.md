@@ -5,12 +5,12 @@
 - **ID:** FF-ISSUE-052
 - **Category:** UI-UX
 - **Priority:** Medium
-- **Status:** Observed
+- **Status:** **Resolved (Batch G)**
 - **Affected module:** Regional Branches & Hubs
 - **Source:** `docs/testing/FLEET_FLOW_MANUAL_TESTING_AND_DECISION_HANDOFF.md` (Section 4.E, Regional Branch listing UI)
 - **Related issues:** [FF-ISSUE-051](FF-ISSUE-051-branch-creation-form-ui.md), [FF-ISSUE-053](FF-ISSUE-053-branch-hub-operational-integration.md)
 - **Related decisions:** [DEC-010](../../decisions/DEC-010-branches-and-hubs-tenancy-model.md)
-- **Implementation status:** Not implemented
+- **Implementation status:** **Implemented & Verified (Batch G Phase G5)**
 
 ## 1. Summary
 
@@ -53,13 +53,17 @@ Replace flat div rendering with Fleet Flow's standard `<DataTable />` or `<Branc
 
 ## 9. Acceptance criteria
 
-- [ ] Branches are rendered in clean, structured cards or table rows.
-- [ ] Each branch displays explicit Edit and Deactivate action triggers.
-- [ ] Search and status filters are present for multi-branch companies.
+- [x] Branches are rendered in clean, structured cards with `.card-header`, `.card-body`, and `.card-footer`.
+- [x] Each branch displays explicit Edit, Deactivate, and Delete action triggers.
+- [x] Search (by name, code, city, state) and status filters (All, Active, Inactive) with dynamic counters are present.
+- [x] Head Office branch actions (deactivation, deletion) are strictly protected in the UI.
+- [x] Deletion gracefully captures HTTP 409 `CANNOT_DELETE_BRANCH_WITH_RECORDS` and provides "Deactivate Branch Instead" guidance.
 
 ## 10. Required tests
 
-- Component tests for branch list rendering and action trigger handlers.
+- Unit/contract test suite for branch list rendering, filters, and action trigger handlers (`backend/src/tests/integration/phase7BatchG5ListingAndActions.test.ts`).
+- Frontend production build verification (`npm --prefix frontend run build`).
+- Full regression suite across Phase 7 (`npm --prefix backend run test -- src/tests/integration/phase7`).
 
 ## 11. Dependencies and related issues
 
@@ -67,4 +71,7 @@ Replace flat div rendering with Fleet Flow's standard `<DataTable />` or `<Branc
 
 ## 12. Verification evidence
 
-- Implementation and verification evidence pending.
+- Implemented and audited in [`BATCH_G5_AUDIT_REPORT.md`](../../audit/BATCH_G5_AUDIT_REPORT.md).
+- Automated test suite passed (20/20 tests in `phase7BatchG5ListingAndActions.test.ts`).
+- Full regression suite passed (75/75 tests in Phase 7).
+- Frontend production build completed with 0 errors (`✓ built in 5.06s`).

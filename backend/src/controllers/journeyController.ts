@@ -28,6 +28,7 @@ import { TruckJourney, JourneyStatus } from '../models/TruckJourney.js';
 import { Truck } from '../models/Truck.js';
 import { Driver } from '../models/Driver.js';
 import { Company } from '../models/Company.js';
+import { Branch } from '../models/Branch.js';
 import { BalanceParty } from '../models/BalanceParty.js';
 import { BillingParty } from '../models/BillingParty.js';
 import { Settlement } from '../models/Settlement.js';
@@ -51,9 +52,17 @@ export const getJourneys = async (req: Request, res: Response) => {
     const limit = parseInt(req.query.limit as string) || 15;
     const skip = (page - 1) * limit;
 
-    const { status, truck_id, driver_id, search, from_date, to_date } = req.query;
+    const { status, truck_id, driver_id, search, from_date, to_date, branch_id } = req.query;
 
     const filter: any = { is_deleted: { $ne: true } };
+
+    if (branch_id) {
+      const branch = await Branch.findOne({ _id: branch_id, company_id: req.tenant?.id });
+      if (!branch) {
+        return res.status(404).json({ error: 'Selected regional branch not found in your workspace.' });
+      }
+      filter.branch_id = branch._id;
+    }
 
     if (status && status !== 'all') {
       filter.status = status;
@@ -89,6 +98,7 @@ export const getJourneys = async (req: Request, res: Response) => {
         .populate('truck_id', 'truck_no make model body_type status')
         .populate('driver_id', 'name phone license_number status')
         .populate('billing_party_id', 'name trade_name gstin billing_address')
+        .populate('branch_id', 'branch_name branch_code is_head_office')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit),
@@ -185,6 +195,7 @@ export const getJourneyById = async (req: Request, res: Response) => {
       .populate('truck_id')
       .populate('driver_id')
       .populate('billing_party_id')
+      .populate('branch_id', 'branch_name branch_code is_head_office')
       .populate('status_history.actor_id', 'name email role');
 
     if (!journey || journey.is_deleted) {
@@ -346,7 +357,44 @@ export const createJourney = async (req: Request, res: Response) => {
       }
     }
 
-    // 6. Concurrency-Safe Atomic Sequential Journey Number
+    // 6. Validate or Auto-Resolve Operational Regional Branch (DEC-010)
+    let branch: any = null;
+    if (req.body.branch_id) {
+      branch = await Branch.findOne({ _id: req.body.branch_id, company_id: companyId });
+      if (!branch) {
+        return res.status(404).json({ error: 'Selected regional branch not found in your workspace.' });
+      }
+      if (!branch.is_active) {
+        return res.status(400).json({ error: 'Cannot dispatch trip for an inactive regional branch.' });
+      }
+    } else {
+      const activeBranches = await Branch.find({ company_id: companyId, is_active: true });
+      if (activeBranches.length === 1) {
+        // Frictionless auto-assignment for single-branch workspaces
+        branch = activeBranches[0];
+      } else if (activeBranches.length > 1) {
+        // Multi-branch workspaces: default to user's assigned branch or Head Office
+        const memberId = req.member?._id || (req as any).membership?._id || (req as any).user?._id;
+        let defaultBranch: any = null;
+        if (memberId) {
+          defaultBranch = activeBranches.find((b) =>
+            b.member_ids?.some((m) => m.toString() === memberId.toString())
+          );
+        }
+        if (!defaultBranch) {
+          defaultBranch = activeBranches.find((b) => b.is_head_office);
+        }
+        if (defaultBranch) {
+          branch = defaultBranch;
+        } else {
+          return res.status(400).json({
+            error: 'Active regional branch is required for trip dispatch in multi-branch workspaces.',
+          });
+        }
+      }
+    }
+
+    // 7. Concurrency-Safe Atomic Sequential Journey Number
     const updatedCompany = await Company.findByIdAndUpdate(
       companyId,
       { $inc: { 'counters.journey_seq': 1 } },
@@ -355,12 +403,13 @@ export const createJourney = async (req: Request, res: Response) => {
     const seq = updatedCompany?.counters?.journey_seq || (await TruckJourney.countDocuments({ company_id: companyId })) + 1;
     const journey_number = `JRN-${String(seq).padStart(4, '0')}`;
 
-    // 7. Use current truck odometer if start_odometer_kms not supplied
+    // 8. Use current truck odometer if start_odometer_kms not supplied
     const initialOdometer =
       typeof start_odometer_kms === 'number' ? start_odometer_kms : truck.current_odometer_kms || 0;
 
     const journey = new TruckJourney({
       company_id: companyId,
+      branch_id: branch?._id || undefined,
       journey_number,
       status,
       status_history: [

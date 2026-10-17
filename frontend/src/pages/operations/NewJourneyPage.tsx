@@ -41,6 +41,7 @@ import {
   Save,
   ArrowLeft,
   Package,
+  Building2,
 } from 'lucide-react';
 
 export const NewJourneyPage: React.FC = () => {
@@ -49,6 +50,7 @@ export const NewJourneyPage: React.FC = () => {
 
   // Form State
   const [formData, setFormData] = useState({
+    branch_id: '',
     truck_id: '',
     driver_id: '',
     billing_party_id: '',
@@ -99,6 +101,33 @@ export const NewJourneyPage: React.FC = () => {
     },
   });
 
+  // 4. Fetch company branches for operational attribution (DEC-010)
+  const { data: branchesData, isLoading: branchesLoading } = useQuery({
+    queryKey: ['company-branches'],
+    queryFn: async () => {
+      const res = await api.get('/company/branches');
+      return res.data?.branches || [];
+    },
+  });
+
+  const activeBranches = Array.isArray(branchesData)
+    ? branchesData.filter((b: any) => b.is_active)
+    : [];
+
+  // Default branch assignment rules (DEC-010 / G3)
+  useEffect(() => {
+    if (activeBranches.length === 1 && !formData.branch_id) {
+      // Single active branch: frictionless auto-selection
+      setFormData((prev) => ({ ...prev, branch_id: activeBranches[0]._id }));
+    } else if (activeBranches.length > 1 && !formData.branch_id) {
+      // Multi-branch: default to Head Office if available
+      const headOffice = activeBranches.find((b: any) => b.is_head_office);
+      if (headOffice) {
+        setFormData((prev) => ({ ...prev, branch_id: headOffice._id }));
+      }
+    }
+  }, [activeBranches]);
+
   // Automatically pre-fill odometer when a truck is selected
   useEffect(() => {
     if (formData.truck_id && trucksData?.trucks) {
@@ -122,10 +151,11 @@ export const NewJourneyPage: React.FC = () => {
   const isTruckExpired = selectedTruck && selectedTruck.compliance_status === 'EXPIRED';
   const isDriverBusy = selectedDriver && selectedDriver.status !== 'active';
 
-  // 4. Create Journey Mutation
+  // 5. Create Journey Mutation
   const createMutation = useMutation({
     mutationFn: async (dispatchImmediately: boolean) => {
       const payload = {
+        branch_id: formData.branch_id || undefined,
         truck_id: formData.truck_id,
         driver_id: formData.driver_id,
         billing_party_id: formData.billing_party_id || undefined,
@@ -197,6 +227,11 @@ export const NewJourneyPage: React.FC = () => {
 
     if (dispatchImmediately && isTruckExpired) {
       toast.error(`Vehicle ${selectedTruck?.truck_no} has expired compliance certificates.`);
+      return;
+    }
+
+    if (activeBranches.length > 1 && !formData.branch_id) {
+      toast.error('Please select the originating regional branch for this trip.');
       return;
     }
 
@@ -290,6 +325,54 @@ export const NewJourneyPage: React.FC = () => {
                 </div>
               )}
             </div>
+          </div>
+
+          {/* Regional Dispatch Branch Selection (DEC-010) */}
+          <div className="form-group" style={{ marginTop: '1.25rem', marginBottom: 0, borderTop: '1px solid var(--border-light)', paddingTop: '1.25rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+              <label className="form-label" style={{ marginBottom: 0, display: 'inline-flex', alignItems: 'center', gap: '0.375rem' }}>
+                <Building2 size={16} color="var(--color-primary-600)" />
+                Originating Regional Branch
+                {activeBranches.length > 1 && <span style={{ color: 'var(--color-danger)' }}>*</span>}
+              </label>
+              {activeBranches.length === 1 && (
+                <span className="badge badge-info" style={{ fontSize: '0.6875rem' }}>
+                  Auto-selected: Primary Branch
+                </span>
+              )}
+              {activeBranches.length === 0 && (
+                <span className="badge badge-neutral" style={{ fontSize: '0.6875rem' }}>
+                  Company Direct / Unbranched
+                </span>
+              )}
+            </div>
+
+            {branchesLoading ? (
+              <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>Loading branch configuration...</div>
+            ) : activeBranches.length === 0 ? (
+              <div style={{ backgroundColor: 'var(--color-slate-50)', padding: '0.75rem', borderRadius: 'var(--radius-md)', fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)', border: '1px solid var(--border-light)' }}>
+                No regional branches configured. Trip will be attributed company-wide to Head Office direct.
+              </div>
+            ) : (
+              <>
+                <select
+                  className="form-control"
+                  value={formData.branch_id}
+                  onChange={(e) => setFormData({ ...formData, branch_id: e.target.value })}
+                  required={activeBranches.length > 1}
+                >
+                  {activeBranches.length > 1 && <option value="">-- Choose Originating Regional Branch --</option>}
+                  {activeBranches.map((b: any) => (
+                    <option key={b._id} value={b._id}>
+                      {b.branch_name} ({b.branch_code}) {b.is_head_office ? '★ Head Office' : ''} — {[b.city, b.state].filter(Boolean).join(', ')}
+                    </option>
+                  ))}
+                </select>
+                <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)', marginTop: '0.375rem' }}>
+                  Originating dispatch branch responsible for trip accounting, LR generation sequence, and commercial profitability attribution.
+                </div>
+              </>
+            )}
           </div>
         </div>
 

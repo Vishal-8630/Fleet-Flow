@@ -23,6 +23,10 @@ export interface IBranch extends Document {
   phone?: string;
   lr_prefix: string;           // e.g. 'MUM-LR-', 'BHW-'
   invoice_prefix: string;      // e.g. 'INV-MUM-'
+  counters?: {
+    lr_seq: number;
+    invoice_seq: number;
+  };
   is_head_office: boolean;
   is_active: boolean;
   member_ids: Types.ObjectId[];
@@ -43,6 +47,10 @@ const BranchSchema = new Schema<IBranch>(
     phone: { type: String, trim: true },
     lr_prefix: { type: String, required: true, default: 'LR-', trim: true },
     invoice_prefix: { type: String, required: true, default: 'INV-', trim: true },
+    counters: {
+      lr_seq: { type: Number, default: 0 },
+      invoice_seq: { type: Number, default: 0 },
+    },
     is_head_office: { type: Boolean, default: false },
     is_active: { type: Boolean, default: true },
     member_ids: [{ type: Schema.Types.ObjectId, ref: 'CompanyMember' }],
@@ -51,6 +59,7 @@ const BranchSchema = new Schema<IBranch>(
 );
 
 BranchSchema.index({ company_id: 1, branch_code: 1 }, { unique: true });
+BranchSchema.index({ company_id: 1, is_active: 1 });
 BranchSchema.plugin(tenantPlugin);
 
 export const Branch = mongoose.model<IBranch>('Branch', BranchSchema);

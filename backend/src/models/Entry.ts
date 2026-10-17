@@ -84,6 +84,7 @@ export interface IEntry extends Document {
   rate_per_tonne?: number;
 
   // Operational & Billing Linkages
+  branch_id?: Types.ObjectId; // Responsible / originating regional branch (DEC-010)
   journey_id?: Types.ObjectId;
   invoice_id?: Types.ObjectId;
   status: LRStatus;
@@ -239,6 +240,11 @@ const EntrySchema = new Schema<IEntry>(
       min: 0,
     },
 
+    branch_id: {
+      type: Schema.Types.ObjectId,
+      ref: 'Branch',
+      index: true,
+    },
     journey_id: {
       type: Schema.Types.ObjectId,
       ref: 'TruckJourney',
@@ -278,6 +284,7 @@ EntrySchema.index({ company_id: 1, lr_no: 1 }, { unique: true });
 EntrySchema.index({ tracking_token: 1 }, { unique: true, sparse: true });
 EntrySchema.index({ company_id: 1, bill_no: 1 });
 EntrySchema.index({ company_id: 1, lr_date: -1 });
+EntrySchema.index({ company_id: 1, branch_id: 1, lr_date: -1 });
 EntrySchema.index({ company_id: 1, status: 1, lr_date: -1 });
 EntrySchema.index({ 'custom_fields.$**': 1 });
 

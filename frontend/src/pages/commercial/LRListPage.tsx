@@ -35,6 +35,7 @@ import {
   User,
   Shield,
   Layers,
+  Building2,
 } from 'lucide-react';
 
 export const LRListPage: React.FC = () => {
@@ -47,6 +48,7 @@ export const LRListPage: React.FC = () => {
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState('');
   const [termsFilter, setTermsFilter] = useState('');
+  const [branchFilter, setBranchFilter] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
 
   // Modals state
@@ -56,6 +58,8 @@ export const LRListPage: React.FC = () => {
 
   // Form state (persists until Cancel or Submit)
   const initialForm = {
+    branch_id: '',
+    journey_id: '',
     lr_no: '',
     bill_no: '',
     lr_date: new Date().toISOString().split('T')[0],
@@ -99,13 +103,40 @@ export const LRListPage: React.FC = () => {
     },
   });
 
+  // Branch configuration for regional numbering & attribution (DEC-010)
+  const { data: branchesData } = useQuery({
+    queryKey: ['company-branches'],
+    enabled: isUnlocked,
+    queryFn: async () => {
+      const res = await api.get('/company/branches');
+      return res.data?.branches || [];
+    },
+  });
+
+  const activeBranches = Array.isArray(branchesData)
+    ? branchesData.filter((b: any) => b.is_active)
+    : [];
+
+  // Active journeys for linked LR creation
+  const { data: activeJourneysData } = useQuery({
+    queryKey: ['active-journeys-lookup'],
+    enabled: isUnlocked && isCreateModalOpen,
+    queryFn: async () => {
+      const res = await api.get('/operations/journeys', {
+        params: { status: 'active', limit: 100 },
+      });
+      return res.data?.journeys || [];
+    },
+  });
+
   const { data: lrsData, isLoading } = useQuery({
-    queryKey: ['lr-list', page, statusFilter, termsFilter, searchQuery],
+    queryKey: ['lr-list', page, statusFilter, termsFilter, branchFilter, searchQuery],
     enabled: isUnlocked,
     queryFn: async () => {
       const params: any = { page, limit: 12 };
       if (statusFilter) params.status = statusFilter;
       if (termsFilter) params.freight_terms = termsFilter;
+      if (branchFilter) params.branch_id = branchFilter;
       if (searchQuery) params.search = searchQuery;
       const res = await api.get('/commercial/entries', { params });
       return res.data;
@@ -154,6 +185,59 @@ export const LRListPage: React.FC = () => {
     },
   });
 
+  // Default branch assignment rules when opening create modal (DEC-010)
+  React.useEffect(() => {
+    if (isCreateModalOpen && !formData.journey_id && !formData.branch_id) {
+      if (activeBranches.length === 1) {
+        setFormData((prev) => ({ ...prev, branch_id: activeBranches[0]._id }));
+      } else if (activeBranches.length > 1) {
+        const headOffice = activeBranches.find((b: any) => b.is_head_office);
+        if (headOffice) {
+          setFormData((prev) => ({ ...prev, branch_id: headOffice._id }));
+        }
+      }
+    }
+  }, [isCreateModalOpen, activeBranches]);
+
+  const handleJourneyChange = (journeyId: string) => {
+    if (!journeyId) {
+      setFormData((prev) => ({ ...prev, journey_id: '' }));
+      return;
+    }
+
+    const selectedJourney = activeJourneysData?.find((j: any) => j._id === journeyId);
+    if (!selectedJourney) return;
+
+    const journeyBranchId = selectedJourney.branch_id?._id || selectedJourney.branch_id;
+    const originCity = selectedJourney.from_location?.city;
+    const originState = selectedJourney.from_location?.state;
+    const destCity = selectedJourney.to_location?.city;
+    const destState = selectedJourney.to_location?.state;
+
+    setFormData((prev) => ({
+      ...prev,
+      journey_id: journeyId,
+      branch_id: journeyBranchId ? String(journeyBranchId) : prev.branch_id,
+      vehicle_number: selectedJourney.truck_id?.truck_no || prev.vehicle_number,
+      driver_name: selectedJourney.driver_id?.name || prev.driver_name,
+      driver_phone: selectedJourney.driver_id?.phone || prev.driver_phone,
+      from_location: originCity ? [originCity, originState].filter(Boolean).join(', ') : prev.from_location,
+      to_location: destCity ? [destCity, destState].filter(Boolean).join(', ') : prev.to_location,
+      billing_party_id: (selectedJourney.billing_party_id?._id || selectedJourney.billing_party_id) ? String(selectedJourney.billing_party_id?._id || selectedJourney.billing_party_id) : prev.billing_party_id,
+    }));
+  };
+
+  const selectedBranch = activeBranches.find((b: any) => b._id === formData.branch_id);
+  const selectedJourney = activeJourneysData?.find((j: any) => j._id === formData.journey_id);
+  const isBranchInherited = Boolean(
+    formData.journey_id &&
+    selectedJourney?.branch_id &&
+    formData.branch_id === String(selectedJourney.branch_id?._id || selectedJourney.branch_id)
+  );
+  const previewPrefix = selectedBranch
+    ? (selectedBranch.lr_prefix || `${selectedBranch.branch_code}-LR-`)
+    : 'LR-';
+
   const handleCreateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.vehicle_number || !formData.from_location || !formData.to_location) {
@@ -166,6 +250,8 @@ export const LRListPage: React.FC = () => {
     }
 
     const payload = {
+      branch_id: formData.branch_id || undefined,
+      journey_id: formData.journey_id || undefined,
       lr_no: formData.lr_no || undefined,
       bill_no: formData.bill_no || undefined,
       lr_date: new Date(formData.lr_date),
@@ -329,6 +415,25 @@ export const LRListPage: React.FC = () => {
           </div>
 
           <div className="filter-toolbar-right">
+            {activeBranches.length > 0 && (
+              <select
+                className="form-control"
+                value={branchFilter}
+                onChange={(e) => {
+                  setBranchFilter(e.target.value);
+                  setPage(1);
+                }}
+                style={{ width: 'auto', minWidth: '150px' }}
+              >
+                <option value="">All Branches</option>
+                {activeBranches.map((b: any) => (
+                  <option key={b._id} value={b._id}>
+                    {b.branch_name} ({b.branch_code})
+                  </option>
+                ))}
+              </select>
+            )}
+
             <select
               className="form-control"
               value={statusFilter}
@@ -369,6 +474,7 @@ export const LRListPage: React.FC = () => {
             <thead>
               <tr>
                 <th>LR Details</th>
+                <th>Branch</th>
                 <th>Vehicle & Driver</th>
                 <th>Route Corridor</th>
                 <th>Consignor & Consignee</th>
@@ -381,7 +487,7 @@ export const LRListPage: React.FC = () => {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={8} style={{ textAlign: 'center', padding: '3rem' }}>
+                  <td colSpan={9} style={{ textAlign: 'center', padding: '3rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}>
                       <div style={{ width: '1.25rem', height: '1.25rem', border: '2px solid var(--color-primary-300)', borderTopColor: 'var(--color-primary-600)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
                       <span style={{ color: 'var(--text-muted)' }}>Loading Lorry Receipts...</span>
@@ -390,7 +496,7 @@ export const LRListPage: React.FC = () => {
                 </tr>
               ) : lrsData?.entries?.length === 0 ? (
                 <tr>
-                  <td colSpan={8} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+                  <td colSpan={9} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
                     No Lorry Receipts found matching current filters.
                   </td>
                 </tr>
@@ -404,6 +510,22 @@ export const LRListPage: React.FC = () => {
                       <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
                         {new Date(lr.lr_date).toLocaleDateString()} • {lr.bill_no}
                       </div>
+                    </td>
+                    <td>
+                      {lr.branch_id ? (
+                        <div>
+                          <span className="badge badge-info" style={{ fontSize: '0.6875rem' }}>
+                            {lr.branch_id.branch_code}
+                          </span>
+                          <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: '0.125rem' }}>
+                            {lr.branch_id.branch_name}
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="badge badge-neutral" style={{ fontSize: '0.6875rem' }}>
+                          Company Direct
+                        </span>
+                      )}
                     </td>
                     <td>
                       <div style={{ fontWeight: 'var(--font-weight-medium)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
@@ -525,6 +647,87 @@ export const LRListPage: React.FC = () => {
         }
       >
         <form onSubmit={handleCreateSubmit}>
+          {/* Operational Linkage & Regional Attribution Card (DEC-010) */}
+          <div style={{ backgroundColor: 'var(--color-slate-50)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', padding: '1rem', marginBottom: '1.25rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+              <Building2 size={16} color="var(--color-primary-600)" />
+              <span style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-semibold)', color: 'var(--text-main)' }}>
+                Operational Linkage & Regional Sequence
+              </span>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem' }}>
+              {/* Linked Trip Selector */}
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label" style={{ fontSize: 'var(--font-size-xs)' }}>
+                  Link to Originating Trip (Optional)
+                </label>
+                <select
+                  className="form-control"
+                  value={formData.journey_id}
+                  onChange={(e) => handleJourneyChange(e.target.value)}
+                  style={{ fontSize: 'var(--font-size-xs)', height: '38px' }}
+                >
+                  <option value="">-- Standalone Consignment (No Trip Link) --</option>
+                  {activeJourneysData?.map((j: any) => (
+                    <option key={j._id} value={j._id}>
+                      {j.journey_number} — {j.truck_id?.truck_no || 'Rig'} ({j.from_location?.city} → {j.to_location?.city})
+                    </option>
+                  ))}
+                </select>
+                <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                  Selecting a trip auto-fills vehicle, driver, route corridor, and responsible branch.
+                </div>
+              </div>
+
+              {/* Responsible Branch Selector */}
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                  <label className="form-label" style={{ fontSize: 'var(--font-size-xs)', marginBottom: 0 }}>
+                    Responsible Regional Branch
+                  </label>
+                  {isBranchInherited && (
+                    <span className="badge badge-info" style={{ fontSize: '0.625rem' }}>
+                      Inherited from Trip
+                    </span>
+                  )}
+                </div>
+                <select
+                  className="form-control"
+                  value={formData.branch_id}
+                  onChange={(e) => setFormData({ ...formData, branch_id: e.target.value })}
+                  style={{ fontSize: 'var(--font-size-xs)', height: '38px' }}
+                >
+                  <option value="">Company Direct / Head Office Sequence (LR-)</option>
+                  {activeBranches.map((b: any) => (
+                    <option key={b._id} value={b._id}>
+                      {b.branch_name} ({b.branch_code}) {b.is_head_office ? '★ Head Office' : ''} — Prefix: {b.lr_prefix || `${b.branch_code}-LR-`}
+                    </option>
+                  ))}
+                </select>
+                <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                  Branch determines the autonomous sequence counter and audit attribution.
+                </div>
+              </div>
+            </div>
+
+            {/* Sequence Prefix Preview Banner */}
+            <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-secondary)' }}>
+                <strong>Sequence Prefix:</strong>{' '}
+                <span style={{ fontFamily: 'monospace', fontWeight: 600, color: 'var(--color-primary-600)', backgroundColor: 'var(--color-primary-50)', padding: '0.125rem 0.375rem', borderRadius: 'var(--radius-sm)' }}>
+                  {previewPrefix}
+                </span>
+                <span style={{ marginLeft: '0.5rem', color: 'var(--text-muted)' }}>
+                  (Allocated atomically upon issuance)
+                </span>
+              </div>
+              <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
+                Leave LR Number blank below for next sequential counter.
+              </div>
+            </div>
+          </div>
+
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', marginBottom: '1rem' }}>
             <div className="form-group">
               <label className="form-label">LR Number (Optional / Auto-Gen)</label>

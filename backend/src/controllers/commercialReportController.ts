@@ -19,6 +19,7 @@ import { Invoice } from '../models/Invoice.js';
 import { Entry } from '../models/Entry.js';
 import { TruckJourney } from '../models/TruckJourney.js';
 import { CreditNote } from '../models/CreditNote.js';
+import { Branch } from '../models/Branch.js';
 import { Ledger } from '../models/Ledger.js';
 import { getTenantId } from '../plugins/tenantPlugin.js';
 import {
@@ -40,12 +41,24 @@ export async function getArAgingReport(req: Request, res: Response): Promise<voi
     const companyId = getTenantId(req);
     const now = new Date();
 
-    // Get all unpaid or partially paid invoices
-    const invoices = await Invoice.find({
+    const invoiceQuery: any = {
       company_id: companyId,
       status: { $in: ['issued', 'partially_paid'] },
-    })
+    };
+
+    if (req.query.branch_id) {
+      const branch = await Branch.findOne({ _id: req.query.branch_id, company_id: companyId });
+      if (!branch) {
+        res.status(404).json({ error: 'Selected regional branch not found in your workspace.' });
+        return;
+      }
+      invoiceQuery.branch_id = branch._id;
+    }
+
+    // Get all unpaid or partially paid invoices
+    const invoices = await Invoice.find(invoiceQuery)
       .populate('billing_party_id', 'party_name gstin contact_phone')
+      .populate('branch_id', 'branch_name branch_code')
       .lean();
 
     const buckets = {
@@ -68,6 +81,7 @@ export async function getArAgingReport(req: Request, res: Response): Promise<voi
       const summary = {
         invoice_id: inv._id,
         invoice_no: inv.invoice_number,
+        branch_id: (inv as any).branch_id?._id || inv.branch_id || null,
         party: { party_name: partyName, name: partyName },
         customer_name: partyName,
         invoice_date: inv.invoice_date || inv.created_at,
@@ -112,7 +126,7 @@ export async function getArAgingReport(req: Request, res: Response): Promise<voi
 export async function getTripProfitabilityReport(req: Request, res: Response): Promise<void> {
   try {
     const companyId = getTenantId(req);
-    const { from, to, limit = 50 } = req.query;
+    const { from, to, limit = 50, branch_id } = req.query;
 
     const dateFilter: any = {};
     if (from) dateFilter.$gte = new Date(from as string);
@@ -123,11 +137,21 @@ export async function getTripProfitabilityReport(req: Request, res: Response): P
       journeyQuery.start_date = dateFilter;
     }
 
+    if (branch_id) {
+      const branch = await Branch.findOne({ _id: branch_id, company_id: companyId });
+      if (!branch) {
+        res.status(404).json({ error: 'Selected regional branch not found in your workspace.' });
+        return;
+      }
+      journeyQuery.branch_id = branch._id;
+    }
+
     const journeys = await TruckJourney.find(journeyQuery)
       .sort({ start_date: -1 })
       .limit(Number(limit))
       .populate('truck_id', 'registration_number truck_no')
       .populate('driver_id', 'name')
+      .populate('branch_id', 'branch_name branch_code is_head_office')
       .lean();
 
     const profitReport = journeys.map((j) => {
@@ -156,6 +180,8 @@ export async function getTripProfitabilityReport(req: Request, res: Response): P
       return {
         journey_id: j._id,
         journey_number: (j as any).journey_number,
+        branch_id: (j as any).branch_id?._id || (j as any).branch_id || null,
+        branch_name: (j as any).branch_id?.branch_name || 'Head Office / Global',
         from: fromLocation,
         to: toLocation,
         truck: (j.truck_id as any)?.registration_number || (j.truck_id as any)?.truck_no || 'Vehicle',
@@ -199,7 +225,7 @@ export async function getTripProfitabilityReport(req: Request, res: Response): P
 export async function exportToTallyXml(req: Request, res: Response): Promise<void> {
   try {
     const companyId = getTenantId(req);
-    const { from, to } = req.query;
+    const { from, to, branch_id } = req.query;
 
     const dateFilter: any = {};
     if (from) dateFilter.$gte = new Date(from as string);
@@ -208,6 +234,15 @@ export async function exportToTallyXml(req: Request, res: Response): Promise<voi
     const invoiceQuery: any = { company_id: companyId, status: { $ne: 'cancelled' } };
     if (Object.keys(dateFilter).length > 0) {
       invoiceQuery.invoice_date = dateFilter;
+    }
+
+    if (branch_id) {
+      const branch = await Branch.findOne({ _id: branch_id, company_id: companyId });
+      if (!branch) {
+        res.status(404).json({ error: 'Selected regional branch not found in your workspace.' });
+        return;
+      }
+      invoiceQuery.branch_id = branch._id;
     }
 
     const invoices = await Invoice.find(invoiceQuery)

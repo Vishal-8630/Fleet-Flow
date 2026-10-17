@@ -12,6 +12,7 @@ import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import { Invoice } from '../models/Invoice.js';
 import { Entry } from '../models/Entry.js';
+import { Branch } from '../models/Branch.js';
 import { BillingParty } from '../models/BillingParty.js';
 import { Company } from '../models/Company.js';
 import { Ledger } from '../models/Ledger.js';
@@ -146,6 +147,7 @@ export const createInvoice = async (req: Request, res: Response) => {
   try {
     const companyId = req.tenant?.id;
     const {
+      branch_id,
       billing_party_id,
       invoice_date,
       due_date,
@@ -158,6 +160,18 @@ export const createInvoice = async (req: Request, res: Response) => {
       notes,
       terms_and_conditions,
     } = req.body;
+
+    // Validate branch if branch_id is supplied
+    let branch: any = null;
+    if (branch_id) {
+      branch = await Branch.findOne({ _id: branch_id, company_id: companyId });
+      if (!branch) {
+        return res.status(404).json({ error: 'Selected regional branch not found in your workspace.' });
+      }
+      if (!branch.is_active) {
+        return res.status(400).json({ error: 'Cannot issue invoice for an inactive regional branch.' });
+      }
+    }
 
     // 1. Deep Foreign Key Ownership Validation (Anti-IDOR)
     const allLrIds = [
@@ -179,14 +193,26 @@ export const createInvoice = async (req: Request, res: Response) => {
     }
 
     // 2. Concurrency-Safe Atomic Sequential Invoice Number
-    const invoicePrefix = company?.settings?.invoice_prefix || 'INV-';
-    const updatedCompany = await Company.findByIdAndUpdate(
-      companyId,
-      { $inc: { 'counters.invoice_seq': 1 } },
-      { new: true, upsert: false }
-    );
-    const seq = updatedCompany?.counters?.invoice_seq || 1;
-    const invoice_number = `${invoicePrefix}${String(seq).padStart(4, '0')}`;
+    let invoice_number: string;
+    if (branch) {
+      const invoicePrefix = branch.invoice_prefix || `INV-${branch.branch_code}-`;
+      const updatedBranch = await Branch.findOneAndUpdate(
+        { _id: branch._id, company_id: companyId },
+        { $inc: { 'counters.invoice_seq': 1 } },
+        { new: true, upsert: false }
+      );
+      const seq = updatedBranch?.counters?.invoice_seq || 1;
+      invoice_number = `${invoicePrefix}${String(seq).padStart(4, '0')}`;
+    } else {
+      const invoicePrefix = company?.settings?.invoice_prefix || 'INV-';
+      const updatedCompany = await Company.findByIdAndUpdate(
+        companyId,
+        { $inc: { 'counters.invoice_seq': 1 } },
+        { new: true, upsert: false }
+      );
+      const seq = updatedCompany?.counters?.invoice_seq || 1;
+      invoice_number = `${invoicePrefix}${String(seq).padStart(4, '0')}`;
+    }
 
     // Resolve Line Items: If items are empty but lr_ids are provided, auto-populate from LRs
     let processedItems = items;
@@ -265,6 +291,7 @@ export const createInvoice = async (req: Request, res: Response) => {
 
     const newInvoice = new Invoice({
       company_id: companyId,
+      branch_id: branch?._id || undefined,
       invoice_number,
       invoice_date: invoice_date ? new Date(invoice_date) : new Date(),
       due_date: due_date ? new Date(due_date) : new Date(Date.now() + 15 * 86400000), // Default 15 days

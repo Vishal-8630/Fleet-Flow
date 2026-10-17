@@ -46,6 +46,7 @@ export const InvoiceListPage: React.FC = () => {
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState('');
   const [rcmFilter, setRcmFilter] = useState('');
+  const [branchFilter, setBranchFilter] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
 
   // Modals
@@ -56,6 +57,7 @@ export const InvoiceListPage: React.FC = () => {
 
   // Form State (Create Invoice)
   const initialInvoiceForm = {
+    branch_id: '',
     billing_party_id: '',
     invoice_date: new Date().toISOString().split('T')[0],
     due_date: new Date(Date.now() + 15 * 86400000).toISOString().split('T')[0],
@@ -89,13 +91,28 @@ export const InvoiceListPage: React.FC = () => {
     },
   });
 
+  // Branch configuration for regional numbering & attribution (DEC-010)
+  const { data: branchesData } = useQuery({
+    queryKey: ['company-branches'],
+    enabled: isUnlocked,
+    queryFn: async () => {
+      const res = await api.get('/company/branches');
+      return res.data?.branches || [];
+    },
+  });
+
+  const activeBranches = Array.isArray(branchesData)
+    ? branchesData.filter((b: any) => b.is_active)
+    : [];
+
   const { data: invoicesData, isLoading } = useQuery({
-    queryKey: ['invoice-list', page, statusFilter, rcmFilter, searchQuery],
+    queryKey: ['invoice-list', page, statusFilter, rcmFilter, branchFilter, searchQuery],
     enabled: isUnlocked,
     queryFn: async () => {
       const params: any = { page, limit: 12 };
       if (statusFilter) params.status = statusFilter;
       if (rcmFilter) params.is_rcm = rcmFilter;
+      if (branchFilter) params.branch_id = branchFilter;
       if (searchQuery) params.search = searchQuery;
       const res = await api.get('/commercial/invoices', { params });
       return res.data;
@@ -189,6 +206,25 @@ export const InvoiceListPage: React.FC = () => {
   const calculatedTax = isRcm ? 0 : Math.round(((invoiceSubtotal * taxRate) / 100) * 100) / 100;
   const calculatedGrandTotal = invoiceSubtotal + calculatedTax;
 
+  // Default branch assignment rules when opening create modal (DEC-010)
+  React.useEffect(() => {
+    if (isCreateModalOpen && !invoiceForm.branch_id) {
+      if (activeBranches.length === 1) {
+        setInvoiceForm((prev) => ({ ...prev, branch_id: activeBranches[0]._id }));
+      } else if (activeBranches.length > 1) {
+        const headOffice = activeBranches.find((b: any) => b.is_head_office);
+        if (headOffice) {
+          setInvoiceForm((prev) => ({ ...prev, branch_id: headOffice._id }));
+        }
+      }
+    }
+  }, [isCreateModalOpen, activeBranches]);
+
+  const selectedBranch = activeBranches.find((b: any) => b._id === invoiceForm.branch_id);
+  const previewPrefix = selectedBranch
+    ? (selectedBranch.invoice_prefix || `INV-${selectedBranch.branch_code}-`)
+    : 'INV-';
+
   const handleCreateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!invoiceForm.billing_party_id) {
@@ -201,6 +237,7 @@ export const InvoiceListPage: React.FC = () => {
     }
 
     const payload = {
+      branch_id: invoiceForm.branch_id || undefined,
       billing_party_id: invoiceForm.billing_party_id,
       invoice_date: invoiceForm.invoice_date,
       due_date: invoiceForm.due_date,
@@ -348,6 +385,25 @@ export const InvoiceListPage: React.FC = () => {
           </div>
 
           <div className="filter-toolbar-right">
+            {activeBranches.length > 0 && (
+              <select
+                className="form-control"
+                value={branchFilter}
+                onChange={(e) => {
+                  setBranchFilter(e.target.value);
+                  setPage(1);
+                }}
+                style={{ width: 'auto', minWidth: '150px' }}
+              >
+                <option value="">All Branches</option>
+                {activeBranches.map((b: any) => (
+                  <option key={b._id} value={b._id}>
+                    {b.branch_name} ({b.branch_code})
+                  </option>
+                ))}
+              </select>
+            )}
+
             <select
               className="form-control"
               value={statusFilter}
@@ -388,6 +444,7 @@ export const InvoiceListPage: React.FC = () => {
             <thead>
               <tr>
                 <th>Invoice #</th>
+                <th>Branch</th>
                 <th>Billed Customer</th>
                 <th>Date & Due</th>
                 <th>Tax Category</th>
@@ -401,7 +458,7 @@ export const InvoiceListPage: React.FC = () => {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={9} style={{ textAlign: 'center', padding: '3rem' }}>
+                  <td colSpan={10} style={{ textAlign: 'center', padding: '3rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}>
                       <div style={{ width: '1.25rem', height: '1.25rem', border: '2px solid var(--color-primary-300)', borderTopColor: 'var(--color-primary-600)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
                       <span style={{ color: 'var(--text-muted)' }}>Loading Freight Invoices...</span>
@@ -410,7 +467,7 @@ export const InvoiceListPage: React.FC = () => {
                 </tr>
               ) : invoicesData?.invoices?.length === 0 ? (
                 <tr>
-                  <td colSpan={9} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+                  <td colSpan={10} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
                     No freight invoices found matching current criteria.
                   </td>
                 </tr>
@@ -424,6 +481,22 @@ export const InvoiceListPage: React.FC = () => {
                       <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
                         {inv.lr_ids?.length || 0} Linked LR(s)
                       </div>
+                    </td>
+                    <td>
+                      {inv.branch_id ? (
+                        <div>
+                          <span className="badge badge-info" style={{ fontSize: '0.6875rem' }}>
+                            {inv.branch_id.branch_code}
+                          </span>
+                          <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: '0.125rem' }}>
+                            {inv.branch_id.branch_name}
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="badge badge-neutral" style={{ fontSize: '0.6875rem' }}>
+                          Company Direct
+                        </span>
+                      )}
                     </td>
                     <td>
                       <div style={{ fontWeight: 'var(--font-weight-medium)' }}>
@@ -561,6 +634,52 @@ export const InvoiceListPage: React.FC = () => {
         }
       >
         <form onSubmit={handleCreateSubmit}>
+          {/* Issuing Regional Branch Card (DEC-010) */}
+          <div style={{ backgroundColor: 'var(--color-slate-50)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', padding: '1rem', marginBottom: '1.25rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+              <Building2 size={16} color="var(--color-primary-600)" />
+              <span style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-semibold)', color: 'var(--text-main)' }}>
+                Issuing Branch & Sequence Allocation
+              </span>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem', alignItems: 'center' }}>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label" style={{ fontSize: 'var(--font-size-xs)' }}>
+                  Issuing Regional Branch
+                </label>
+                <select
+                  className="form-control"
+                  value={invoiceForm.branch_id}
+                  onChange={(e) => setInvoiceForm({ ...invoiceForm, branch_id: e.target.value })}
+                  style={{ fontSize: 'var(--font-size-xs)', height: '38px' }}
+                >
+                  <option value="">Company Direct / Head Office Sequence (INV-)</option>
+                  {activeBranches.map((b: any) => (
+                    <option key={b._id} value={b._id}>
+                      {b.branch_name} ({b.branch_code}) {b.is_head_office ? '★ Head Office' : ''} — Prefix: {b.invoice_prefix || `INV-${b.branch_code}-`}
+                    </option>
+                  ))}
+                </select>
+                <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                  Determines the autonomous branch invoice series and revenue attribution.
+                </div>
+              </div>
+
+              <div style={{ padding: '0.75rem', backgroundColor: 'var(--bg-card)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-light)' }}>
+                <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-secondary)' }}>
+                  <strong>Series Prefix:</strong>{' '}
+                  <span style={{ fontFamily: 'monospace', fontWeight: 600, color: 'var(--color-primary-600)', backgroundColor: 'var(--color-primary-50)', padding: '0.125rem 0.375rem', borderRadius: 'var(--radius-sm)' }}>
+                    {previewPrefix}
+                  </span>
+                </div>
+                <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                  Next sequential number will be allocated atomically by the server upon issuance.
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
             <div className="form-group">
               <label className="form-label">Billing Party (Customer / Shipper) *</label>

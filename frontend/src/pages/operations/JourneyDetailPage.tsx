@@ -49,6 +49,7 @@ import {
   CreditCard,
   Wallet,
   Lock,
+  Building2,
 } from 'lucide-react';
 
 export const JourneyDetailPage: React.FC = () => {
@@ -691,6 +692,41 @@ export const JourneyDetailPage: React.FC = () => {
                     <ExternalLink size={13} /> Driver Dossier
                   </button>
                 )}
+              </div>
+
+              {/* Regional Branch Attribution Tile (DEC-010) */}
+              <div className="operational-asset-tile">
+                <div className="asset-icon-box" style={{ backgroundColor: 'var(--color-primary-50)', border: '1px solid var(--color-primary-200)' }}>
+                  <Building2 size={24} color="var(--color-primary-600)" />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', marginBottom: '0.375rem', flexWrap: 'wrap' }}>
+                    <span style={{ fontWeight: 'var(--font-weight-bold)', color: 'var(--text-main)', fontSize: 'var(--font-size-base)' }}>
+                      {journey.branch_id?.branch_name || 'Company Direct / Unbranched'}
+                    </span>
+                    {journey.branch_id ? (
+                      <>
+                        <span className="badge badge-info" style={{ fontSize: '0.6875rem' }}>
+                          {journey.branch_id.branch_code}
+                        </span>
+                        {journey.branch_id.is_head_office && (
+                          <span className="badge badge-primary" style={{ fontSize: '0.6875rem' }}>Head Office</span>
+                        )}
+                      </>
+                    ) : (
+                      <span className="badge badge-neutral" style={{ fontSize: '0.6875rem' }}>Head Office Direct</span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-secondary)' }}>
+                    {journey.branch_id ? (
+                      <span>
+                        <strong>Hub Location:</strong> {[journey.branch_id.city, journey.branch_id.state].filter(Boolean).join(', ') || 'Regional Facility'}
+                      </span>
+                    ) : (
+                      <span>Attributed to global company operations (no regional branch assigned).</span>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           </div>

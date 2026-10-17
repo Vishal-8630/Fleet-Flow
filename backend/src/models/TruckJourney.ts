@@ -178,6 +178,7 @@ export interface ITruckJourney extends Document {
   driver_id: Types.ObjectId;
   driver_handover_history?: IDriverHandover[];
   billing_party_id?: Types.ObjectId; // Optional customer for commercial linkage
+  branch_id?: Types.ObjectId; // Responsible / originating regional branch (DEC-010)
 
   // Route & Schedule
   from_location: {
@@ -305,6 +306,11 @@ const TruckJourneySchema = new Schema<ITruckJourney>(
     billing_party_id: {
       type: Schema.Types.ObjectId,
       ref: 'BillingParty',
+      index: true,
+    },
+    branch_id: {
+      type: Schema.Types.ObjectId,
+      ref: 'Branch',
       index: true,
     },
 
@@ -582,6 +588,7 @@ const TruckJourneySchema = new Schema<ITruckJourney>(
 TruckJourneySchema.index({ company_id: 1, journey_number: 1 }, { unique: true });
 TruckJourneySchema.index({ company_id: 1, status: 1, start_date: -1 });
 TruckJourneySchema.index({ company_id: 1, truck_id: 1, start_date: -1 });
+TruckJourneySchema.index({ company_id: 1, branch_id: 1, start_date: -1 });
 TruckJourneySchema.index({ 'custom_fields.$**': 1 });
 
 // Multi-tenant isolation plugin
