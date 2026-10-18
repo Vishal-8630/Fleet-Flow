@@ -5,12 +5,12 @@
 - **ID:** FF-ISSUE-003
 - **Category:** UI-UX
 - **Priority:** Medium
-- **Status:** Observed
+- **Status:** Resolved (Batch H4)
 - **Affected module:** Public Marketing Homepage
 - **Source:** `docs/testing/FLEET_FLOW_MANUAL_TESTING_AND_DECISION_HANDOFF.md` (Section 4.A, FF-MT-004)
 - **Related issues:** [FF-ISSUE-001](FF-ISSUE-001-public-site-color-scheme.md), [FF-ISSUE-002](FF-ISSUE-002-unwanted-fleet-roi-calculator.md)
 - **Related decisions:** None
-- **Implementation status:** Not implemented
+- **Implementation status:** Implemented (Batch H4)
 
 ## 1. Summary
 
@@ -56,9 +56,9 @@ Remove fabricated numerical claims.
 
 ## 9. Acceptance criteria
 
-- [ ] Homepage content length is reduced by at least 40%.
-- [ ] All unverified metrics and claims are removed or replaced with factual software capability statements.
-- [ ] Typography and spacing align with the app's clean enterprise design tokens.
+- [x] Homepage content length is reduced by at least 40%.
+- [x] All unverified metrics and claims are removed or replaced with factual software capability statements.
+- [x] Typography and spacing align with the app's clean enterprise design tokens.
 
 ## 10. Required tests
 
@@ -71,4 +71,6 @@ Remove fabricated numerical claims.
 
 ## 12. Verification evidence
 
-- Implementation and verification evidence pending.
+- Removed all unsupported statistics ("99.8% on-time", "15M+ km tracked", "500+ operators", "₹120Cr+ freight").
+- Replaced with factual architecture guarantees (Multi-Tenant Isolation, Statutory GST & LR Compliance, ACID Financial Payouts, DPDP Act 2023 Readiness).
+- Validated via `backend/src/tests/integration/phase8BatchH4PublicAndAuthShell.test.ts`.

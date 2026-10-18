@@ -3,14 +3,19 @@
  * PRICING PAGE (PricingPage.tsx)
  * ============================================================================
  * Dynamic SaaS pricing matrix backed by GET /api/billing/plans.
- * Supports monthly/annual billing toggle, live catalog quotas, modular add-ons,
- * loading skeletons, retry error states, and DEC-001 approved trial terms.
+ * 
+ * Satisfies:
+ * - FF-ISSUE-005: Enterprise light-mode card styling matching app design system.
+ * - FF-ISSUE-006: Accessible interactive FAQ accordion with chevron indicators,
+ *   keyboard toggling (Enter/Space), and aria-expanded state.
+ * - DEC-001: Preserves canonical pricing (Starter ₹1,999, Standard ₹3,999, Pro ₹8,999)
+ *   and 7-day complimentary trial terms.
  * ============================================================================
  */
 
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Check, ArrowRight, Sparkles, AlertCircle, RefreshCw } from 'lucide-react';
+import { Check, ArrowRight, Sparkles, AlertCircle, RefreshCw, ChevronDown, ShieldCheck } from 'lucide-react';
 import { PublicLayout } from '../../components/layout/PublicLayout';
 import api from '../../api/client';
 
@@ -110,6 +115,7 @@ export const PricingPage: React.FC = () => {
   const [addons, setAddons] = useState<BackendAddon[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(0);
 
   const fetchCatalog = async () => {
     try {
@@ -136,9 +142,13 @@ export const PricingPage: React.FC = () => {
     fetchCatalog();
   }, []);
 
+  const toggleFaq = (index: number) => {
+    setOpenFaqIndex(openFaqIndex === index ? null : index);
+  };
+
   return (
     <PublicLayout>
-      <div style={{ background: '#0a0a0a', color: '#fff', padding: '5rem 1.5rem', flex: 1 }}>
+      <div style={{ backgroundColor: 'var(--bg-app)', color: 'var(--text-primary)', padding: '4.5rem 1.5rem', flex: 1 }}>
         <div style={{ maxWidth: 1200, margin: '0 auto' }}>
           {/* Header */}
           <div style={{ textAlign: 'center', marginBottom: '3.5rem' }}>
@@ -146,10 +156,10 @@ export const PricingPage: React.FC = () => {
               style={{
                 display: 'inline-block',
                 padding: '0.375rem 1rem',
-                borderRadius: '9999px',
-                background: 'rgba(99,102,241,0.15)',
-                border: '1px solid rgba(99,102,241,0.3)',
-                color: '#818cf8',
+                borderRadius: 'var(--radius-full)',
+                backgroundColor: 'var(--color-primary-50)',
+                border: '1px solid var(--color-primary-200)',
+                color: 'var(--color-primary-700)',
                 fontSize: '0.8125rem',
                 fontWeight: 600,
                 letterSpacing: '0.05em',
@@ -158,31 +168,45 @@ export const PricingPage: React.FC = () => {
             >
               TRANSPARENT COMMERCIAL PRICING • GST INCLUSIVE
             </span>
-            <h1 style={{ fontSize: 'clamp(2rem, 4vw, 3.25rem)', fontWeight: 800, letterSpacing: '-0.02em', margin: 0, lineHeight: 1.15 }}>
+            <h1 style={{ fontSize: 'clamp(2rem, 4vw, 3.25rem)', fontWeight: 800, letterSpacing: '-0.02em', margin: 0, lineHeight: 1.15, color: 'var(--text-primary)' }}>
               Predictable Pricing Built for <br />
-              <span style={{ background: 'linear-gradient(135deg, #6366f1, #a855f7)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+              <span style={{ color: 'var(--color-primary-600)' }}>
                 Transport Operators of Any Size
               </span>
             </h1>
-            <p style={{ color: 'rgba(255,255,255,0.65)', fontSize: '1.125rem', maxWidth: 650, margin: '1.25rem auto 0', lineHeight: 1.6 }}>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '1.125rem', maxWidth: 650, margin: '1.25rem auto 0', lineHeight: 1.6 }}>
               All plans include complete LR management, compliance vault, and GST invoicing. Choose the tier matching your vehicle & branch footprint.
             </p>
 
             {/* Billing Toggle */}
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.75rem', marginTop: '2.5rem', background: 'rgba(255,255,255,0.05)', padding: '0.375rem', borderRadius: '0.75rem', border: '1px solid rgba(255,255,255,0.1)' }}>
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexWrap: 'wrap',
+                maxWidth: '100%',
+                gap: '0.5rem',
+                marginTop: '2.5rem',
+                backgroundColor: 'var(--color-slate-100)',
+                padding: '0.375rem',
+                borderRadius: 'var(--radius-lg)',
+                border: '1px solid var(--border-light)',
+              }}
+            >
               <button
                 type="button"
                 onClick={() => setIsAnnual(false)}
                 style={{
-                  padding: '0.5rem 1.25rem',
-                  borderRadius: '0.5rem',
+                  padding: '0.5rem 1rem',
+                  borderRadius: 'var(--radius-md)',
                   border: 'none',
-                  background: !isAnnual ? 'var(--color-primary-600, #6366f1)' : 'transparent',
-                  color: !isAnnual ? '#fff' : 'rgba(255,255,255,0.65)',
+                  backgroundColor: !isAnnual ? 'var(--color-primary-600)' : 'transparent',
+                  color: !isAnnual ? '#fff' : 'var(--text-secondary)',
                   fontWeight: 600,
                   fontSize: '0.875rem',
                   cursor: 'pointer',
-                  transition: 'all 0.15s ease',
+                  transition: 'all var(--transition-fast)',
                 }}
               >
                 Monthly Billing
@@ -191,92 +215,96 @@ export const PricingPage: React.FC = () => {
                 type="button"
                 onClick={() => setIsAnnual(true)}
                 style={{
-                  padding: '0.5rem 1.25rem',
-                  borderRadius: '0.5rem',
+                  padding: '0.5rem 1rem',
+                  borderRadius: 'var(--radius-md)',
                   border: 'none',
-                  background: isAnnual ? 'var(--color-primary-600, #6366f1)' : 'transparent',
-                  color: isAnnual ? '#fff' : 'rgba(255,255,255,0.65)',
+                  backgroundColor: isAnnual ? 'var(--color-primary-600)' : 'transparent',
+                  color: isAnnual ? '#fff' : 'var(--text-secondary)',
                   fontWeight: 600,
                   fontSize: '0.875rem',
                   cursor: 'pointer',
-                  display: 'flex',
+                  display: 'inline-flex',
                   alignItems: 'center',
                   gap: '0.5rem',
-                  transition: 'all 0.15s ease',
+                  flexWrap: 'wrap',
+                  justifyContent: 'center',
+                  transition: 'all var(--transition-fast)',
                 }}
               >
                 <span>Annual Billing</span>
-                <span style={{ fontSize: '0.6875rem', background: 'rgba(16,185,129,0.2)', color: '#10b981', padding: '0.125rem 0.375rem', borderRadius: '9999px', fontWeight: 700 }}>
-                  2 MONTHS FREE (SAVE 16.7%)
+                <span
+                  style={{
+                    fontSize: '0.7rem',
+                    fontWeight: 700,
+                    backgroundColor: isAnnual ? 'rgba(255,255,255,0.25)' : 'var(--color-emerald-100)',
+                    color: isAnnual ? '#fff' : 'var(--color-emerald-800)',
+                    padding: '0.15rem 0.5rem',
+                    borderRadius: 'var(--radius-full)',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  2 Months Free (16.7% off)
                 </span>
               </button>
             </div>
           </div>
 
-          {/* Error State */}
-          {error && (
-            <div
-              style={{
-                maxWidth: 600,
-                margin: '0 auto 3rem auto',
-                background: 'rgba(239, 68, 68, 0.1)',
-                border: '1px solid rgba(239, 68, 68, 0.3)',
-                borderRadius: '0.75rem',
-                padding: '1.25rem',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: '1rem',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: '#f87171', fontSize: '0.875rem' }}>
-                <AlertCircle size={20} />
-                <span>{error}</span>
-              </div>
-              <button
-                type="button"
-                onClick={fetchCatalog}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem',
-                  background: 'rgba(239, 68, 68, 0.2)',
-                  color: '#fff',
-                  border: '1px solid rgba(239, 68, 68, 0.4)',
-                  padding: '0.375rem 0.75rem',
-                  borderRadius: '0.5rem',
-                  cursor: 'pointer',
-                  fontSize: '0.8125rem',
-                  fontWeight: 600,
-                }}
-              >
-                <RefreshCw size={14} /> Retry
-              </button>
-            </div>
-          )}
-
-          {/* Loading Skeleton */}
-          {loading && (
+          {/* Pricing Grid */}
+          {loading ? (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1.5rem' }}>
               {[1, 2, 3, 4].map((i) => (
                 <div
                   key={i}
                   style={{
-                    background: 'rgba(255,255,255,0.03)',
-                    border: '1px solid rgba(255,255,255,0.08)',
-                    borderRadius: '1.25rem',
-                    padding: '2rem 1.5rem',
-                    height: 480,
-                    animation: 'pulse 1.5s infinite',
+                    backgroundColor: 'var(--bg-surface)',
+                    border: '1px solid var(--border-light)',
+                    borderRadius: 'var(--radius-xl)',
+                    padding: '2rem',
+                    height: '24rem',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
                   }}
-                />
+                >
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <div style={{ height: '1.5rem', width: '60%', backgroundColor: 'var(--color-slate-200)', borderRadius: 'var(--radius-sm)' }} />
+                    <div style={{ height: '1rem', width: '80%', backgroundColor: 'var(--color-slate-100)', borderRadius: 'var(--radius-sm)' }} />
+                    <div style={{ height: '2.5rem', width: '50%', backgroundColor: 'var(--color-slate-200)', borderRadius: 'var(--radius-sm)' }} />
+                  </div>
+                  <div style={{ height: '2.5rem', width: '100%', backgroundColor: 'var(--color-slate-200)', borderRadius: 'var(--radius-md)' }} />
+                </div>
               ))}
             </div>
-          )}
-
-          {/* Dynamic Pricing Grid */}
-          {!loading && plans.length > 0 && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1.5rem', alignItems: 'stretch' }}>
+          ) : error ? (
+            <div
+              style={{
+                backgroundColor: 'var(--bg-surface)',
+                border: '1px solid var(--color-danger-border)',
+                borderRadius: 'var(--radius-lg)',
+                padding: '2rem',
+                textAlign: 'center',
+                maxWidth: '30rem',
+                margin: '0 auto',
+              }}
+            >
+              <AlertCircle size={32} color="var(--color-danger-text)" style={{ margin: '0 auto 1rem' }} />
+              <h3 style={{ fontSize: '1.125rem', fontWeight: 700, margin: '0 0 0.5rem', color: 'var(--text-primary)' }}>
+                Catalog Service Unavailable
+              </h3>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', margin: '0 0 1.25rem' }}>
+                {error}
+              </p>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={fetchCatalog}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
+              >
+                <RefreshCw size={14} /> Retry
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1.5rem' }}>
               {plans.map((plan) => {
                 const isPopular = plan.code === 'standard';
                 const monthlyPrice = plan.monthly_price_paise ? plan.monthly_price_paise / 100 : null;
@@ -306,14 +334,14 @@ export const PricingPage: React.FC = () => {
                   <div
                     key={plan._id || plan.code}
                     style={{
-                      background: isPopular ? 'rgba(99,102,241,0.08)' : 'rgba(255,255,255,0.03)',
-                      border: isPopular ? '2px solid #6366f1' : '1px solid rgba(255,255,255,0.08)',
-                      borderRadius: '1.25rem',
-                      padding: '2rem 1.5rem',
+                      backgroundColor: 'var(--bg-surface)',
+                      border: isPopular ? '2px solid var(--color-primary-600)' : '1px solid var(--border-light)',
+                      borderRadius: 'var(--radius-xl)',
+                      padding: '2.25rem 1.75rem',
                       display: 'flex',
                       flexDirection: 'column',
                       position: 'relative',
-                      boxShadow: isPopular ? '0 0 35px rgba(99,102,241,0.2)' : 'none',
+                      boxShadow: isPopular ? 'var(--shadow-lg)' : 'var(--shadow-sm)',
                     }}
                   >
                     {isPopular && (
@@ -323,9 +351,9 @@ export const PricingPage: React.FC = () => {
                           top: '-0.75rem',
                           left: '50%',
                           transform: 'translateX(-50%)',
-                          background: 'linear-gradient(135deg, #6366f1, #a855f7)',
+                          backgroundColor: 'var(--color-primary-600)',
                           padding: '0.25rem 0.875rem',
-                          borderRadius: '9999px',
+                          borderRadius: 'var(--radius-full)',
                           fontSize: '0.6875rem',
                           fontWeight: 800,
                           color: '#fff',
@@ -333,6 +361,7 @@ export const PricingPage: React.FC = () => {
                           display: 'flex',
                           alignItems: 'center',
                           gap: '0.25rem',
+                          boxShadow: '0 2px 8px rgba(37,99,235,0.3)',
                         }}
                       >
                         <Sparkles size={12} />
@@ -341,10 +370,10 @@ export const PricingPage: React.FC = () => {
                     )}
 
                     <div>
-                      <h3 style={{ fontSize: '1.25rem', fontWeight: 800, margin: '0 0 0.5rem 0', color: '#fff' }}>
+                      <h3 style={{ fontSize: '1.25rem', fontWeight: 800, margin: '0 0 0.5rem 0', color: 'var(--text-primary)' }}>
                         {plan.name}
                       </h3>
-                      <p style={{ fontSize: '0.8125rem', color: 'rgba(255,255,255,0.6)', margin: 0, minHeight: 36, lineHeight: 1.5 }}>
+                      <p style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', margin: 0, minHeight: 36, lineHeight: 1.5 }}>
                         {plan.description}
                       </p>
                     </div>
@@ -353,60 +382,48 @@ export const PricingPage: React.FC = () => {
                       {displayPrice !== null ? (
                         <div>
                           <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.25rem' }}>
-                            <span style={{ fontSize: '2.25rem', fontWeight: 800, color: '#fff' }}>
+                            <span style={{ fontSize: '2.25rem', fontWeight: 800, color: 'var(--text-primary)' }}>
                               ₹{displayPrice.toLocaleString('en-IN')}
                             </span>
-                            <span style={{ fontSize: '0.8125rem', color: 'rgba(255,255,255,0.5)' }}>/ month</span>
+                            <span style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>/ month</span>
                           </div>
-                          <div style={{ fontSize: '0.75rem', color: '#10b981', marginTop: '0.25rem', fontWeight: 600 }}>
-                            {isAnnual
-                              ? `Billed annually at ₹${(annualTotal || 0).toLocaleString('en-IN')}/yr (GST incl.)`
-                              : 'Billed monthly (GST incl.)'}
-                          </div>
+                          {isAnnual && annualTotal && (
+                            <div style={{ fontSize: '0.75rem', color: 'var(--color-emerald-700)', fontWeight: 600, marginTop: '0.25rem' }}>
+                              Billed annually at ₹{annualTotal.toLocaleString('en-IN')}/yr
+                            </div>
+                          )}
                         </div>
                       ) : (
-                        <div>
-                          <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#fff' }}>Custom Quote</div>
-                          <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)', marginTop: '0.25rem' }}>Tailored enterprise rollout</div>
+                        <div style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-primary)', margin: '0.5rem 0' }}>
+                          Custom Quote
                         </div>
                       )}
                     </div>
 
-                    <div style={{ padding: '0.75rem 0', borderTop: '1px solid rgba(255,255,255,0.08)', borderBottom: '1px solid rgba(255,255,255,0.08)', marginBottom: '1.5rem', display: 'flex', flexDirection: 'column', gap: '0.25rem', fontSize: '0.8125rem' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ color: 'rgba(255,255,255,0.6)' }}>Fleet Quota:</span>
-                        <span style={{ fontWeight: 700, color: '#fff' }}>{truckLabel}</span>
+                    <div style={{ margin: '1rem 0 1.5rem', borderTop: '1px solid var(--border-light)', paddingTop: '1.25rem', flex: 1 }}>
+                      <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>
+                        Entitlements & Features
                       </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ color: 'rgba(255,255,255,0.6)' }}>Branches & Users:</span>
-                        <span style={{ fontWeight: 700, color: '#fff' }}>{branchLabel} • {userLabel}</span>
-                      </div>
-                    </div>
-
-                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.625rem', marginBottom: '1.75rem' }}>
-                      {features.map((feat, idx) => (
-                        <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', fontSize: '0.8125rem', color: 'rgba(255,255,255,0.8)' }}>
-                          <Check size={16} color="#10b981" style={{ flexShrink: 0, marginTop: '0.125rem' }} />
-                          <span>{feat}</span>
-                        </div>
-                      ))}
+                      <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                        {features.map((feat, idx) => (
+                          <li key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', fontSize: '0.8125rem', color: 'var(--text-secondary)', lineHeight: 1.45 }}>
+                            <Check size={14} color="var(--color-emerald-600)" style={{ flexShrink: 0, marginTop: '0.125rem' }} />
+                            <span>{feat}</span>
+                          </li>
+                        ))}
+                      </ul>
                     </div>
 
                     <Link
                       to={ctaLink}
+                      className={isPopular ? 'btn btn-primary' : 'btn btn-secondary'}
                       style={{
                         padding: '0.75rem 1rem',
-                        borderRadius: '0.625rem',
+                        borderRadius: 'var(--radius-md)',
                         textAlign: 'center',
                         textDecoration: 'none',
                         fontWeight: 700,
                         fontSize: '0.875rem',
-                        background: isPopular
-                          ? 'linear-gradient(135deg, #6366f1, #4f46e5)'
-                          : 'rgba(255,255,255,0.08)',
-                        color: '#fff',
-                        border: isPopular ? 'none' : '1px solid rgba(255,255,255,0.15)',
-                        transition: 'all 0.15s ease',
                       }}
                     >
                       {ctaText}
@@ -417,59 +434,165 @@ export const PricingPage: React.FC = () => {
             </div>
           )}
 
-          {/* Modular Add-ons */}
+          {/* Add-ons Catalog */}
           <div style={{ marginTop: '5rem' }}>
-            <div style={{ textAlign: 'center', marginBottom: '2.5rem' }}>
-              <h2 style={{ fontSize: '1.75rem', fontWeight: 800, margin: '0 0 0.5rem 0' }}>Modular Platform Add-Ons</h2>
-              <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.9375rem', margin: 0 }}>Add specialized enterprise modules or capacity to your active plan.</p>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem' }}>
+            <h2 style={{ fontSize: '1.75rem', fontWeight: 800, textAlign: 'center', marginBottom: '0.75rem', color: 'var(--text-primary)' }}>
+              Modular Enterprise Add-ons
+            </h2>
+            <p style={{ color: 'var(--text-secondary)', textAlign: 'center', fontSize: '0.9375rem', maxWidth: 500, margin: '0 auto 2.5rem' }}>
+              Scale specific operational modules without jumping subscription tiers.
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem' }}>
               {addons.length > 0 ? (
                 addons.map((addon) => {
                   const priceStr = addon.monthly_price_paise
                     ? `₹${(addon.monthly_price_paise / 100).toLocaleString('en-IN')} / mo`
                     : 'Contact Sales';
                   return (
-                    <div key={addon._id || addon.code} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '1rem', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    <div
+                      key={addon._id || addon.code}
+                      style={{
+                        backgroundColor: 'var(--bg-surface)',
+                        border: '1px solid var(--border-light)',
+                        borderRadius: 'var(--radius-lg)',
+                        padding: '1.5rem',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '0.5rem',
+                        boxShadow: 'var(--shadow-sm)',
+                      }}
+                    >
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div style={{ fontWeight: 700, color: '#fff', fontSize: '1rem' }}>{addon.name}</div>
-                        <div style={{ fontWeight: 800, color: '#818cf8', fontSize: '0.9375rem' }}>{priceStr}</div>
+                        <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '1rem' }}>{addon.name}</div>
+                        <div style={{ fontWeight: 800, color: 'var(--color-primary-600)', fontSize: '0.9375rem' }}>{priceStr}</div>
                       </div>
-                      <p style={{ margin: 0, fontSize: '0.8125rem', color: 'rgba(255,255,255,0.6)', lineHeight: 1.5 }}>{addon.description}</p>
+                      <p style={{ margin: 0, fontSize: '0.8125rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>{addon.description}</p>
                     </div>
                   );
                 })
               ) : (
                 <>
-                  <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '1rem', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  <div
+                    style={{
+                      backgroundColor: 'var(--bg-surface)',
+                      border: '1px solid var(--border-light)',
+                      borderRadius: 'var(--radius-lg)',
+                      padding: '1.5rem',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '0.5rem',
+                      boxShadow: 'var(--shadow-sm)',
+                    }}
+                  >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div style={{ fontWeight: 700, color: '#fff', fontSize: '1rem' }}>WhatsApp Business Gateway</div>
-                      <div style={{ fontWeight: 800, color: '#818cf8', fontSize: '0.9375rem' }}>₹999 / mo</div>
+                      <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '1rem' }}>WhatsApp Business Gateway</div>
+                      <div style={{ fontWeight: 800, color: 'var(--color-primary-600)', fontSize: '0.9375rem' }}>₹999 / mo</div>
                     </div>
-                    <p style={{ margin: 0, fontSize: '0.8125rem', color: 'rgba(255,255,255,0.6)', lineHeight: 1.5 }}>Automated dispatch alerts, consignee tracking links, and PDF LR delivery.</p>
+                    <p style={{ margin: 0, fontSize: '0.8125rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                      Automated dispatch alerts, consignee tracking links, and PDF LR delivery.
+                    </p>
                   </div>
-                  <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '1rem', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  <div
+                    style={{
+                      backgroundColor: 'var(--bg-surface)',
+                      border: '1px solid var(--border-light)',
+                      borderRadius: 'var(--radius-lg)',
+                      padding: '1.5rem',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '0.5rem',
+                      boxShadow: 'var(--shadow-sm)',
+                    }}
+                  >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div style={{ fontWeight: 700, color: '#fff', fontSize: '1rem' }}>GPS Telematics Integration</div>
-                      <div style={{ fontWeight: 800, color: '#818cf8', fontSize: '0.9375rem' }}>₹149 / truck / mo</div>
+                      <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '1rem' }}>GPS Telematics Integration</div>
+                      <div style={{ fontWeight: 800, color: 'var(--color-primary-600)', fontSize: '0.9375rem' }}>₹149 / truck / mo</div>
                     </div>
-                    <p style={{ margin: 0, fontSize: '0.8125rem', color: 'rgba(255,255,255,0.6)', lineHeight: 1.5 }}>Live AIS-140 GPS telematics streaming, ignition status, and geo-fencing alerts.</p>
+                    <p style={{ margin: 0, fontSize: '0.8125rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                      Live AIS-140 GPS telematics streaming, ignition status, and geo-fencing alerts.
+                    </p>
                   </div>
                 </>
               )}
             </div>
           </div>
 
-          {/* FAQ Accordion */}
+          {/* FAQ Accordion (FF-ISSUE-006) */}
           <div style={{ marginTop: '5rem', maxWidth: 800, margin: '5rem auto 0' }}>
-            <h2 style={{ fontSize: '1.75rem', fontWeight: 800, textAlign: 'center', marginBottom: '2rem' }}>Frequently Asked Questions</h2>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {FAQS.map((faq, i) => (
-                <div key={i} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '0.75rem', padding: '1.25rem 1.5rem' }}>
-                  <div style={{ fontWeight: 700, fontSize: '0.9375rem', color: '#fff', marginBottom: '0.5rem' }}>{faq.q}</div>
-                  <p style={{ margin: 0, fontSize: '0.875rem', color: 'rgba(255,255,255,0.65)', lineHeight: 1.6 }}>{faq.a}</p>
-                </div>
-              ))}
+            <h2 style={{ fontSize: '1.75rem', fontWeight: 800, textAlign: 'center', marginBottom: '2rem', color: 'var(--text-primary)' }}>
+              Frequently Asked Questions
+            </h2>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              {FAQS.map((faq, i) => {
+                const isOpen = openFaqIndex === i;
+                return (
+                  <div
+                    key={i}
+                    style={{
+                      backgroundColor: 'var(--bg-surface)',
+                      border: '1px solid var(--border-light)',
+                      borderRadius: 'var(--radius-lg)',
+                      overflow: 'hidden',
+                      boxShadow: 'var(--shadow-sm)',
+                      transition: 'border-color var(--transition-fast)',
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => toggleFaq(i)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          toggleFaq(i);
+                        }
+                      }}
+                      aria-expanded={isOpen}
+                      aria-controls={`faq-answer-${i}`}
+                      id={`faq-question-${i}`}
+                      style={{
+                        width: '100%',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        padding: '1.25rem 1.5rem',
+                        backgroundColor: 'transparent',
+                        border: 'none',
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <span style={{ fontWeight: 700, fontSize: '0.9375rem', color: 'var(--text-primary)' }}>
+                        {faq.q}
+                      </span>
+                      <ChevronDown
+                        size={18}
+                        color="var(--text-muted)"
+                        style={{
+                          transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                          transition: 'transform var(--transition-fast)',
+                          flexShrink: 0,
+                          marginLeft: '1rem',
+                        }}
+                      />
+                    </button>
+                    {isOpen && (
+                      <div
+                        id={`faq-answer-${i}`}
+                        role="region"
+                        aria-labelledby={`faq-question-${i}`}
+                        style={{
+                          padding: '0 1.5rem 1.25rem',
+                          fontSize: '0.875rem',
+                          color: 'var(--text-secondary)',
+                          lineHeight: 1.6,
+                        }}
+                      >
+                        {faq.a}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -479,4 +602,3 @@ export const PricingPage: React.FC = () => {
 };
 
 export default PricingPage;
-

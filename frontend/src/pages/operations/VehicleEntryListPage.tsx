@@ -24,6 +24,7 @@ import { Modal } from '../../components/common/Modal';
 import { toast } from '../../stores/uiStore';
 import { useAuthStore } from '../../stores/authStore';
 import { CreditLimitWarningModal, CreditExposureData } from '../../components/common/CreditLimitWarningModal';
+import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import {
   Truck,
   Plus,
@@ -53,6 +54,9 @@ export const VehicleEntryListPage: React.FC = () => {
 
   // View Financial Breakdown Modal State
   const [viewEntry, setViewEntry] = useState<any>(null);
+
+  // Delete Confirmation Dialog State (FF-ISSUE-049 & FF-ISSUE-010)
+  const [deleteConfirmEntry, setDeleteConfirmEntry] = useState<{ id: string; entryNumber: string } | null>(null);
 
   // Credit Limit Warning Modal State (DEC-007 Option B)
   const [isCreditWarningOpen, setIsCreditWarningOpen] = useState(false);
@@ -402,31 +406,28 @@ export const VehicleEntryListPage: React.FC = () => {
           <table className="table">
             <thead>
               <tr>
-                <th>Entry #</th>
-                <th>Date</th>
-                <th>Hired Vehicle & Driver</th>
-                <th>Supplier (Balance Party)</th>
-                <th>Route</th>
-                <th>Agreed Freight</th>
-                <th>Advances</th>
-                <th>Dala (₹)</th>
-                <th>Kamisan (₹)</th>
-                <th>Net Balance Due</th>
-                <th>POD Status</th>
-                <th>Status</th>
-                <th style={{ textAlign: 'right' }}>Actions</th>
+                <th style={{ whiteSpace: 'nowrap' }}>Entry #</th>
+                <th style={{ whiteSpace: 'nowrap' }}>Date</th>
+                <th style={{ whiteSpace: 'nowrap' }}>Hired Vehicle & Driver</th>
+                <th style={{ whiteSpace: 'nowrap' }}>Supplier (Balance Party)</th>
+                <th style={{ whiteSpace: 'nowrap' }}>Route</th>
+                <th style={{ whiteSpace: 'nowrap' }}>Agreed Freight</th>
+                <th style={{ whiteSpace: 'nowrap' }}>Advances</th>
+                <th style={{ whiteSpace: 'nowrap' }}>Net Balance Due</th>
+                <th style={{ whiteSpace: 'nowrap' }}>Status</th>
+                <th style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={13} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+                  <td colSpan={10} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
                     Loading market movements...
                   </td>
                 </tr>
               ) : !entriesData?.entries || entriesData.entries.length === 0 ? (
                 <tr>
-                  <td colSpan={13} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+                  <td colSpan={10} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
                     No market vehicle movements found.
                   </td>
                 </tr>
@@ -438,12 +439,12 @@ export const VehicleEntryListPage: React.FC = () => {
                         {entry.entry_number}
                       </span>
                     </td>
-                    <td>{new Date(entry.entry_date).toLocaleDateString()}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{new Date(entry.entry_date).toLocaleDateString()}</td>
                     <td>
-                      <div style={{ fontWeight: 'var(--font-weight-bold)', color: 'var(--text-main)' }}>
+                      <div style={{ fontWeight: 'var(--font-weight-bold)', color: 'var(--text-main)', whiteSpace: 'nowrap' }}>
                         {entry.vehicle_number}
                       </div>
-                      <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
+                      <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                         {entry.driver_name || 'Driver unassigned'} {entry.driver_phone ? `(${entry.driver_phone})` : ''}
                       </div>
                     </td>
@@ -467,39 +468,33 @@ export const VehicleEntryListPage: React.FC = () => {
                         </div>
                       )}
                     </td>
-                    <td style={{ fontWeight: 'var(--font-weight-semibold)' }}>
+                    <td style={{ fontWeight: 'var(--font-weight-semibold)', whiteSpace: 'nowrap' }}>
                       ₹{entry.freight_amount?.toLocaleString('en-IN')}
                     </td>
-                    <td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
                       <div>₹{(entry.driver_cash_advance + entry.diesel_advance_amount)?.toLocaleString('en-IN')}</div>
                       <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
                         Cash: ₹{entry.driver_cash_advance} | Fuel: ₹{entry.diesel_advance_amount}
                       </div>
                     </td>
-                    <td style={{ color: 'var(--color-amber-700)', fontWeight: 'var(--font-weight-medium)' }}>
-                      ₹{(entry.dala_charges || 0).toLocaleString('en-IN')}
-                    </td>
-                    <td style={{ color: 'var(--color-amber-700)', fontWeight: 'var(--font-weight-medium)' }}>
-                      ₹{(entry.kamisan_amount || 0).toLocaleString('en-IN')}
-                    </td>
-                    <td style={{ fontWeight: 'var(--font-weight-bold)', color: 'var(--color-rose-600)' }}>
+                    <td style={{ fontWeight: 'var(--font-weight-bold)', color: 'var(--color-rose-600)', whiteSpace: 'nowrap' }}>
                       ₹{entry.net_balance_due?.toLocaleString('en-IN')}
                     </td>
                     <td>
-                      {entry.pod_received ? (
-                        <span className="badge badge-success" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
-                          <CheckCircle2 size={12} /> Received
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', alignItems: 'flex-start' }}>
+                        <span className={`badge ${entry.status === 'paid' ? 'badge-success' : entry.status === 'partially_paid' ? 'badge-primary' : 'badge-neutral'}`}>
+                          {entry.status?.toUpperCase()}
                         </span>
-                      ) : (
-                        <span className="badge badge-warning" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
-                          <Clock size={12} /> Pending
-                        </span>
-                      )}
-                    </td>
-                    <td>
-                      <span className={`badge ${entry.status === 'paid' ? 'badge-success' : entry.status === 'partially_paid' ? 'badge-primary' : 'badge-neutral'}`}>
-                        {entry.status?.toUpperCase()}
-                      </span>
+                        {entry.pod_received ? (
+                          <span className="badge badge-success" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', fontSize: '10px' }}>
+                            <CheckCircle2 size={10} /> POD Recv
+                          </span>
+                        ) : (
+                          <span className="badge badge-warning" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', fontSize: '10px' }}>
+                            <Clock size={10} /> POD Pend
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td style={{ textAlign: 'right' }}>
                       <div style={{ display: 'inline-flex', gap: '0.375rem', alignItems: 'center' }}>
@@ -533,9 +528,10 @@ export const VehicleEntryListPage: React.FC = () => {
                             className="btn btn-secondary"
                             style={{ padding: '0.375rem 0.5rem', fontSize: 'var(--font-size-xs)', color: 'var(--color-danger)' }}
                             onClick={() => {
-                              if (window.confirm(`Delete entry ${entry.entry_number}?`)) {
-                                deleteMutation.mutate(entry._id);
-                              }
+                              setDeleteConfirmEntry({
+                                id: entry._id,
+                                entryNumber: entry.entry_number,
+                              });
                             }}
                             title="Delete Entry"
                           >
@@ -935,6 +931,27 @@ export const VehicleEntryListPage: React.FC = () => {
           await createMutation.mutateAsync({ credit_override: true, override_reason: reason });
         }}
         isSubmitting={createMutation.isPending}
+      />
+
+      {/* FF-ISSUE-010 / FF-ISSUE-049 ACCESSIBLE DELETE CONFIRMATION DIALOG */}
+      <ConfirmDialog
+        isOpen={Boolean(deleteConfirmEntry)}
+        onClose={() => setDeleteConfirmEntry(null)}
+        onConfirm={async () => {
+          if (deleteConfirmEntry) {
+            await deleteMutation.mutateAsync(deleteConfirmEntry.id);
+            setDeleteConfirmEntry(null);
+          }
+        }}
+        title="Delete Market Vehicle Movement"
+        message={
+          <span>
+            Are you sure you want to delete movement <strong>{deleteConfirmEntry?.entryNumber}</strong>? This action will permanently remove the movement ledger entry.
+          </span>
+        }
+        confirmText="Delete Movement"
+        variant="danger"
+        isLoading={deleteMutation.isPending}
       />
     </div>
   );

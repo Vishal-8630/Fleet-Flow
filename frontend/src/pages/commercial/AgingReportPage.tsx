@@ -9,8 +9,9 @@
 
 import React, { useEffect, useState } from 'react';
 import { PageHeader } from '../../components/common/PageHeader';
-import { TrendingUp, AlertCircle, Clock, RefreshCw, FileDown } from 'lucide-react';
+import { TrendingUp, AlertCircle, Clock, RefreshCw, FileDown, CheckCircle2 } from 'lucide-react';
 import api from '../../api/client';
+import { toast } from '../../stores/uiStore';
 
 interface AgingBucket {
   count: number;
@@ -44,16 +45,25 @@ const AgingBucketCard: React.FC<{
   label: string;
   bucket: AgingBucket;
   color: string;
-  bgColor: string;
-}> = ({ label, bucket, color, bgColor }) => (
+  badgeClass: string;
+}> = ({ label, bucket, color, badgeClass }) => (
   <div style={{
-    background: bgColor, borderRadius: 'var(--radius-lg)', padding: '1.25rem',
-    border: `2px solid ${color}30`,
+    background: 'var(--bg-card)',
+    borderRadius: 'var(--radius-lg)',
+    padding: '1.25rem',
+    border: '1px solid var(--border-default)',
+    borderTop: `3px solid ${color}`,
+    boxShadow: 'var(--shadow-sm)',
   }}>
-    <div style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600, color, marginBottom: '0.5rem' }}>{label}</div>
-    <div style={{ fontSize: '1.5rem', fontWeight: 800, color }}>{formatCurrency(bucket.total_paise)}</div>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+      <span style={{ fontSize: 'var(--font-size-xs)', fontWeight: 600, color: 'var(--text-secondary)' }}>{label}</span>
+      <span className={`badge ${badgeClass}`} style={{ fontSize: '10px' }}>
+        {bucket.count} inv
+      </span>
+    </div>
+    <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-primary)' }}>{formatCurrency(bucket.total_paise)}</div>
     <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-      {bucket.count} invoice{bucket.count !== 1 ? 's' : ''}
+      {bucket.count} invoice{bucket.count !== 1 ? 's' : ''} outstanding
     </div>
   </div>
 );
@@ -88,25 +98,26 @@ export const AgingReportPage: React.FC = () => {
       link.download = 'Tally_Sales_Vouchers.xml';
       link.click();
       window.URL.revokeObjectURL(url);
+      toast.success('Tally XML export downloaded successfully.');
     } catch {
-      alert('Failed to export Tally XML. Please try again.');
+      toast.error('Failed to export Tally XML. Please try again.');
     } finally {
       setExporting(false);
     }
   };
 
   const tabItems = [
-    { key: 'overdue_90_plus' as const, label: '90+ Days', color: 'var(--color-danger)', bgColor: '#fef2f2' },
-    { key: 'days_61_90' as const, label: '61-90 Days', color: '#dc2626', bgColor: '#fff7ed' },
-    { key: 'days_31_60' as const, label: '31-60 Days', color: 'var(--color-warning)', bgColor: '#fffbeb' },
-    { key: 'current_0_30' as const, label: '0-30 Days', color: 'var(--color-success-600)', bgColor: '#f0fdf4' },
+    { key: 'overdue_90_plus' as const, label: '> 90 Days (Overdue)', color: 'var(--color-danger)', badgeClass: 'badge-danger' },
+    { key: 'days_61_90' as const, label: '61–90 Days', color: '#dc2626', badgeClass: 'badge-danger' },
+    { key: 'days_31_60' as const, label: '31–60 Days', color: 'var(--color-warning)', badgeClass: 'badge-warning' },
+    { key: 'current_0_30' as const, label: '0–30 Days (Current)', color: 'var(--color-success-600)', badgeClass: 'badge-success' },
   ];
 
   return (
     <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       <PageHeader
         title="Accounts Receivable Aging"
-        subtitle="Outstanding invoice aging analysis by payment delay period"
+        subtitle="Outstanding receivables aging analysis computed from Invoice Issue Date (0–30, 31–60, 61–90, and >90 days)"
         actions={
           <button
             onClick={handleTallyExport}
@@ -130,51 +141,80 @@ export const AgingReportPage: React.FC = () => {
         </div>
       ) : data ? (
         <>
-          {/* Summary Stat Banner */}
+          {/* Summary Stat Banner - Clean Neutral Enterprise Card */}
           <div style={{
-            background: 'linear-gradient(135deg, var(--color-primary-600), var(--color-primary-800))',
+            background: 'var(--bg-card)',
             borderRadius: 'var(--radius-xl)',
             padding: '1.5rem 2rem',
-            color: '#fff',
+            border: '1px solid var(--border-default)',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
+            boxShadow: 'var(--shadow-sm)',
           }}>
             <div>
-              <div style={{ fontSize: 'var(--font-size-sm)', opacity: 0.8 }}>Total Outstanding Receivables</div>
-              <div style={{ fontSize: '2.5rem', fontWeight: 800 }}>{formatCurrency(data.total_outstanding_paise)}</div>
-              <div style={{ fontSize: 'var(--font-size-xs)', opacity: 0.6, marginTop: '0.25rem' }}>
-                As of {new Date(data.as_of).toLocaleString('en-IN')}
+              <div style={{ fontSize: 'var(--font-size-xs)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)' }}>
+                Total Outstanding Receivables
+              </div>
+              <div style={{ fontSize: '2.25rem', fontWeight: 800, color: 'var(--text-primary)', marginTop: '0.25rem' }}>
+                {formatCurrency(data.total_outstanding_paise)}
+              </div>
+              <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)', marginTop: '0.375rem', display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                <span>As of {new Date(data.as_of).toLocaleString('en-IN')}</span>
+                <span>•</span>
+                <span style={{ color: 'var(--color-primary-600)', fontWeight: 500 }}>
+                  Aging baseline: elapsed days from invoice issue date
+                </span>
               </div>
             </div>
-            <AlertCircle size={48} style={{ opacity: 0.3 }} />
+            <div style={{ width: 48, height: 48, borderRadius: 'var(--radius-lg)', background: 'var(--color-primary-50, #eff6ff)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <TrendingUp size={24} color="var(--color-primary-600)" />
+            </div>
           </div>
 
-          {/* Aging Bucket Cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem' }}>
+          {/* Policy Baseline Helper Notice */}
+          <div style={{
+            background: 'var(--bg-subtle)',
+            borderRadius: 'var(--radius-md)',
+            padding: '0.75rem 1rem',
+            border: '1px solid var(--border-subtle)',
+            fontSize: 'var(--font-size-xs)',
+            color: 'var(--text-secondary)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+          }}>
+            <AlertCircle size={14} color="var(--color-primary-600)" style={{ flexShrink: 0 }} />
+            <span>
+              <strong>Aging Policy Baseline:</strong> Buckets compute aging from <em>Invoice Issue Date</em> (0–30, 31–60, 61–90, and 90+ days). Outstanding amounts reflect total invoice value minus cash receipts and credit notes.
+            </span>
+          </div>
+
+          {/* Aging Bucket Cards - Neutral Design System Tokens */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
             <AgingBucketCard
-              label="Current (0-30 Days)"
+              label="0–30 Days (Current)"
               bucket={data.aging.current_0_30}
               color="var(--color-success-600)"
-              bgColor="#f0fdf4"
+              badgeClass="badge-success"
             />
             <AgingBucketCard
-              label="31-60 Days"
+              label="31–60 Days"
               bucket={data.aging.days_31_60}
               color="var(--color-warning)"
-              bgColor="#fffbeb"
+              badgeClass="badge-warning"
             />
             <AgingBucketCard
-              label="61-90 Days"
+              label="61–90 Days"
               bucket={data.aging.days_61_90}
               color="#dc2626"
-              bgColor="#fff7ed"
+              badgeClass="badge-danger"
             />
             <AgingBucketCard
               label="> 90 Days (Overdue)"
               bucket={data.aging.overdue_90_plus}
               color="var(--color-danger)"
-              bgColor="#fef2f2"
+              badgeClass="badge-danger"
             />
           </div>
 

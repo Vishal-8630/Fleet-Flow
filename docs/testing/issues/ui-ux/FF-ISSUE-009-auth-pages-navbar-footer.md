@@ -5,12 +5,12 @@
 - **ID:** FF-ISSUE-009
 - **Category:** UI-UX
 - **Priority:** Medium
-- **Status:** Observed / Needs Verification
+- **Status:** Resolved (Batch H4)
 - **Affected module:** Authentication Pages (Login, Register, Password Reset)
 - **Source:** `docs/testing/FLEET_FLOW_MANUAL_TESTING_AND_DECISION_HANDOFF.md` (Section 4.A, FF-MT-010)
 - **Related issues:** [FF-ISSUE-001](FF-ISSUE-001-public-site-color-scheme.md)
 - **Related decisions:** None
-- **Implementation status:** Not implemented
+- **Implementation status:** Implemented (Batch H4)
 
 ## 1. Summary
 
@@ -50,9 +50,9 @@ Implement a clean `AuthHeader` (Fleet Flow brand logo linking to `/`, and a subt
 
 ## 9. Acceptance criteria
 
-- [ ] Auth pages include a minimal, distraction-free header with a clickable logo returning to `/`.
-- [ ] Auth pages include a minimal footer with links to Terms of Service and Privacy Policy.
-- [ ] Layout remains responsive on mobile screens without pushing form inputs off-screen.
+- [x] Auth pages include a minimal, distraction-free header with a clickable logo returning to `/`.
+- [x] Auth pages include a minimal footer with links to Terms of Service and Privacy Policy.
+- [x] Layout remains responsive on mobile screens without pushing form inputs off-screen.
 
 ## 10. Required tests
 
@@ -65,4 +65,7 @@ Implement a clean `AuthHeader` (Fleet Flow brand logo linking to `/`, and a subt
 
 ## 12. Verification evidence
 
-- Implementation and verification evidence pending.
+- Created reusable `AuthLayout.tsx` with top brand header linking to `/` and minimal legal footer linking to `/privacy`, `/terms`, `/refund-policy`, and `/contact`.
+- Integrated `AuthLayout` into `LoginPage.tsx` and `RegisterPage.tsx`.
+- Preserved existing authentication mutation, validation, rate limiting, and session redirection logic.
+- Verified via `backend/src/tests/integration/phase8BatchH4PublicAndAuthShell.test.ts`.

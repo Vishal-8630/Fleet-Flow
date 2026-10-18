@@ -5,12 +5,12 @@
 - **ID:** FF-ISSUE-006
 - **Category:** UI-UX
 - **Priority:** Low
-- **Status:** Observed / Approved for Future Design
+- **Status:** Resolved (Batch H4)
 - **Affected module:** Public Pricing Page
 - **Source:** `docs/testing/FLEET_FLOW_MANUAL_TESTING_AND_DECISION_HANDOFF.md` (Section 4.A, FF-MT-007)
 - **Related issues:** [FF-ISSUE-005](FF-ISSUE-005-pricing-page-redesign.md)
 - **Related decisions:** None
-- **Implementation status:** Not implemented
+- **Implementation status:** Implemented (Batch H4)
 
 ## 1. Summary
 
@@ -52,9 +52,9 @@ Implement an accessible Accordion component for the FAQ section with:
 
 ## 9. Acceptance criteria
 
-- [ ] FAQ questions render collapsed by default with clear expand indicators.
-- [ ] Clicking a question smoothly toggles the visibility of its answer.
-- [ ] Keyboard navigation (Tab, Enter/Space) toggles accordion items correctly.
+- [x] FAQ questions render collapsed by default with clear expand indicators.
+- [x] Clicking a question smoothly toggles the visibility of its answer.
+- [x] Keyboard navigation (Tab, Enter/Space) toggles accordion items correctly.
 
 ## 10. Required tests
 
@@ -66,4 +66,6 @@ Implement an accessible Accordion component for the FAQ section with:
 
 ## 12. Verification evidence
 
-- Implementation and verification evidence pending.
+- Implemented interactive accordion state in `PricingPage.tsx` using `openFaqIndex`, `toggleFaq`, `aria-expanded`, `aria-controls`, and `ChevronDown` rotation.
+- Added full keyboard access for `Enter` and `Space` key presses.
+- Verified via `backend/src/tests/integration/phase8BatchH4PublicAndAuthShell.test.ts`.

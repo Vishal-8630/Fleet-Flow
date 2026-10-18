@@ -39,6 +39,7 @@ import {
 import api from '../../api/client';
 import { PageHeader } from '../../components/common/PageHeader';
 import { Modal } from '../../components/common/Modal';
+import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { Pagination } from '../../components/common/Pagination';
 import { CustomFieldsRenderer } from '../../components/common/CustomFieldsRenderer';
 import { useAuthStore } from '../../stores/authStore';
@@ -81,6 +82,7 @@ export const TruckListPage: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState('');
   const [complianceFilter, setComplianceFilter] = useState('');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [truckToDelete, setTruckToDelete] = useState<TruckRecord | null>(null);
 
   // Form State for new vehicle registration
   const initialTruckFormData = {
@@ -159,6 +161,7 @@ export const TruckListPage: React.FC = () => {
     },
     onSuccess: (resData) => {
       toast.success(resData.message || 'Vehicle removed from fleet.');
+      setTruckToDelete(null);
       queryClient.invalidateQueries({ queryKey: ['trucks'] });
     },
     onError: (err: any) => {
@@ -511,11 +514,7 @@ export const TruckListPage: React.FC = () => {
                             type="button"
                             className="btn btn-danger btn-sm"
                             title="Remove vehicle"
-                            onClick={() => {
-                              if (confirm(`Are you sure you want to remove vehicle ${truck.truck_no}?`)) {
-                                deleteMutation.mutate(truck._id);
-                              }
-                            }}
+                            onClick={() => setTruckToDelete(truck)}
                           >
                             <Trash2 size={14} />
                           </button>
@@ -719,6 +718,29 @@ export const TruckListPage: React.FC = () => {
           </div>
         </form>
       </Modal>
+
+      {/* 7. Confirm Vehicle Deletion Dialog */}
+      <ConfirmDialog
+        isOpen={Boolean(truckToDelete)}
+        onClose={() => setTruckToDelete(null)}
+        onConfirm={() => {
+          if (truckToDelete) {
+            deleteMutation.mutate(truckToDelete._id);
+          }
+        }}
+        title="Remove Vehicle Asset"
+        confirmText="Remove Vehicle"
+        variant="danger"
+        isLoading={deleteMutation.isPending}
+        message={
+          <>
+            Are you sure you want to remove vehicle <strong>{truckToDelete?.truck_no}</strong> ({truckToDelete?.make} {truckToDelete?.model}) from the active fleet roster?
+            <div style={{ marginTop: '0.5rem', color: 'var(--color-danger-text)', fontSize: 'var(--font-size-xs)' }}>
+              Warning: This action permanently removes the vehicle from active dispatch schedules. Existing completed trips and maintenance records remain archived.
+            </div>
+          </>
+        }
+      />
     </div>
   );
 };

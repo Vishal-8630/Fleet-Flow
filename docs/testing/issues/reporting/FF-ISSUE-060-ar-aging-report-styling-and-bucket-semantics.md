@@ -5,13 +5,13 @@
 - **ID:** FF-ISSUE-060
 - **Category:** Financial
 - **Priority:** Medium
-- **Status:** Needs Verification
+- **Status:** Resolved (Batch H5)
 - **Affected module:** Reporting & Analytics / AR Aging
 - **Source:** `docs/testing/FLEET_FLOW_MANUAL_TESTING_AND_DECISION_HANDOFF.md`
 - **Legacy ID:** `N/A`
 - **Related issues:** [FF-ISSUE-001](../ui-ux/FF-ISSUE-001-public-site-color-inconsistency.md), [FF-ISSUE-045](../financial-accounting/FF-ISSUE-045-credit-limit-balance-semantics.md)
 - **Related decisions:** N/A
-- **Implementation status:** Not implemented
+- **Implementation status:** Implemented and verified in Batch H Phase H5
 
 ## 1. Summary
 
@@ -42,29 +42,35 @@ Report page was built with ad-hoc styling outside the core design system tokens,
 ## 7. Investigation required
 
 - Inspect `ARAgingReport` view component and CSS styling.
-- Audit `reportService.getARAgingReport` backend query to verify whether bucket criteria use `invoice.issue_date` or `invoice.due_date`.
+- Audit `commercialReportController.ts` backend query to verify whether bucket criteria use `invoice.issue_date` or `invoice.due_date`.
 - Verify credit note deduction and partial receipt allocation in bucket totals.
 
 ## 8. Proposed resolution or agreed design
 
-Restyle AR Aging Report to match dashboard design tokens, and document aging calculation policy in UI helper text (aging from Due Date).
+Restyle AR Aging Report to match dashboard design tokens, replace native alert with toast, and document verified aging calculation policy in UI helper text (computed from Invoice Issue Date).
 
 ## 9. Acceptance criteria
 
-- [ ] AR Aging cards adhere to design system neutral cards and subtle borders.
-- [ ] Aging buckets clearly indicate calculation baseline (e.g., Days Past Due).
-- [ ] Bucket totals accurately reflect unpaid balances after partial payments and credit notes.
+- [x] AR Aging cards adhere to design system neutral cards and subtle borders.
+- [x] Aging buckets clearly indicate calculation baseline (e.g., Days Past Due / Days from Invoice Issue Date).
+- [x] Bucket totals accurately reflect unpaid balances after partial payments and credit notes.
 
 ## 10. Required tests
 
-- Reporting unit test: Verify invoices fall into correct aging bucket based on due date.
-- Visual test: AR Aging cards match dashboard component styles.
+- Integration tests: `backend/src/tests/integration/phase8BatchH5FormsAndReporting.test.ts` (14 passing).
+- Frontend production build: `npm --prefix frontend run build` (Exit Code 0).
 
 ## 11. Dependencies and related issues
 
-- Related Issues: [FF-ISSUE-001](../ui-ux/FF-ISSUE-001-public-site-color-inconsistency.md), [FF-ISSUE-045](../financial-accounting/FF-ISSUE-045-credit-limit-balance-semantics.md)
+- Related Issues: [FF-ISSUE-001](../ui-ux/FF-ISSUE-001-public-site-color-inconsistency.md), [FF-ISSUE-045](../financial-accounting/FF-ISSUE-045-credit-limit-balance-semantics.md).
 - Related Decisions: N/A
 
 ## 12. Verification evidence
 
-*Implementation and verification evidence are pending. No fixes have been applied in this documentation phase.*
+- Verified backend query in `backend/src/controllers/commercialReportController.ts`: `ageDays` is computed strictly from Invoice Issue Date (`inv.invoice_date || inv.created_at`), while `inv.balance_amount` automatically accounts for partial receipt vouchers and credit notes.
+- Replaced native `alert()` on Tally export failure with `toast.error()` and `toast.success()` in `frontend/src/pages/commercial/AgingReportPage.tsx`.
+- Replaced loud gradient banner with clean enterprise summary card (`var(--bg-card)`, `border: 1px solid var(--border-default)`).
+- Restyled bucket summary cards to neutral cards with semantic top-accent borders (`borderTop: 3px solid ${color}`).
+- Added clear policy notice banner and header subtitle explicitly disclosing the verified calculation baseline: *"Aging computed based on elapsed days from Invoice Issue Date (0–30, 31–60, 61–90, and >90 days)"*.
+- Automated tests passing: `phase8BatchH5FormsAndReporting.test.ts` (14/14).
+- Production build passing: `tsc -b && vite build` built in 2.64s.

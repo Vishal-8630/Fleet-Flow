@@ -5,12 +5,12 @@
 - **ID:** FF-ISSUE-007
 - **Category:** UI-UX
 - **Priority:** Medium
-- **Status:** Observed
+- **Status:** Resolved (Batch H4)
 - **Affected module:** Public Security Page
 - **Source:** `docs/testing/FLEET_FLOW_MANUAL_TESTING_AND_DECISION_HANDOFF.md` (Section 4.A, FF-MT-008)
 - **Related issues:** [FF-ISSUE-001](FF-ISSUE-001-public-site-color-scheme.md)
 - **Related decisions:** None
-- **Implementation status:** Not implemented
+- **Implementation status:** Implemented (Batch H4)
 
 ## 1. Summary
 
@@ -54,9 +54,9 @@ Link out to a separate detailed Security Whitepaper or Policy document if requir
 
 ## 9. Acceptance criteria
 
-- [ ] Top-level security page is concise, structured, and easily readable by commercial buyers.
-- [ ] No confidential infrastructure topology details are unnecessarily exposed.
-- [ ] Factual security and compliance commitments are preserved without distortion.
+- [x] Top-level security page is concise, structured, and easily readable by commercial buyers.
+- [x] No confidential infrastructure topology details are unnecessarily exposed.
+- [x] Factual security and compliance commitments are preserved without distortion.
 
 ## 10. Required tests
 
@@ -68,4 +68,6 @@ Link out to a separate detailed Security Whitepaper or Policy document if requir
 
 ## 12. Verification evidence
 
-- Implementation and verification evidence pending.
+- Created dedicated `SecurityPage.tsx` with four executive trust pillars (Data Protection & Encryption, Multi-Tenant Logical Isolation, Availability & Disaster Recovery, Compliance & Statutory Governance).
+- Decoupled `/security` route in `App.tsx` from `PrivacyPage.tsx`.
+- Verified via `backend/src/tests/integration/phase8BatchH4PublicAndAuthShell.test.ts`.

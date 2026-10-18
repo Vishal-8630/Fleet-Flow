@@ -23,6 +23,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Truck, Building2, Mail, Lock, User, Phone, FileText, ArrowRight, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
+import { AuthLayout } from '../../components/layout/AuthLayout';
 
 export const RegisterPage: React.FC = () => {
   const [formData, setFormData] = useState({
@@ -82,7 +83,7 @@ export const RegisterPage: React.FC = () => {
   };
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--color-slate-100)', padding: '2rem 1.5rem' }}>
+    <AuthLayout headerAction={{ label: 'Already registered?', linkText: 'Sign In', to: '/login' }}>
       <div className="card" style={{ width: '100%', maxWidth: '38rem', boxShadow: 'var(--shadow-xl)', borderRadius: 'var(--radius-xl)' }}>
         <div className="card-body" style={{ padding: '2.5rem' }}>
           {/* Header & Logo */}
@@ -263,6 +264,6 @@ export const RegisterPage: React.FC = () => {
           </div>
         </div>
       </div>
-    </div>
+    </AuthLayout>
   );
 };

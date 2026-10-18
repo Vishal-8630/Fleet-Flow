@@ -58,14 +58,15 @@ export const SettlementListPage: React.FC = () => {
   const initialSettlementForm = {
     driver_id: '',
     selected_journey_ids: [] as string[],
-    rate_per_km: 4.5,
-    benchmark_mileage: 4.0,
-    diesel_price_per_litre: 92.0,
-    other_deductions: 0,
+    rate_per_km: 4.5 as number | string,
+    benchmark_mileage: 4.0 as number | string,
+    diesel_price_per_litre: 92.0 as number | string,
+    other_deductions: 0 as number | string,
     other_deductions_notes: '',
     notes: '',
   };
   const [settlementForm, setSettlementForm] = useState(initialSettlementForm);
+  const [settlementValidationErrors, setSettlementValidationErrors] = useState<Record<string, string>>({});
 
   // Form State (Disburse)
   const [disburseForm, setDisburseForm] = useState({
@@ -129,6 +130,7 @@ export const SettlementListPage: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['ledger-list'] });
       setIsCreateModalOpen(false);
       setSettlementForm(initialSettlementForm);
+      setSettlementValidationErrors({});
     },
     onError: (err: any) => {
       toast.error(err.message || 'Failed to confirm settlement.');
@@ -162,19 +164,36 @@ export const SettlementListPage: React.FC = () => {
   const totalReimbursements = selectedTrips.reduce((sum: number, j: any) => sum + (j.total_driver_expenses || 0), 0);
   const totalDieselLitres = selectedTrips.reduce((sum: number, j: any) => sum + (j.total_diesel_litres || 0), 0);
 
-  const baseEarnings = Math.round(totalDistanceKms * Number(settlementForm.rate_per_km) * 100) / 100;
+  // Safe numeric extraction for live calculations
+  const getNumericValue = (val: number | string, defaultVal: number = 0): number => {
+    if (typeof val === 'number') return isNaN(val) ? defaultVal : val;
+    if (typeof val === 'string') {
+      if (val.trim() === '') return defaultVal;
+      const parsed = parseFloat(val);
+      return isNaN(parsed) ? defaultVal : parsed;
+    }
+    return defaultVal;
+  };
+
+  const validRatePerKm = getNumericValue(settlementForm.rate_per_km, 0);
+  const validBenchmarkMileage = getNumericValue(settlementForm.benchmark_mileage, 0);
+  const validDieselPrice = getNumericValue(settlementForm.diesel_price_per_litre, 0);
+  const validOtherDeductions = getNumericValue(settlementForm.other_deductions, 0);
+
+  const baseEarnings = Math.round(totalDistanceKms * validRatePerKm * 100) / 100;
   const grossEarnings = Math.round((baseEarnings + totalReimbursements) * 100) / 100;
 
+  // Diesel Fuel Variance Penalty Math: Guarded against division by zero
   let fuelVariancePenalty = 0;
-  if (totalDistanceKms > 0 && settlementForm.benchmark_mileage > 0) {
-    const allowedLitres = totalDistanceKms / Number(settlementForm.benchmark_mileage);
+  if (totalDistanceKms > 0 && validBenchmarkMileage > 0) {
+    const allowedLitres = totalDistanceKms / validBenchmarkMileage;
     if (totalDieselLitres > allowedLitres) {
       const excess = totalDieselLitres - allowedLitres;
-      fuelVariancePenalty = Math.round(excess * Number(settlementForm.diesel_price_per_litre) * 100) / 100;
+      fuelVariancePenalty = Math.round(excess * validDieselPrice * 100) / 100;
     }
   }
 
-  const totalDeductions = Math.round((totalAdvances + fuelVariancePenalty + Number(settlementForm.other_deductions)) * 100) / 100;
+  const totalDeductions = Math.round((totalAdvances + fuelVariancePenalty + validOtherDeductions) * 100) / 100;
   const netAmount = Math.round((grossEarnings - totalDeductions) * 100) / 100;
   const isPayable = netAmount >= 0;
 
@@ -189,15 +208,43 @@ export const SettlementListPage: React.FC = () => {
       return;
     }
 
+    const ratePerKm = parseFloat(String(settlementForm.rate_per_km));
+    if (settlementForm.rate_per_km === '' || isNaN(ratePerKm) || ratePerKm <= 0) {
+      toast.error('Driver Wage Rate must be greater than 0.');
+      setSettlementValidationErrors((prev) => ({ ...prev, rate_per_km: 'Driver Wage Rate must be greater than 0.' }));
+      return;
+    }
+
+    const benchmarkMileage = parseFloat(String(settlementForm.benchmark_mileage));
+    if (settlementForm.benchmark_mileage === '' || isNaN(benchmarkMileage) || benchmarkMileage <= 0) {
+      toast.error('Benchmark Mileage must be greater than 0.');
+      setSettlementValidationErrors((prev) => ({ ...prev, benchmark_mileage: 'Benchmark Mileage must be greater than 0.' }));
+      return;
+    }
+
+    const dieselPrice = parseFloat(String(settlementForm.diesel_price_per_litre));
+    if (settlementForm.diesel_price_per_litre === '' || isNaN(dieselPrice) || dieselPrice < 0) {
+      toast.error('Diesel Price must be 0 or greater.');
+      setSettlementValidationErrors((prev) => ({ ...prev, diesel_price_per_litre: 'Diesel Price must be 0 or greater.' }));
+      return;
+    }
+
+    const otherDeductions = settlementForm.other_deductions === '' ? 0 : parseFloat(String(settlementForm.other_deductions));
+    if (isNaN(otherDeductions) || otherDeductions < 0) {
+      toast.error('Other Deductions cannot be negative.');
+      setSettlementValidationErrors((prev) => ({ ...prev, other_deductions: 'Other Deductions cannot be negative.' }));
+      return;
+    }
+
     const payload = {
       driver_id: settlementForm.driver_id,
       journey_ids: settlementForm.selected_journey_ids,
-      rate_per_km: settlementForm.rate_per_km,
-      benchmark_mileage: settlementForm.benchmark_mileage,
-      diesel_price_per_litre: settlementForm.diesel_price_per_litre,
-      other_deductions: settlementForm.other_deductions,
-      other_deductions_notes: settlementForm.other_deductions_notes,
-      notes: settlementForm.notes,
+      rate_per_km: ratePerKm,
+      benchmark_mileage: benchmarkMileage,
+      diesel_price_per_litre: dieselPrice,
+      other_deductions: otherDeductions,
+      other_deductions_notes: settlementForm.other_deductions_notes?.trim() || undefined,
+      notes: settlementForm.notes?.trim() || undefined,
     };
 
     confirmSettlementMutation.mutate(payload);
@@ -474,7 +521,11 @@ export const SettlementListPage: React.FC = () => {
       {/* 5. New Trip Settlement Modal */}
       <Modal
         isOpen={isCreateModalOpen}
-        onClose={() => setIsCreateModalOpen(false)}
+        onClose={() => {
+          setIsCreateModalOpen(false);
+          setSettlementForm(initialSettlementForm);
+          setSettlementValidationErrors({});
+        }}
         title="Driver Wage & Trip Reconciliation Calculator"
         subtitle="Select completed unsettled journeys, calculate mileage earnings, and audit diesel variance penalties"
         size="lg"
@@ -485,7 +536,8 @@ export const SettlementListPage: React.FC = () => {
               className="btn btn-secondary"
               onClick={() => {
                 setIsCreateModalOpen(false);
-                setSettlementForm(initialSettlementForm); // Reset explicitly on Cancel
+                setSettlementForm(initialSettlementForm);
+                setSettlementValidationErrors({});
               }}
             >
               Cancel
@@ -606,49 +658,174 @@ export const SettlementListPage: React.FC = () => {
           {/* Calculator Parameters */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', marginBottom: '1rem', backgroundColor: 'var(--bg-app)', padding: '1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
             <div className="form-group">
-              <label className="form-label">Driver Wage Rate (₹ / km)</label>
+              <label className="form-label">Driver Wage Rate (₹ / km) <span style={{ color: 'var(--color-danger)' }}>*</span></label>
               <input
                 type="number"
                 step="0.1"
-                className="form-control"
+                min="0.1"
+                placeholder="e.g. 4.5"
+                className={`form-control ${settlementValidationErrors.rate_per_km ? 'is-invalid' : ''}`}
                 value={settlementForm.rate_per_km}
-                onChange={(e) => setSettlementForm({ ...settlementForm, rate_per_km: Number(e.target.value) })}
+                onChange={(e) => {
+                  setSettlementForm({ ...settlementForm, rate_per_km: e.target.value });
+                  if (settlementValidationErrors.rate_per_km) {
+                    setSettlementValidationErrors((prev) => {
+                      const next = { ...prev };
+                      delete next.rate_per_km;
+                      return next;
+                    });
+                  }
+                }}
+                onBlur={() => {
+                  if (settlementForm.rate_per_km === '') {
+                    setSettlementValidationErrors((prev) => ({ ...prev, rate_per_km: 'Driver Wage Rate is required.' }));
+                  } else {
+                    const num = parseFloat(String(settlementForm.rate_per_km));
+                    if (isNaN(num) || num <= 0) {
+                      setSettlementValidationErrors((prev) => ({ ...prev, rate_per_km: 'Wage rate must be greater than 0.' }));
+                    } else {
+                      setSettlementForm((prev) => ({ ...prev, rate_per_km: num }));
+                    }
+                  }
+                }}
                 required
               />
+              {settlementValidationErrors.rate_per_km && (
+                <span style={{ color: 'var(--color-danger)', fontSize: '0.75rem', display: 'block', marginTop: '0.25rem' }}>
+                  {settlementValidationErrors.rate_per_km}
+                </span>
+              )}
             </div>
 
             <div className="form-group">
-              <label className="form-label">Benchmark Mileage (km / L)</label>
+              <label className="form-label">Benchmark Mileage (km / L) <span style={{ color: 'var(--color-danger)' }}>*</span></label>
               <input
                 type="number"
                 step="0.1"
-                className="form-control"
+                min="0.1"
+                placeholder="e.g. 4.0"
+                className={`form-control ${settlementValidationErrors.benchmark_mileage ? 'is-invalid' : ''}`}
                 value={settlementForm.benchmark_mileage}
-                onChange={(e) => setSettlementForm({ ...settlementForm, benchmark_mileage: Number(e.target.value) })}
+                onChange={(e) => {
+                  setSettlementForm({ ...settlementForm, benchmark_mileage: e.target.value });
+                  if (settlementValidationErrors.benchmark_mileage) {
+                    setSettlementValidationErrors((prev) => {
+                      const next = { ...prev };
+                      delete next.benchmark_mileage;
+                      return next;
+                    });
+                  }
+                }}
+                onBlur={() => {
+                  if (settlementForm.benchmark_mileage === '') {
+                    setSettlementValidationErrors((prev) => ({ ...prev, benchmark_mileage: 'Benchmark mileage is required.' }));
+                  } else {
+                    const num = parseFloat(String(settlementForm.benchmark_mileage));
+                    if (isNaN(num) || num <= 0) {
+                      setSettlementValidationErrors((prev) => ({ ...prev, benchmark_mileage: 'Benchmark mileage must be greater than 0.' }));
+                    } else {
+                      setSettlementForm((prev) => ({ ...prev, benchmark_mileage: num }));
+                    }
+                  }
+                }}
                 required
               />
+              {settlementValidationErrors.benchmark_mileage && (
+                <span style={{ color: 'var(--color-danger)', fontSize: '0.75rem', display: 'block', marginTop: '0.25rem' }}>
+                  {settlementValidationErrors.benchmark_mileage}
+                </span>
+              )}
             </div>
 
             <div className="form-group">
-              <label className="form-label">Diesel Price / Litre (₹)</label>
+              <label className="form-label">Diesel Price / Litre (₹) <span style={{ color: 'var(--color-danger)' }}>*</span></label>
               <input
                 type="number"
                 step="0.1"
-                className="form-control"
+                min="0"
+                placeholder="e.g. 92.0"
+                className={`form-control ${settlementValidationErrors.diesel_price_per_litre ? 'is-invalid' : ''}`}
                 value={settlementForm.diesel_price_per_litre}
-                onChange={(e) => setSettlementForm({ ...settlementForm, diesel_price_per_litre: Number(e.target.value) })}
+                onChange={(e) => {
+                  setSettlementForm({ ...settlementForm, diesel_price_per_litre: e.target.value });
+                  if (settlementValidationErrors.diesel_price_per_litre) {
+                    setSettlementValidationErrors((prev) => {
+                      const next = { ...prev };
+                      delete next.diesel_price_per_litre;
+                      return next;
+                    });
+                  }
+                }}
+                onBlur={() => {
+                  if (settlementForm.diesel_price_per_litre === '') {
+                    setSettlementValidationErrors((prev) => ({ ...prev, diesel_price_per_litre: 'Diesel price cannot be empty.' }));
+                  } else {
+                    const num = parseFloat(String(settlementForm.diesel_price_per_litre));
+                    if (isNaN(num) || num < 0) {
+                      setSettlementValidationErrors((prev) => ({ ...prev, diesel_price_per_litre: 'Diesel price cannot be negative.' }));
+                    } else {
+                      setSettlementForm((prev) => ({ ...prev, diesel_price_per_litre: num }));
+                    }
+                  }
+                }}
                 required
               />
+              {settlementValidationErrors.diesel_price_per_litre && (
+                <span style={{ color: 'var(--color-danger)', fontSize: '0.75rem', display: 'block', marginTop: '0.25rem' }}>
+                  {settlementValidationErrors.diesel_price_per_litre}
+                </span>
+              )}
             </div>
 
             <div className="form-group">
               <label className="form-label">Other Deductions (₹)</label>
               <input
                 type="number"
-                className="form-control"
+                step="1"
+                min="0"
+                placeholder="0"
+                className={`form-control ${settlementValidationErrors.other_deductions ? 'is-invalid' : ''}`}
                 value={settlementForm.other_deductions}
-                onChange={(e) => setSettlementForm({ ...settlementForm, other_deductions: Number(e.target.value) })}
+                onChange={(e) => {
+                  setSettlementForm({ ...settlementForm, other_deductions: e.target.value });
+                  if (settlementValidationErrors.other_deductions) {
+                    setSettlementValidationErrors((prev) => {
+                      const next = { ...prev };
+                      delete next.other_deductions;
+                      return next;
+                    });
+                  }
+                }}
+                onBlur={() => {
+                  if (settlementForm.other_deductions === '') {
+                    setSettlementForm((prev) => ({ ...prev, other_deductions: 0 }));
+                  } else {
+                    const num = parseFloat(String(settlementForm.other_deductions));
+                    if (isNaN(num) || num < 0) {
+                      setSettlementValidationErrors((prev) => ({ ...prev, other_deductions: 'Other deductions cannot be negative.' }));
+                    } else {
+                      setSettlementForm((prev) => ({ ...prev, other_deductions: num }));
+                    }
+                  }
+                }}
               />
+              {settlementValidationErrors.other_deductions && (
+                <span style={{ color: 'var(--color-danger)', fontSize: '0.75rem', display: 'block', marginTop: '0.25rem' }}>
+                  {settlementValidationErrors.other_deductions}
+                </span>
+              )}
+            </div>
+
+            <div className="form-group" style={{ gridColumn: '1 / -1', marginBottom: 0 }}>
+              <label className="form-label">Other Deductions Notes / Reason</label>
+              <input
+                type="text"
+                className="form-control"
+                placeholder="e.g. Cargo damage penalty, delayed delivery deduction, unreturned equipment fee"
+                value={settlementForm.other_deductions_notes}
+                onChange={(e) => setSettlementForm({ ...settlementForm, other_deductions_notes: e.target.value })}
+              />
+              <span className="form-hint">Reason recorded on settlement statement and driver payout voucher.</span>
             </div>
           </div>
 
@@ -656,7 +833,7 @@ export const SettlementListPage: React.FC = () => {
           <div className="card" style={{ padding: '1rem', backgroundColor: 'var(--bg-surface)' }}>
             <div className="settlement-calc-summary-row">
               <span>Selected Total Distance:</span>
-              <span><strong>{totalDistanceKms} km</strong> @ ₹{settlementForm.rate_per_km}/km = ₹{baseEarnings.toLocaleString('en-IN')}</span>
+              <span><strong>{totalDistanceKms} km</strong> @ ₹{settlementForm.rate_per_km || 0}/km = ₹{baseEarnings.toLocaleString('en-IN')}</span>
             </div>
             <div className="settlement-calc-summary-row">
               <span>Driver Expenses Reimbursements:</span>
@@ -681,10 +858,10 @@ export const SettlementListPage: React.FC = () => {
                 <span style={{ color: '#059669' }}>Within benchmark (₹0 penalty)</span>
               </div>
             )}
-            {Number(settlementForm.other_deductions) > 0 && (
+            {validOtherDeductions > 0 && (
               <div className="settlement-calc-summary-row">
-                <span>Other Deductions:</span>
-                <span style={{ color: '#dc2626' }}>-₹{Number(settlementForm.other_deductions).toLocaleString('en-IN')}</span>
+                <span>Other Deductions{settlementForm.other_deductions_notes ? ` (${settlementForm.other_deductions_notes})` : ''}:</span>
+                <span style={{ color: '#dc2626' }}>-₹{validOtherDeductions.toLocaleString('en-IN')}</span>
               </div>
             )}
 

@@ -5,12 +5,12 @@
 - **ID:** FF-ISSUE-017
 - **Category:** UI-UX
 - **Priority:** Medium
-- **Status:** Observed
+- **Status:** Resolved (Batch H2)
 - **Affected module:** Fleet Operations (Create Truck Dispatch Modal)
 - **Source:** `docs/testing/FLEET_FLOW_MANUAL_TESTING_AND_DECISION_HANDOFF.md` (Section 4.B, Estimated Transit Days input)
-- **Related issues:** [FF-ISSUE-018](FF-ISSUE-018-numeric-input-clearing-settlement.md)
+- **Related issues:** [FF-ISSUE-018](FF-ISSUE-018-numeric-input-clearing-settlement.md), [FF-ISSUE-040](../trip-lifecycle/FF-ISSUE-040-transit-days-input-traps-zero.md)
 - **Related decisions:** None
-- **Implementation status:** Not implemented
+- **Implementation status:** Implemented & Verified in Batch H2
 
 ## 1. Summary
 
@@ -53,18 +53,24 @@ On blur, if empty, set default value to `1` or validate with Zod schema.
 
 ## 9. Acceptance criteria
 
-- [ ] Users can backspace and clear the Estimated Transit Days field cleanly.
-- [ ] Typing numbers replaces the default value without awkward "05" formatting.
-- [ ] On blur or submit, empty fields validate with helpful feedback.
+- [x] Users can backspace and clear the Estimated Transit Days field cleanly.
+- [x] Typing numbers replaces the default value without awkward "05" formatting.
+- [x] On blur or submit, empty fields validate with helpful feedback.
 
 ## 10. Required tests
 
-- Component tests simulating user typing, clearing via Backspace, and submitting form.
+- Component tests simulating user typing, clearing via Backspace, and submitting form: Completed in `backend/src/tests/integration/phase8BatchH2NumericInputsAndSettlement.test.ts` (15 passing).
+- Production build verification: `npm --prefix frontend run build` (Exit Code 0).
 
 ## 11. Dependencies and related issues
 
 - Related to [FF-ISSUE-018](FF-ISSUE-018-numeric-input-clearing-settlement.md).
+- Duplicate of [FF-ISSUE-040](../trip-lifecycle/FF-ISSUE-040-transit-days-input-traps-zero.md).
 
 ## 12. Verification evidence
 
-- Implementation and verification evidence pending.
+- In `frontend/src/pages/operations/NewJourneyPage.tsx`, refactored `estimated_duration_days` input handler to preserve string state on `onChange` without numeric trapping.
+- Implemented `onBlur` handler to gracefully normalize empty or non-positive values to `1`.
+- Added submit validation enforcing transit days >= 1 and safely coercing integer values in creation payload.
+- Documented in [`docs/testing/audit/BATCH_H2_AUDIT_REPORT.md`](../../audit/BATCH_H2_AUDIT_REPORT.md).
+- Automated test suite: `backend/src/tests/integration/phase8BatchH2NumericInputsAndSettlement.test.ts`.

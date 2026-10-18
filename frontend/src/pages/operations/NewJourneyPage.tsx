@@ -61,7 +61,7 @@ export const NewJourneyPage: React.FC = () => {
     to_state: '',
     to_hub: '',
     start_date: new Date().toISOString().split('T')[0],
-    estimated_duration_days: 2,
+    estimated_duration_days: 2 as number | string,
     start_odometer_kms: '',
     loaded_weight_tonnes: '',
     cbm_volume: '',
@@ -175,7 +175,7 @@ export const NewJourneyPage: React.FC = () => {
           status: 'pending',
         })),
         start_date: formData.start_date,
-        estimated_duration_days: Number(formData.estimated_duration_days) || 2,
+        estimated_duration_days: Math.max(1, parseInt(String(formData.estimated_duration_days), 10) || 1),
         start_odometer_kms: Number(formData.start_odometer_kms) || 0,
         loaded_weight_tonnes: Number(formData.loaded_weight_tonnes) || 0,
         cbm_volume: Number(formData.cbm_volume) || 0,
@@ -232,6 +232,12 @@ export const NewJourneyPage: React.FC = () => {
 
     if (activeBranches.length > 1 && !formData.branch_id) {
       toast.error('Please select the originating regional branch for this trip.');
+      return;
+    }
+
+    const transitDays = parseInt(String(formData.estimated_duration_days), 10);
+    if (formData.estimated_duration_days === '' || isNaN(transitDays) || transitDays < 1) {
+      toast.error('Estimated Transit Days must be at least 1 day.');
       return;
     }
 
@@ -632,7 +638,19 @@ export const NewJourneyPage: React.FC = () => {
                 placeholder="e.g. 3"
                 className="form-control"
                 value={formData.estimated_duration_days}
-                onChange={(e) => setFormData({ ...formData, estimated_duration_days: Number(e.target.value) })}
+                onChange={(e) => setFormData({ ...formData, estimated_duration_days: e.target.value })}
+                onBlur={() => {
+                  if (formData.estimated_duration_days === '') {
+                    setFormData((prev) => ({ ...prev, estimated_duration_days: 1 }));
+                  } else {
+                    const parsed = parseInt(String(formData.estimated_duration_days), 10);
+                    if (isNaN(parsed) || parsed < 1) {
+                      setFormData((prev) => ({ ...prev, estimated_duration_days: 1 }));
+                    } else {
+                      setFormData((prev) => ({ ...prev, estimated_duration_days: parsed }));
+                    }
+                  }
+                }}
               />
             </div>
           </div>

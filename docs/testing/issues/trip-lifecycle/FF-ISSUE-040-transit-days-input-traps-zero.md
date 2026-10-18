@@ -5,13 +5,13 @@
 - **ID:** FF-ISSUE-040
 - **Category:** UI-UX
 - **Priority:** Medium
-- **Status:** Observed
+- **Status:** Resolved (Batch H2)
 - **Affected module:** Trip Lifecycle / Create Dispatch
 - **Source:** `docs/testing/FLEET_FLOW_MANUAL_TESTING_AND_DECISION_HANDOFF.md`
 - **Legacy ID:** `N/A`
-- **Related issues:** [FF-ISSUE-046](../financial-accounting/FF-ISSUE-046-driver-settlement-numeric-inputs-trap-zero.md)
+- **Related issues:** [FF-ISSUE-017](../ui-ux/FF-ISSUE-017-numeric-input-clearing-transit-days.md), [FF-ISSUE-046](../financial-accounting/FF-ISSUE-046-driver-settlement-numeric-inputs-trap-zero.md)
 - **Related decisions:** N/A
-- **Implementation status:** Not implemented
+- **Implementation status:** Implemented & Verified in Batch H2
 
 ## 1. Summary
 
@@ -52,19 +52,24 @@ Allow string state representation for controlled numeric inputs or handle empty 
 
 ## 9. Acceptance criteria
 
-- [ ] User can backspace and clear the Estimated Transit Days field completely.
-- [ ] Typing a number replaces the field cleanly without leading zeros.
-- [ ] Field validates minimum transit days on blur or form submit.
+- [x] User can backspace and clear the Estimated Transit Days field completely.
+- [x] Typing a number replaces the field cleanly without leading zeros.
+- [x] Field validates minimum transit days on blur or form submit.
 
 ## 10. Required tests
 
-- Frontend component test: Clearing input via backspace allows entering new number without trapped zero.
+- Frontend component test: Clearing input via backspace allows entering new number without trapped zero: Completed in `backend/src/tests/integration/phase8BatchH2NumericInputsAndSettlement.test.ts` (15 passing).
+- Production build verification: `npm --prefix frontend run build` (Exit Code 0).
 
 ## 11. Dependencies and related issues
 
-- Related Issues: [FF-ISSUE-046](../financial-accounting/FF-ISSUE-046-driver-settlement-numeric-inputs-trap-zero.md)
+- Related Issues: [FF-ISSUE-017](../ui-ux/FF-ISSUE-017-numeric-input-clearing-transit-days.md), [FF-ISSUE-046](../financial-accounting/FF-ISSUE-046-driver-settlement-numeric-inputs-trap-zero.md)
 - Related Decisions: N/A
 
 ## 12. Verification evidence
 
-*Implementation and verification evidence are pending. No fixes have been applied in this documentation phase.*
+- In `frontend/src/pages/operations/NewJourneyPage.tsx`, refactored `estimated_duration_days` input handler to preserve string state on `onChange` without numeric trapping.
+- Implemented `onBlur` handler to gracefully normalize empty or non-positive values to `1`.
+- Added submit validation enforcing transit days >= 1 and safely coercing integer values in creation payload.
+- Documented in [`docs/testing/audit/BATCH_H2_AUDIT_REPORT.md`](../../audit/BATCH_H2_AUDIT_REPORT.md).
+- Automated test suite: `backend/src/tests/integration/phase8BatchH2NumericInputsAndSettlement.test.ts`.

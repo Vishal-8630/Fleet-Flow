@@ -5,13 +5,13 @@
 - **ID:** FF-ISSUE-049
 - **Category:** UI-UX
 - **Priority:** Medium
-- **Status:** Observed
+- **Status:** Resolved (Batch H5)
 - **Affected module:** Market Movements / Movement Listing
 - **Source:** `docs/testing/FLEET_FLOW_MANUAL_TESTING_AND_DECISION_HANDOFF.md`
 - **Legacy ID:** `FF-MT-041`
-- **Related issues:** [FF-ISSUE-048](FF-ISSUE-048-market-movement-status-ambiguity-pod.md)
+- **Related issues:** [FF-ISSUE-048](FF-ISSUE-048-market-movement-status-ambiguity-pod.md), [FF-ISSUE-010](../ui-ux/FF-ISSUE-010-native-browser-confirm-dialogs.md)
 - **Related decisions:** N/A
-- **Implementation status:** Not implemented
+- **Implementation status:** Implemented and verified in Batch H Phase H5
 
 ## 1. Summary
 
@@ -51,20 +51,25 @@ Streamline table columns to core essentials, standardize status badges, and prov
 
 ## 9. Acceptance criteria
 
-- [ ] Table fits cleanly without awkward truncation on standard desktop resolutions.
-- [ ] Columns prioritize Movement ID, Broker/Truck, Route, Delivery Status, Settlement Status, and Net Due.
-- [ ] Status badges use shared design tokens.
+- [x] Table fits cleanly without awkward truncation on standard desktop resolutions.
+- [x] Columns prioritize Movement ID, Broker/Truck, Route, Delivery Status, Settlement Status, and Net Due.
+- [x] Status badges use shared design tokens.
 
 ## 10. Required tests
 
-- Responsive UI test: Table renders cleanly across screen widths.
-- Visual regression test: Badges conform to shared palette.
+- Integration tests: `backend/src/tests/integration/phase8BatchH5FormsAndReporting.test.ts` (14 passing).
+- Frontend production build: `npm --prefix frontend run build` (Exit Code 0).
 
 ## 11. Dependencies and related issues
 
-- Related Issues: [FF-ISSUE-048](FF-ISSUE-048-market-movement-status-ambiguity-pod.md)
+- Related Issues: [FF-ISSUE-048](FF-ISSUE-048-market-movement-status-ambiguity-pod.md), [FF-ISSUE-010](../ui-ux/FF-ISSUE-010-native-browser-confirm-dialogs.md).
 - Related Decisions: N/A
 
 ## 12. Verification evidence
 
-*Implementation and verification evidence are pending. No fixes have been applied in this documentation phase.*
+- Streamlined table from 13 overcrowded columns to 10 prioritized columns in `frontend/src/pages/operations/VehicleEntryListPage.tsx`.
+- Relocated secondary brokerage deductions (Dala and Commission) to the comprehensive 1-click View Financial Breakdown & Deduction Arithmetic modal (`viewEntry`), retaining complete mathematical transparency while preventing table cell wrapping.
+- Wrapped table in `.table-responsive` with `overflowX: auto` and `whiteSpace: 'nowrap'` on headers and vital figures.
+- Replaced the remaining `window.confirm()` call for movement deletion with the accessible `<ConfirmDialog />` component.
+- Automated tests passing: `phase8BatchH5FormsAndReporting.test.ts` (14/14).
+- Production build passing: `tsc -b && vite build` built in 2.64s.

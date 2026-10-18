@@ -11,6 +11,12 @@
   white-space: nowrap;
 }
 
+.badge-primary {
+  background-color: var(--color-primary-bg);
+  border-color: var(--color-primary-border);
+  color: var(--color-primary-text);
+}
+
 .badge-success {
   background-color: var(--color-success-bg);
   border-color: var(--color-success-border);

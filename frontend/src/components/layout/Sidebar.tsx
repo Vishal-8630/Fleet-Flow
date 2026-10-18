@@ -18,7 +18,7 @@
  */
 
 import React, { useState } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   Truck,
@@ -60,6 +60,7 @@ import { Modal } from '../common/Modal';
 
 export const Sidebar: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { role, user, isImpersonation, enabledFeatures = [], planFeatures = [] } = useAuthStore();
   const { sidebarOpen, setSidebarOpen } = useUiStore();
   const isSuperAdmin = Boolean(user?.isSuperAdmin) && !isImpersonation;
@@ -89,12 +90,12 @@ export const Sidebar: React.FC = () => {
     { label: 'Trip Dispatch', path: '/operations/journeys', icon: Navigation, feature: 'MOD_TRIPS' },
     { label: 'Live Fleet Map', path: '/operations/live-map', icon: Map, feature: 'MOD_GPS_SYNC', tier: 'PRO' },
     { label: 'Market Movements', path: '/operations/market-entries', icon: Layers, feature: 'MOD_MARKET_VEHICLES' },
-    { label: 'Bill Entries & LR', path: '/bill-entry/all', icon: Receipt, feature: 'MOD_LR_ENGINE', tier: 'STD' },
-    { label: 'Freight Invoices', path: '/invoices', icon: FileSpreadsheet, feature: 'MOD_BILLING_INVOICE', tier: 'STD' },
+    { label: 'Bill Entries & LR', path: '/bill-entry/all', icon: Receipt, feature: 'MOD_LR_ENGINE', tier: 'STD', aliases: ['/commercial/entries'] },
+    { label: 'Freight Invoices', path: '/invoices', icon: FileSpreadsheet, feature: 'MOD_BILLING_INVOICE', tier: 'STD', aliases: ['/commercial/invoices'] },
     { label: 'Credit Notes', path: '/commercial/credit-notes', icon: FileX, roles: ['admin', 'accountant'], feature: 'MOD_BILLING_INVOICE' },
-    { label: 'AR Aging Report', path: '/commercial/aging', icon: TrendingUp, roles: ['admin', 'accountant'], feature: 'MOD_REPORTS' },
-    { label: 'Driver Settlements', path: '/settlements', icon: BadgeCent, roles: ['admin', 'accountant'], feature: 'MOD_SETTLEMENTS', tier: 'STD' },
-    { label: 'General Ledger', path: '/ledger', icon: BookOpen, roles: ['admin', 'accountant'], feature: 'MOD_LEDGERS', tier: 'STD' },
+    { label: 'AR Aging Report', path: '/commercial/aging', icon: TrendingUp, roles: ['admin', 'accountant'], feature: 'MOD_REPORTS', aliases: ['/financials/aging'] },
+    { label: 'Driver Settlements', path: '/settlements', icon: BadgeCent, roles: ['admin', 'accountant'], feature: 'MOD_SETTLEMENTS', tier: 'STD', aliases: ['/commercial/settlements'] },
+    { label: 'General Ledger', path: '/ledger', icon: BookOpen, roles: ['admin', 'accountant'], feature: 'MOD_LEDGERS', tier: 'STD', aliases: ['/commercial/ledger'] },
     { label: 'Pending Approvals', path: '/settings/approvals', icon: CheckSquare, roles: ['admin'], feature: 'MOD_WORKFLOW_APPROVALS', tier: 'PRO' },
     { label: 'Team & Access', path: '/team', icon: Users, roles: ['admin'] },
     { label: 'Branches & Hubs', path: '/settings/branches', icon: GitBranch, roles: ['admin'], feature: 'MOD_MULTI_BRANCH', tier: 'PRO' },
@@ -158,6 +159,17 @@ export const Sidebar: React.FC = () => {
     }
   };
 
+  const isItemActive = (item: { path: string; end?: boolean; aliases?: string[] }, navLinkIsActive: boolean) => {
+    if (navLinkIsActive) return true;
+    if (item.aliases && item.aliases.length > 0) {
+      const current = location.pathname;
+      return item.aliases.some((alias) =>
+        item.end ? current === alias : current === alias || current.startsWith(`${alias}/`)
+      );
+    }
+    return false;
+  };
+
   return (
     <aside className={`sidebar ${sidebarOpen ? 'mobile-open' : ''}`}>
       {/* 1. Brand Logo & Name + Mobile Close Button */}
@@ -200,7 +212,7 @@ export const Sidebar: React.FC = () => {
                   to={item.path}
                   end={item.end}
                   onClick={handleLinkClick}
-                  className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+                  className={({ isActive }) => `nav-link ${isItemActive(item, isActive) ? 'active' : ''}`}
                 >
                   <Icon size={18} />
                   <span>{item.label}</span>
@@ -223,7 +235,7 @@ export const Sidebar: React.FC = () => {
                   end={item.end}
                   onClick={(e) => handleItemClick(e, item, isLocked)}
                   onKeyDown={(e) => handleItemKeyDown(e, item, isLocked)}
-                  className={({ isActive }) => `nav-link ${isActive && !isLocked ? 'active' : ''} ${isLocked ? 'locked-nav-item' : ''}`}
+                  className={({ isActive }) => `nav-link ${isItemActive(item, isActive) && !isLocked ? 'active' : ''} ${isLocked ? 'locked-nav-item' : ''}`}
                   aria-haspopup={isLocked ? 'dialog' : undefined}
                   aria-disabled={isLocked ? true : undefined}
                 >

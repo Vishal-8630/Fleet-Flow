@@ -70,6 +70,14 @@ select.form-select,
   background-color: #ffffff;
 }
 
+.form-control:focus-visible,
+.form-input:focus-visible,
+.form-select:focus-visible,
+.form-textarea:focus-visible {
+  outline: 2px solid var(--color-primary-600);
+  outline-offset: 1px;
+}
+
 .form-control::placeholder,
 .form-input::placeholder,
 .form-textarea::placeholder {

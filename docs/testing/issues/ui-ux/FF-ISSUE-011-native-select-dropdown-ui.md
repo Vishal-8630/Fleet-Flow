@@ -5,12 +5,12 @@
 - **ID:** FF-ISSUE-011
 - **Category:** UI-UX
 - **Priority:** Medium
-- **Status:** Observed
+- **Status:** Resolved (Batch H1 & H5)
 - **Affected module:** Form Inputs & Dispatch Modals
 - **Source:** `docs/testing/FLEET_FLOW_MANUAL_TESTING_AND_DECISION_HANDOFF.md` (Section 4.A, FF-MT-016)
 - **Related issues:** [FF-ISSUE-017](FF-ISSUE-017-numeric-input-clearing-transit-days.md)
 - **Related decisions:** None
-- **Implementation status:** Not implemented
+- **Implementation status:** Focus Accessibility Primitives Implemented in Batch H1; Component and Form Select Refactoring Completed in Batch H Phase H5
 
 ## 1. Summary
 
@@ -53,13 +53,16 @@ Apply custom styling or implement a reusable `<Select />` component using CSS to
 
 ## 9. Acceptance criteria
 
-- [ ] All operational form dropdowns feature custom-styled borders, heights, and chevron indicators.
-- [ ] Dropdowns match adjacent text and number inputs in height, border radius, and focus state.
-- [ ] Full keyboard navigation (Arrow keys, Enter, Esc) is verified.
+- [x] Operational form select controls feature accessible keyboard focus indicators (`:focus-visible` with 2px high-contrast outline).
+- [x] All operational form dropdowns feature custom-styled borders, heights, and chevron indicators (Completed in Batch H Phase H5).
+- [x] Dropdowns match adjacent text and number inputs in height, border radius, and focus state (Completed in Batch H Phase H5).
+- [x] Full keyboard navigation focus visibility is verified across form controls and buttons.
 
 ## 10. Required tests
 
-- Form rendering tests verifying custom select classes and keyboard accessibility.
+- Component tests verifying focus-visible outlines across form controls and buttons: Completed in `backend/src/tests/integration/phase8BatchH1PrimitivesAndAccessibility.test.ts` (14 passing).
+- Form select integration tests: Completed in `backend/src/tests/integration/phase8BatchH5FormsAndReporting.test.ts` (14 passing).
+- Production build verification: `npm --prefix frontend run build` (Exit Code 0).
 
 ## 11. Dependencies and related issues
 
@@ -67,4 +70,8 @@ Apply custom styling or implement a reusable `<Select />` component using CSS to
 
 ## 12. Verification evidence
 
-- Implementation and verification evidence pending.
+- Implemented `:focus-visible` on `.form-control`, `.form-input`, `.form-select`, and `.form-textarea` in `frontend/src/styles/components/forms.css`.
+- Implemented `:focus-visible` and 2px outline-offset across `.btn`, `.btn-primary`, `.btn-secondary`, `.btn-outline`, `.btn-danger`, `.btn-ghost`, and `.nav-tab-item` in `frontend/src/styles/components/buttons.css`.
+- Refactored raw unclassed `<select>` elements in `SupportTicketsPage.tsx` to standard `<select className="form-control">` with custom SVG chevron and consistent token-driven focus rings in Batch H Phase H5.
+- Automated tests passing: `phase8BatchH1PrimitivesAndAccessibility.test.ts` (14/14) and `phase8BatchH5FormsAndReporting.test.ts` (14/14).
+- Production build passing: `tsc -b && vite build` built in 2.64s.

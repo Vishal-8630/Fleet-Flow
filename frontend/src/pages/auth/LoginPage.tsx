@@ -20,6 +20,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Truck, Lock, Mail, ArrowRight, AlertCircle, ShieldAlert, AlertTriangle } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
+import { AuthLayout } from '../../components/layout/AuthLayout';
 
 export const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -63,16 +64,7 @@ export const LoginPage: React.FC = () => {
   };
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: 'var(--color-slate-100)',
-        padding: '1.5rem',
-      }}
-    >
+    <AuthLayout headerAction={{ label: "Don't have an account?", linkText: 'Start Free Trial', to: '/register' }}>
       <div
         className="card"
         style={{
@@ -277,7 +269,7 @@ export const LoginPage: React.FC = () => {
           </div>
         </div>
       </div>
-    </div>
+    </AuthLayout>
   );
 };
 

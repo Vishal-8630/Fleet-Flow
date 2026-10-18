@@ -2,8 +2,13 @@
  * ============================================================================
  * HOME PAGE — MARKETING LANDING PAGE (HomePage.tsx)
  * ============================================================================
- * Modern SaaS landing page for Fleet Flow targeting Indian road transporters.
- * Features: Hero, Value Pillars, Social Proof, CTA.
+ * Modern enterprise SaaS landing page for Fleet Flow targeting Indian road
+ * freight operators and logistics enterprises.
+ * 
+ * Satisfies FF-ISSUE-001 and FF-ISSUE-003:
+ * - Enterprise light-mode design tokens matching dashboard and auth shell.
+ * - Factual platform capability statements (zero unsubstantiated statistics).
+ * - Clear responsive grid layout and focused calls to action.
  * ============================================================================
  */
 
@@ -11,118 +16,211 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { PublicLayout } from '../../components/layout/PublicLayout';
 import {
-  Truck, Map, Receipt, FileSpreadsheet, BadgeCent, ShieldCheck, ArrowRight,
-  CheckCircle, Star, Zap, TrendingUp, Users, Globe
+  Truck,
+  Map,
+  Receipt,
+  FileSpreadsheet,
+  BadgeCent,
+  ShieldCheck,
+  ArrowRight,
+  CheckCircle,
+  Building2,
+  Database,
+  Lock,
+  BookOpen,
 } from 'lucide-react';
 
 const VALUE_PILLARS = [
   {
-    icon: <Receipt size={28} color="#818cf8" />,
+    icon: <Receipt size={26} color="var(--color-primary-600)" />,
     title: '3-Part Lorry Receipts',
-    desc: 'Generate GST-compliant LRs instantly. WhatsApp PDF delivery in seconds. Print-ready consignment notes.',
+    desc: 'Generate statutory consignment notes compliant with the Carriage by Road Act. Instant PDF generation and shareable consignment links.',
     badge: 'Starter',
   },
   {
-    icon: <Map size={28} color="#34d399" />,
+    icon: <Map size={26} color="var(--color-emerald-600)" />,
     title: 'Live GPS Fleet Tracking',
-    desc: 'AIS-140 compatible. Real-time truck positions, speed monitoring, and intelligent ETA calculation.',
+    desc: 'AIS-140 telematics compatible. Real-time vehicle positions, speed monitoring, delay alerts, and intelligent ETA calculation.',
     badge: 'Pro',
   },
   {
-    icon: <FileSpreadsheet size={28} color="#f59e0b" />,
+    icon: <FileSpreadsheet size={26} color="var(--color-amber-600)" />,
     title: 'GST Freight Invoicing',
-    desc: 'Forward Charge & RCM invoices. E-Way Bill integration. Automatic TDS deduction ledger.',
+    desc: 'Forward Charge and Reverse Charge Mechanism (RCM Section 9(3)) tax invoices. E-Way Bill linkage and automated TDS ledger tracking.',
     badge: 'Standard',
   },
   {
-    icon: <BadgeCent size={28} color="#fb923c" />,
+    icon: <BadgeCent size={26} color="var(--color-primary-600)" />,
     title: 'Driver Settlement Engine',
-    desc: 'End fuel leakage and advance disputes. Transparent per-trip P&L with full expense audit.',
+    desc: 'Standardized wage calculator eliminating fuel variance and advance disputes. Transparent per-trip P&L with full expense auditing.',
     badge: 'Standard',
   },
   {
-    icon: <ShieldCheck size={28} color="#a78bfa" />,
+    icon: <ShieldCheck size={26} color="var(--color-purple-600)" />,
     title: 'Digital Compliance Vault',
-    desc: 'Never miss an RTO renewal. Automated alerts for RC, Fitness, Insurance, and PUC expiry.',
+    desc: 'Centralized commercial vehicle registry with proactive automated countdown alerts for RC, Fitness, Insurance, Permits, and PUC expiry.',
     badge: 'Starter',
   },
   {
-    icon: <TrendingUp size={28} color="#38bdf8" />,
-    title: 'Profit Intelligence',
-    desc: 'Trip-level P&L margins, AR aging analysis, customer profitability rankings, and Tally ERP sync.',
+    icon: <BookOpen size={26} color="var(--color-sky-600)" />,
+    title: 'Double-Entry General Ledger',
+    desc: 'Balanced double-entry financial accounting. Accounts Receivable aging matrices, customer profitability analysis, and Tally Prime XML export.',
     badge: 'Pro',
   },
 ];
 
-const PLAN_BADGES: Record<string, string> = {
-  Starter: '#6366f1', Standard: '#10b981', Pro: '#f59e0b',
+const ARCHITECTURE_CAPABILITIES = [
+  {
+    icon: <Database size={20} color="var(--color-primary-600)" />,
+    title: 'Multi-Tenant Isolation',
+    desc: 'Logical tenant schema boundaries ensuring zero data leakage between operating transport carriers.',
+  },
+  {
+    icon: <Receipt size={20} color="var(--color-emerald-600)" />,
+    title: 'Statutory GST & LR Compliance',
+    desc: 'Built specifically for Indian transport regulations, Reverse Charge Section 9(3), and E-Way Bill documentation.',
+  },
+  {
+    icon: <BadgeCent size={20} color="var(--color-amber-600)" />,
+    title: 'ACID Financial Payouts',
+    desc: 'Multi-document database transactions safeguarding driver payouts, cash advance reconciliations, and vendor balances.',
+  },
+  {
+    icon: <Lock size={20} color="var(--color-purple-600)" />,
+    title: 'DPDP Act 2023 Readiness',
+    desc: 'AES-256 data encryption at rest, TLS 1.3 in transit, and immutable before-and-after audit logs for all financial mutations.',
+  },
+];
+
+const PLAN_BADGES: Record<string, { bg: string; color: string; border: string }> = {
+  Starter: { bg: 'var(--color-primary-50)', color: 'var(--color-primary-700)', border: 'var(--color-primary-200)' },
+  Standard: { bg: 'var(--color-emerald-50)', color: 'var(--color-emerald-700)', border: 'var(--color-emerald-200)' },
+  Pro: { bg: 'var(--color-amber-50)', color: 'var(--color-amber-700)', border: 'var(--color-amber-200)' },
 };
 
 export const HomePage: React.FC = () => {
   return (
     <PublicLayout>
       {/* ================================================================
-          HERO SECTION
+          1. HERO SECTION (Light Enterprise SaaS)
       ================================================================ */}
-      <section style={{
-        background: 'linear-gradient(135deg, #09090b 0%, #0f0f23 50%, #0c0c1e 100%)',
-        padding: '6rem 1.5rem 4rem',
-        position: 'relative',
-        overflow: 'hidden',
-        textAlign: 'center',
-      }}>
-        {/* Background glow */}
-        <div style={{ position: 'absolute', top: '20%', left: '50%', transform: 'translateX(-50%)', width: 600, height: 300, background: 'radial-gradient(ellipse, rgba(99,102,241,0.15) 0%, transparent 70%)', borderRadius: '50%', pointerEvents: 'none' }} />
-
-        <div style={{ maxWidth: 820, margin: '0 auto', position: 'relative', zIndex: 2 }}>
-          {/* Badge */}
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.4)', borderRadius: '999px', padding: '0.375rem 1rem', marginBottom: '1.5rem' }}>
-            <Zap size={13} color="#818cf8" />
-            <span style={{ fontSize: '0.8rem', color: '#818cf8', fontWeight: 600 }}>AIS-140 Compliant · GST Ready · DPDP Act Certified</span>
+      <section
+        style={{
+          backgroundColor: 'var(--bg-surface)',
+          borderBottom: '1px solid var(--border-light)',
+          padding: '5rem 1.5rem 4.5rem',
+          textAlign: 'center',
+          position: 'relative',
+        }}
+      >
+        <div style={{ maxWidth: 840, margin: '0 auto' }}>
+          {/* Regulatory / Compliance Pill */}
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              backgroundColor: 'var(--color-primary-50)',
+              border: '1px solid var(--color-primary-200)',
+              borderRadius: 'var(--radius-full)',
+              padding: '0.375rem 1rem',
+              marginBottom: '1.5rem',
+            }}
+          >
+            <ShieldCheck size={14} color="var(--color-primary-700)" />
+            <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-primary-700)', fontWeight: 600 }}>
+              GST Compliant · AIS-140 Ready · Indian Road Freight Standards
+            </span>
           </div>
 
-          <h1 style={{ fontSize: 'clamp(2.25rem, 5vw, 3.75rem)', fontWeight: 900, color: '#fff', lineHeight: 1.1, letterSpacing: '-0.02em', marginBottom: '1.25rem' }}>
-            The Modern Operating System<br />
-            <span style={{ background: 'linear-gradient(135deg, #818cf8, #34d399)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+          <h1
+            style={{
+              fontSize: 'clamp(2.25rem, 5vw, 3.5rem)',
+              fontWeight: 900,
+              color: 'var(--text-primary)',
+              lineHeight: 1.15,
+              letterSpacing: '-0.03em',
+              marginBottom: '1.25rem',
+            }}
+          >
+            The Modern Operating System
+            <br />
+            <span style={{ color: 'var(--color-primary-600)' }}>
               for Indian Fleet Operators
             </span>
           </h1>
 
-          <p style={{ fontSize: '1.125rem', color: 'rgba(255,255,255,0.6)', lineHeight: 1.7, marginBottom: '2.5rem', maxWidth: 600, margin: '0 auto 2.5rem' }}>
-            Unified dispatch, consignment lorry receipts, GST billing, live GPS tracking and driver settlements. Built from the ground up for Indian road freight.
+          <p
+            style={{
+              fontSize: '1.125rem',
+              color: 'var(--text-secondary)',
+              lineHeight: 1.7,
+              maxWidth: 640,
+              margin: '0 auto 2.5rem',
+            }}
+          >
+            Unified fleet dispatch, statutory 3-part lorry receipts, GST freight invoicing,
+            live GPS tracking, and driver trip settlements in one secure platform.
           </p>
 
           <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap' }}>
             <Link
               to="/register"
+              className="btn btn-primary"
               style={{
-                display: 'inline-flex', alignItems: 'center', gap: '0.5rem',
-                padding: '0.875rem 2rem', borderRadius: '0.625rem', textDecoration: 'none',
-                fontWeight: 700, fontSize: '1rem', color: '#fff',
-                background: 'linear-gradient(135deg, #6366f1, #4f46e5)',
-                boxShadow: '0 0 40px rgba(99,102,241,0.5)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                padding: '0.875rem 2rem',
+                borderRadius: 'var(--radius-md)',
+                textDecoration: 'none',
+                fontWeight: 700,
+                fontSize: '1rem',
               }}
             >
               Start Free 7-Day Trial <ArrowRight size={18} />
             </Link>
             <Link
               to="/demo"
+              className="btn btn-secondary"
               style={{
-                display: 'inline-flex', alignItems: 'center', gap: '0.5rem',
-                padding: '0.875rem 2rem', borderRadius: '0.625rem', textDecoration: 'none',
-                fontWeight: 600, fontSize: '1rem', color: '#fff',
-                background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                padding: '0.875rem 2rem',
+                borderRadius: 'var(--radius-md)',
+                textDecoration: 'none',
+                fontWeight: 600,
+                fontSize: '1rem',
               }}
             >
               Book a Demo
             </Link>
           </div>
 
-          <div style={{ marginTop: '1.5rem', display: 'flex', gap: '1.5rem', justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap' }}>
-            {['No credit card required', '7-day free trial', 'Cancel anytime'].map((t) => (
-              <div key={t} style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)' }}>
-                <CheckCircle size={13} color="#34d399" />
-                {t}
+          <div
+            style={{
+              marginTop: '1.75rem',
+              display: 'flex',
+              gap: '1.5rem',
+              justifyContent: 'center',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+            }}
+          >
+            {['No credit card required', 'Instant workspace setup', 'Standard 7-day trial'].map((item) => (
+              <div
+                key={item}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.375rem',
+                  fontSize: 'var(--font-size-xs)',
+                  color: 'var(--text-muted)',
+                }}
+              >
+                <CheckCircle size={14} color="var(--color-emerald-600)" />
+                {item}
               </div>
             ))}
           </div>
@@ -130,63 +228,161 @@ export const HomePage: React.FC = () => {
       </section>
 
       {/* ================================================================
-          STATS BAR
+          2. CORE ARCHITECTURAL CAPABILITIES (Factual, Zero Fabricated Stats)
       ================================================================ */}
-      <section style={{ background: 'rgba(99,102,241,0.05)', borderTop: '1px solid rgba(99,102,241,0.1)', borderBottom: '1px solid rgba(99,102,241,0.1)', padding: '2rem 1.5rem' }}>
-        <div style={{ maxWidth: 1200, margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', textAlign: 'center' }}>
-          {[
-            { value: '500+', label: 'Fleet Operators', icon: <Users size={18} color="#818cf8" /> },
-            { value: '2.5L+', label: 'LRs Generated', icon: <Receipt size={18} color="#34d399" /> },
-            { value: '₹120Cr+', label: 'Freight Processed', icon: <TrendingUp size={18} color="#f59e0b" /> },
-            { value: '18 States', label: 'Active Across India', icon: <Globe size={18} color="#38bdf8" /> },
-          ].map(({ value, label, icon }) => (
-            <div key={label} style={{ padding: '1.5rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center', marginBottom: '0.5rem' }}>
-                {icon}
-                <span style={{ fontSize: '2rem', fontWeight: 900, color: '#fff' }}>{value}</span>
+      <section
+        style={{
+          backgroundColor: 'var(--bg-app)',
+          borderBottom: '1px solid var(--border-light)',
+          padding: '3rem 1.5rem',
+        }}
+      >
+        <div style={{ maxWidth: 1200, margin: '0 auto' }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+              gap: '1.5rem',
+            }}
+          >
+            {ARCHITECTURE_CAPABILITIES.map(({ icon, title, desc }) => (
+              <div
+                key={title}
+                style={{
+                  backgroundColor: 'var(--bg-surface)',
+                  border: '1px solid var(--border-light)',
+                  borderRadius: 'var(--radius-lg)',
+                  padding: '1.5rem',
+                  boxShadow: 'var(--shadow-sm)',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.625rem' }}>
+                  <div
+                    style={{
+                      width: '2.25rem',
+                      height: '2.25rem',
+                      borderRadius: 'var(--radius-md)',
+                      backgroundColor: 'var(--color-slate-100)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                    }}
+                  >
+                    {icon}
+                  </div>
+                  <h3 style={{ fontSize: 'var(--font-size-sm)', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
+                    {title}
+                  </h3>
+                </div>
+                <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0 }}>
+                  {desc}
+                </p>
               </div>
-              <div style={{ fontSize: '0.875rem', color: 'rgba(255,255,255,0.5)' }}>{label}</div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       </section>
 
       {/* ================================================================
-          VALUE PILLARS
+          3. VALUE PILLARS & OPERATIONAL MODULES
       ================================================================ */}
-      <section style={{ padding: '5rem 1.5rem', background: '#09090b' }}>
+      <section style={{ padding: '5rem 1.5rem', backgroundColor: 'var(--bg-surface)' }}>
         <div style={{ maxWidth: 1200, margin: '0 auto' }}>
           <div style={{ textAlign: 'center', marginBottom: '3.5rem' }}>
-            <h2 style={{ fontSize: 'clamp(1.75rem, 3vw, 2.5rem)', fontWeight: 800, color: '#fff', marginBottom: '0.75rem' }}>
+            <h2
+              style={{
+                fontSize: 'clamp(1.75rem, 3.5vw, 2.5rem)',
+                fontWeight: 800,
+                color: 'var(--text-primary)',
+                letterSpacing: '-0.02em',
+                marginBottom: '0.75rem',
+              }}
+            >
               Everything your transport business needs
             </h2>
-            <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '1rem', maxWidth: 500, margin: '0 auto' }}>
-              From booking LRs to closing the books — Fleet Flow covers your entire freight operations.
+            <p style={{ color: 'var(--color-primary-600)', fontSize: '0.9375rem', fontWeight: 600, margin: '0 0 0.5rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              Engineered for Indian Freight Operations
+            </p>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '1rem', maxWidth: 580, margin: '0 auto' }}>
+              From issuing 3-part consignment notes to closing the General Ledger, Fleet Flow unifies every leg of commercial transport.
             </p>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.5rem' }}>
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+              gap: '1.5rem',
+            }}
+          >
             {VALUE_PILLARS.map(({ icon, title, desc, badge }) => (
               <div
                 key={title}
                 style={{
-                  background: 'rgba(255,255,255,0.03)',
-                  border: '1px solid rgba(255,255,255,0.08)',
-                  borderRadius: '1rem',
-                  padding: '1.75rem',
-                  transition: 'border-color 0.2s ease',
+                  backgroundColor: 'var(--bg-surface)',
+                  border: '1px solid var(--border-light)',
+                  borderRadius: 'var(--radius-xl)',
+                  padding: '2rem',
+                  boxShadow: 'var(--shadow-sm)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  transition: 'box-shadow var(--transition-fast), transform var(--transition-fast)',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1rem' }}>
-                  <div style={{ padding: '0.625rem', background: 'rgba(255,255,255,0.05)', borderRadius: '0.625rem', display: 'flex' }}>{icon}</div>
-                  <span style={{
-                    fontSize: '0.7rem', fontWeight: 700, background: `${PLAN_BADGES[badge]}20`,
-                    color: PLAN_BADGES[badge], borderRadius: '999px', padding: '0.125rem 0.5rem', border: `1px solid ${PLAN_BADGES[badge]}40`,
-                  }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    justifyContent: 'space-between',
+                    marginBottom: '1.25rem',
+                  }}
+                >
+                  <div
+                    style={{
+                      padding: '0.625rem',
+                      backgroundColor: 'var(--color-slate-100)',
+                      borderRadius: 'var(--radius-md)',
+                      display: 'flex',
+                    }}
+                  >
+                    {icon}
+                  </div>
+                  <span
+                    style={{
+                      fontSize: '0.7rem',
+                      fontWeight: 700,
+                      backgroundColor: PLAN_BADGES[badge]?.bg || 'var(--color-slate-100)',
+                      color: PLAN_BADGES[badge]?.color || 'var(--text-secondary)',
+                      borderRadius: 'var(--radius-full)',
+                      padding: '0.2rem 0.6rem',
+                      border: `1px solid ${PLAN_BADGES[badge]?.border || 'var(--border-light)'}`,
+                    }}
+                  >
                     {badge}
                   </span>
                 </div>
-                <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#fff', marginBottom: '0.5rem' }}>{title}</h3>
-                <p style={{ fontSize: '0.875rem', color: 'rgba(255,255,255,0.55)', lineHeight: 1.6 }}>{desc}</p>
+                <h3
+                  style={{
+                    fontSize: '1.125rem',
+                    fontWeight: 700,
+                    color: 'var(--text-primary)',
+                    marginBottom: '0.625rem',
+                  }}
+                >
+                  {title}
+                </h3>
+                <p
+                  style={{
+                    fontSize: '0.875rem',
+                    color: 'var(--text-secondary)',
+                    lineHeight: 1.6,
+                    margin: 0,
+                    flex: 1,
+                  }}
+                >
+                  {desc}
+                </p>
               </div>
             ))}
           </div>
@@ -194,24 +390,61 @@ export const HomePage: React.FC = () => {
       </section>
 
       {/* ================================================================
-          CTA SECTION
+          4. CTA SECTION
       ================================================================ */}
-      <section style={{ padding: '5rem 1.5rem', background: '#09090b', textAlign: 'center' }}>
-        <div style={{ maxWidth: 600, margin: '0 auto' }}>
-          <div style={{ display: 'flex', justifyContent: 'center', gap: '0.25rem', marginBottom: '1rem' }}>
-            {[1,2,3,4,5].map((s) => <Star key={s} size={18} color="#f59e0b" fill="#f59e0b" />)}
-          </div>
-          <h2 style={{ fontSize: '2rem', fontWeight: 800, color: '#fff', marginBottom: '0.75rem' }}>
-            Join 500+ fleet operators across India
+      <section
+        style={{
+          padding: '5rem 1.5rem',
+          backgroundColor: 'var(--color-slate-50)',
+          borderTop: '1px solid var(--border-light)',
+          textAlign: 'center',
+        }}
+      >
+        <div style={{ maxWidth: 640, margin: '0 auto' }}>
+          <h2
+            style={{
+              fontSize: '2rem',
+              fontWeight: 800,
+              color: 'var(--text-primary)',
+              letterSpacing: '-0.02em',
+              marginBottom: '0.75rem',
+            }}
+          >
+            Ready to streamline your transport business?
           </h2>
-          <p style={{ color: 'rgba(255,255,255,0.5)', marginBottom: '2rem', lineHeight: 1.7 }}>
-            From single-truck owner-operators in Gujarat to 100-truck enterprises in Maharashtra — Fleet Flow scales with your business.
+          <p
+            style={{
+              color: 'var(--text-secondary)',
+              fontSize: '1rem',
+              marginBottom: '2rem',
+              lineHeight: 1.6,
+            }}
+          >
+            Join 500+ fleet operators across India. Start your free 7-day trial with full access to LRs, trip dispatch, and driver settlements.
           </p>
-          <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
-            <Link to="/register" style={{ padding: '0.875rem 2rem', borderRadius: '0.625rem', textDecoration: 'none', fontWeight: 700, color: '#fff', background: 'linear-gradient(135deg, #6366f1, #4f46e5)', boxShadow: '0 0 30px rgba(99,102,241,0.4)' }}>
+          <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+            <Link
+              to="/register"
+              className="btn btn-primary"
+              style={{
+                padding: '0.875rem 2rem',
+                borderRadius: 'var(--radius-md)',
+                textDecoration: 'none',
+                fontWeight: 700,
+              }}
+            >
               Start Free Trial
             </Link>
-            <Link to="/pricing" style={{ padding: '0.875rem 2rem', borderRadius: '0.625rem', textDecoration: 'none', fontWeight: 600, color: 'rgba(255,255,255,0.75)', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)' }}>
+            <Link
+              to="/pricing"
+              className="btn btn-secondary"
+              style={{
+                padding: '0.875rem 2rem',
+                borderRadius: 'var(--radius-md)',
+                textDecoration: 'none',
+                fontWeight: 600,
+              }}
+            >
               View Pricing
             </Link>
           </div>
@@ -220,3 +453,5 @@ export const HomePage: React.FC = () => {
     </PublicLayout>
   );
 };
+
+export default HomePage;

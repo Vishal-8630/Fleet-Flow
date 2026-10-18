@@ -5,12 +5,12 @@
 - **ID:** FF-ISSUE-001
 - **Category:** UI-UX
 - **Priority:** Medium
-- **Status:** Observed
+- **Status:** Resolved (Batch H4)
 - **Affected module:** Public Marketing Pages & Landing Shell
 - **Source:** `docs/testing/FLEET_FLOW_MANUAL_TESTING_AND_DECISION_HANDOFF.md` (Section 4.A, FF-MT-001)
 - **Related issues:** [FF-ISSUE-003](FF-ISSUE-003-homepage-content-density.md), [FF-ISSUE-005](FF-ISSUE-005-pricing-page-redesign.md)
 - **Related decisions:** None
-- **Implementation status:** Not implemented
+- **Implementation status:** Implemented (Batch H4)
 
 ## 1. Summary
 
@@ -52,9 +52,9 @@ Refactor public marketing pages to use Fleet Flow's canonical light-mode design 
 
 ## 9. Acceptance criteria
 
-- [ ] Public marketing pages (Home, Features, Pricing, Security, Contact) share the typography, surface colors, and border radius of the authenticated dashboard.
-- [ ] Heavy multi-color dark gradients are replaced with clean, high-contrast, modern business surfaces.
-- [ ] Transition between landing pages, login, and dashboard feels visually continuous and cohesive.
+- [x] Public marketing pages (Home, Features, Pricing, Security, Contact) share the typography, surface colors, and border radius of the authenticated dashboard.
+- [x] Heavy multi-color dark gradients are replaced with clean, high-contrast, modern business surfaces.
+- [x] Transition between landing pages, login, and dashboard feels visually continuous and cohesive.
 
 ## 10. Required tests
 
@@ -68,4 +68,6 @@ Refactor public marketing pages to use Fleet Flow's canonical light-mode design 
 
 ## 12. Verification evidence
 
-- Implementation and verification evidence pending.
+- Refactored `PublicLayout.tsx`, `HomePage.tsx`, `FeaturesPage.tsx`, and `PricingPage.tsx` to use light-mode tokens (`var(--bg-app)`, `var(--bg-surface)`, `var(--border-light)`, `var(--text-primary)`, `var(--color-slate-50)`).
+- Validated via `backend/src/tests/integration/phase8BatchH4PublicAndAuthShell.test.ts`.
+- Validated frontend production bundle build (`npm --prefix frontend run build`).

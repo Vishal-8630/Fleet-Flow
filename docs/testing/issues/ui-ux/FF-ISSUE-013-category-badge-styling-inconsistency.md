@@ -5,12 +5,12 @@
 - **ID:** FF-ISSUE-013
 - **Category:** UI-UX
 - **Priority:** Low
-- **Status:** Observed
+- **Status:** Resolved (Batch H1)
 - **Affected module:** Master Registries (Parties, Vendors, Customers)
 - **Source:** `docs/testing/FLEET_FLOW_MANUAL_TESTING_AND_DECISION_HANDOFF.md` (Section 4.B, Category/badge styling)
 - **Related issues:** [FF-ISSUE-014](FF-ISSUE-014-cash-expense-badge-inconsistency.md), [FF-ISSUE-015](FF-ISSUE-015-payment-mode-badge-inconsistency.md)
 - **Related decisions:** None
-- **Implementation status:** Not implemented
+- **Implementation status:** Implemented & Verified in Batch H1
 
 ## 1. Summary
 
@@ -50,13 +50,14 @@ Define a comprehensive category badge mapper dictionary that maps every valid en
 
 ## 9. Acceptance criteria
 
-- [ ] Every party category value renders inside a standardized badge component.
-- [ ] No category value renders as uncontained plain text.
-- [ ] Badge sizing, padding, and font weight are uniform across the table.
+- [x] Every party category value renders inside a standardized badge component.
+- [x] No category value renders as uncontained plain text.
+- [x] Badge sizing, padding, and font weight are uniform across the table.
 
 ## 10. Required tests
 
-- Component tests asserting badge rendering for every valid party category enum.
+- Component tests asserting badge rendering for every valid party category enum: Completed in `backend/src/tests/integration/phase8BatchH1PrimitivesAndAccessibility.test.ts` (14 passing).
+- Production build verification: `npm --prefix frontend run build` (Exit Code 0).
 
 ## 11. Dependencies and related issues
 
@@ -64,4 +65,7 @@ Define a comprehensive category badge mapper dictionary that maps every valid en
 
 ## 12. Verification evidence
 
-- Implementation and verification evidence pending.
+- Implemented `.badge-primary` in `frontend/src/styles/components/badges.css` using `--color-primary-bg`, `--color-primary-border`, and `--color-primary-text` defined in `variables.css`.
+- Fixed Truck Supplier category badge in `BalancePartyListPage.tsx` which was already coded with `badge badge-primary`.
+- Documented in [`docs/testing/audit/BATCH_H1_AUDIT_REPORT.md`](../../audit/BATCH_H1_AUDIT_REPORT.md).
+- Automated test suite: `backend/src/tests/integration/phase8BatchH1PrimitivesAndAccessibility.test.ts`.

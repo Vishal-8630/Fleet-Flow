@@ -39,6 +39,7 @@ import {
 import api from '../../api/client';
 import { PageHeader } from '../../components/common/PageHeader';
 import { Modal } from '../../components/common/Modal';
+import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { Pagination } from '../../components/common/Pagination';
 import { CustomFieldsRenderer } from '../../components/common/CustomFieldsRenderer';
 import { useAuthStore } from '../../stores/authStore';
@@ -76,6 +77,7 @@ export const DriverListPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [driverToDelete, setDriverToDelete] = useState<DriverRecord | null>(null);
 
   // Form State for new driver registration
   const initialDriverFormData = {
@@ -151,6 +153,7 @@ export const DriverListPage: React.FC = () => {
     },
     onSuccess: (resData) => {
       toast.success(resData.message || 'Driver removed from roster.');
+      setDriverToDelete(null);
       queryClient.invalidateQueries({ queryKey: ['drivers'] });
     },
     onError: (err: any) => {
@@ -428,11 +431,7 @@ export const DriverListPage: React.FC = () => {
                             type="button"
                             className="btn btn-danger btn-sm"
                             title="Remove driver"
-                            onClick={() => {
-                              if (confirm(`Remove driver ${driver.name} from active roster?`)) {
-                                deleteMutation.mutate(driver._id);
-                              }
-                            }}
+                            onClick={() => setDriverToDelete(driver)}
                           >
                             <Trash2 size={14} />
                           </button>
@@ -608,6 +607,29 @@ export const DriverListPage: React.FC = () => {
           </div>
         </form>
       </Modal>
+
+      {/* 7. Confirm Driver Deletion Dialog */}
+      <ConfirmDialog
+        isOpen={Boolean(driverToDelete)}
+        onClose={() => setDriverToDelete(null)}
+        onConfirm={() => {
+          if (driverToDelete) {
+            deleteMutation.mutate(driverToDelete._id);
+          }
+        }}
+        title="Remove Driver from Roster"
+        confirmText="Remove Driver"
+        variant="danger"
+        isLoading={deleteMutation.isPending}
+        message={
+          <>
+            Are you sure you want to remove driver <strong>{driverToDelete?.name}</strong> (License: {driverToDelete?.license_number}) from the active roster?
+            <div style={{ marginTop: '0.5rem', color: 'var(--color-danger-text)', fontSize: 'var(--font-size-xs)' }}>
+              Warning: The driver will be marked inactive and cannot be assigned to new dispatches. Active running advance balance (₹{Number(driverToDelete?.running_advance_balance || 0).toLocaleString('en-IN')}) and trip settlement histories remain recorded.
+            </div>
+          </>
+        }
+      />
     </div>
   );
 };

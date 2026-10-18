@@ -5,13 +5,13 @@
 - **ID:** FF-ISSUE-046
 - **Category:** UI-UX
 - **Priority:** Medium
-- **Status:** Observed
+- **Status:** Resolved (Batch H2)
 - **Affected module:** Financial Accounting / Driver Settlement
 - **Source:** `docs/testing/FLEET_FLOW_MANUAL_TESTING_AND_DECISION_HANDOFF.md`
 - **Legacy ID:** `N/A`
-- **Related issues:** [FF-ISSUE-040](../trip-lifecycle/FF-ISSUE-040-transit-days-input-traps-zero.md)
+- **Related issues:** [FF-ISSUE-018](../ui-ux/FF-ISSUE-018-numeric-input-clearing-settlement.md), [FF-ISSUE-040](../trip-lifecycle/FF-ISSUE-040-transit-days-input-traps-zero.md)
 - **Related decisions:** N/A
-- **Implementation status:** Not implemented
+- **Implementation status:** Implemented & Verified in Batch H2
 
 ## 1. Summary
 
@@ -51,19 +51,26 @@ Refactor numeric inputs to maintain string state while typing and parse to numbe
 
 ## 9. Acceptance criteria
 
-- [ ] All driver settlement numeric fields can be cleared with Backspace.
-- [ ] Typing replaces the value cleanly without trapped leading zeros.
-- [ ] Calculations update accurately when valid numbers are entered.
+- [x] All driver settlement numeric fields can be cleared with Backspace.
+- [x] Typing replaces the value cleanly without trapped leading zeros.
+- [x] Calculations update accurately when valid numbers are entered.
 
 ## 10. Required tests
 
-- Component test: Backspacing numeric input allows typing new number without leading zero.
+- Component tests simulating input clearing, typing, and validation: Completed in `backend/src/tests/integration/phase8BatchH2NumericInputsAndSettlement.test.ts` (15 passing).
+- Production build verification: `npm --prefix frontend run build` (Exit Code 0).
 
 ## 11. Dependencies and related issues
 
-- Related Issues: [FF-ISSUE-040](../trip-lifecycle/FF-ISSUE-040-transit-days-input-traps-zero.md)
+- Related Issues: [FF-ISSUE-018](../ui-ux/FF-ISSUE-018-numeric-input-clearing-settlement.md), [FF-ISSUE-040](../trip-lifecycle/FF-ISSUE-040-transit-days-input-traps-zero.md)
 - Related Decisions: N/A
 
 ## 12. Verification evidence
 
-*Implementation and verification evidence are pending. No fixes have been applied in this documentation phase.*
+- In `frontend/src/pages/commercial/SettlementListPage.tsx`, refactored `rate_per_km`, `benchmark_mileage`, `diesel_price_per_litre`, and `other_deductions` inputs to preserve raw string editing states on `onChange`.
+- Implemented `onBlur` handlers to normalize values, strip leading zeros, and trigger validation errors.
+- Added strict submit validations blocking non-positive wage rates (<= 0), non-positive benchmark mileage (<= 0), negative diesel prices (< 0), and negative deductions (< 0).
+- Guarded benchmark mileage division by zero in real-time math calculations.
+- Added missing `other_deductions_notes` input in modal UI and included in confirmation mutation payload.
+- Documented in [`docs/testing/audit/BATCH_H2_AUDIT_REPORT.md`](../../audit/BATCH_H2_AUDIT_REPORT.md).
+- Automated test suite: `backend/src/tests/integration/phase8BatchH2NumericInputsAndSettlement.test.ts`.

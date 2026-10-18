@@ -2,12 +2,17 @@
  * ============================================================================
  * FEATURES PAGE (FeaturesPage.tsx)
  * ============================================================================
- * Comprehensive capability catalog of the Fleet Flow platform for prospective
- * fleet operators, logistics companies, and corporate supply chain directors.
+ * Structured capability catalog of the Fleet Flow platform.
+ * 
+ * Satisfies FF-ISSUE-004:
+ * - Domain-based categorization across operational modules.
+ * - Interactive category filtering allowing operators to explore specific domains.
+ * - Enterprise light-mode design tokens matching dashboard styling.
+ * - Factual feature representations based strictly on implemented features.
  * ============================================================================
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Truck,
@@ -15,45 +20,59 @@ import {
   CreditCard,
   ShieldCheck,
   MapPin,
-  Users,
   CheckCircle2,
   ArrowRight,
-  TrendingUp,
   Receipt,
   Smartphone,
-  Building2,
-  Lock,
+  BookOpen,
+  Layers,
 } from 'lucide-react';
 import { PublicLayout } from '../../components/layout/PublicLayout';
 
-const MODULES = [
+interface FeatureModule {
+  category: 'fleet' | 'operations' | 'commercial' | 'financial' | 'portals';
+  categoryLabel: string;
+  icon: React.ReactNode;
+  tag: string;
+  title: string;
+  desc: string;
+  features: string[];
+}
+
+const MODULES: FeatureModule[] = [
   {
-    icon: <Truck size={28} color="#6366f1" />,
-    tag: 'ASSET ENGINEERING',
+    category: 'fleet',
+    categoryLabel: 'Fleet & Compliance',
+    icon: <Truck size={26} color="var(--color-primary-600)" />,
+    tag: 'ASSET REGISTRY',
     title: 'Fleet & Digital Compliance Vault',
     desc: 'Centralized registry for owned and market vehicles. Never miss an RTO fitness, national permit, road tax, or insurance renewal with automated countdown alerts.',
     features: [
       '6-document digital compliance tracking (Fitness, Tax, PUC, Insurance, Permits)',
-      'Odometer-based preventative maintenance schedules',
-      'Tyre lifecycle tracking across 10 chassis axle positions',
+      'Odometer-based preventative maintenance schedules and service logs',
+      'Tyre lifecycle tracking across chassis axle positions',
       'Direct vehicle-to-driver binding and historical handover logs',
     ],
   },
   {
-    icon: <MapPin size={28} color="#10b981" />,
-    tag: 'OPERATIONS & DISPATCH',
+    category: 'operations',
+    categoryLabel: 'Dispatch & Operations',
+    icon: <MapPin size={26} color="var(--color-emerald-600)" />,
+    tag: 'TRIP DISPATCH',
     title: 'Trip Management & En-Route Progress',
     desc: 'Plan, dispatch, and track single-vehicle journeys and multi-drop routes with real-time waypoint logging, enroute delay alerts, and diesel expense slips.',
     features: [
       'Multi-drop route planning with intermediate hub milestones',
       'En-route diesel consumption logging and real-world fuel economy (km/L)',
-      'Driver cash advance disbursements with ledger balance limits',
+      'Driver cash advance disbursements with running balance limits',
       'Trip incident reporting (breakdowns, punctures, RTO inspections)',
     ],
   },
   {
-    icon: <FileText size={28} color="#f59e0b" />,
-    tag: 'LEGAL CONSIGNMENT',
+    category: 'commercial',
+    categoryLabel: 'Commercial & Invoicing',
+    icon: <FileText size={26} color="var(--color-amber-600)" />,
+    tag: 'CONSIGNMENT ENGINE',
     title: '3-Part Lorry Receipts (LR / Bilty) Engine',
     desc: 'Generate statutory consignment notes compliant with the Carriage by Road Act. WhatsApp instant copies to consignors, consignees, and drivers with one tap.',
     features: [
@@ -64,8 +83,10 @@ const MODULES = [
     ],
   },
   {
-    icon: <Receipt size={28} color="#8b5cf6" />,
-    tag: 'FINANCIAL ACCURACY',
+    category: 'commercial',
+    categoryLabel: 'Commercial & Invoicing',
+    icon: <Receipt size={26} color="var(--color-primary-600)" />,
+    tag: 'GST INVOICING',
     title: 'GST Freight Tax Invoicing & E-Invoicing',
     desc: 'Full Indian Goods and Services Tax compliance. Automatically segregates Reverse Charge Mechanism (RCM Section 9(3)) from Forward Charge with CGST, SGST, and IGST calculations.',
     features: [
@@ -77,164 +98,280 @@ const MODULES = [
     ],
   },
   {
-    icon: <CreditCard size={28} color="#ec4899" />,
-    tag: 'ACCOUNTING SOUNDNESS',
+    category: 'financial',
+    categoryLabel: 'Ledger & Settlements',
+    icon: <CreditCard size={26} color="var(--color-purple-600)" />,
+    tag: 'FINANCIAL SOUNDNESS',
     title: 'Driver Trip Settlements & Double-Entry Ledger',
     desc: 'End driver payment disputes and fuel leakage. Mathematical round-half-up precision with balanced debits and credits and automatic advance rollover accounting.',
     features: [
       'Balanced Double-Entry General Ledger (Debits = Credits invariant)',
       'Multi-document ACID transactions guarding all financial payouts',
-      'Fuel variance penalty calculations comparing budgeted vs actual litres',
+      'Fuel variance penalty calculations comparing benchmark vs actual consumption',
       'Driver advance recovery with negative rollover balances',
     ],
   },
   {
-    icon: <Smartphone size={28} color="#06b6d4" />,
+    category: 'portals',
+    categoryLabel: 'Portals & Security',
+    icon: <Smartphone size={26} color="var(--color-sky-600)" />,
     tag: 'EXTERNAL ENGAGEMENT',
     title: 'Self-Service Portals for Drivers & Customers',
-    desc: 'Eliminate WhatsApp status inquiries. Provide external shippers, drivers, and fleet brokers with secure mobile portals scoped strictly to their own data.',
+    desc: 'Provide external shippers, drivers, and fleet partners with secure mobile portals scoped strictly to their own data via OTP and magic-link authentication.',
     features: [
       'OTP/magic-link authentication (zero password fatigue for external users)',
       'Customer consignment tracking and one-click stamped POD downloads',
-      'Driver mobile app for digital e-POD signatures and expense uploads',
-      'Market supplier payables and TDS deduction statements',
+      'Driver mobile portal for digital e-POD signatures and expense uploads',
+      'Strict tenant isolation ensuring zero data leakage across companies',
     ],
   },
 ];
 
+const CATEGORIES = [
+  { id: 'all', label: 'All Capabilities' },
+  { id: 'fleet', label: 'Fleet & Compliance' },
+  { id: 'operations', label: 'Dispatch & Operations' },
+  { id: 'commercial', label: 'Commercial & Invoicing' },
+  { id: 'financial', label: 'Ledger & Settlements' },
+  { id: 'portals', label: 'Portals & Security' },
+];
+
 export const FeaturesPage: React.FC = () => {
+  const [activeCategory, setActiveCategory] = useState<string>('all');
+
+  const filteredModules = activeCategory === 'all'
+    ? MODULES
+    : MODULES.filter((m) => m.category === activeCategory);
+
   return (
     <PublicLayout>
-      <div style={{ background: '#0a0a0a', color: '#fff', padding: '5rem 1.5rem', flex: 1 }}>
-        <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-          {/* Header */}
-          <div style={{ textAlign: 'center', marginBottom: '4rem' }}>
-            <span
-              style={{
-                display: 'inline-block',
-                padding: '0.375rem 1rem',
-                borderRadius: '9999px',
-                background: 'rgba(99,102,241,0.15)',
-                border: '1px solid rgba(99,102,241,0.3)',
-                color: '#818cf8',
-                fontSize: '0.8125rem',
-                fontWeight: 600,
-                letterSpacing: '0.05em',
-                marginBottom: '1rem',
-              }}
-            >
-              COMPLETE SAAS PLATFORM
+      {/* Header */}
+      <section
+        style={{
+          backgroundColor: 'var(--bg-surface)',
+          borderBottom: '1px solid var(--border-light)',
+          padding: '4.5rem 1.5rem 3.5rem',
+          textAlign: 'center',
+        }}
+      >
+        <div style={{ maxWidth: 800, margin: '0 auto' }}>
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              backgroundColor: 'var(--color-primary-50)',
+              border: '1px solid var(--color-primary-200)',
+              borderRadius: 'var(--radius-full)',
+              padding: '0.375rem 1rem',
+              marginBottom: '1.25rem',
+            }}
+          >
+            <Layers size={14} color="var(--color-primary-700)" />
+            <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-primary-700)', fontWeight: 600 }}>
+              End-to-End Transport Logistics Architecture
             </span>
-            <h1 style={{ fontSize: 'clamp(2rem, 4vw, 3.25rem)', fontWeight: 800, letterSpacing: '-0.02em', margin: 0, lineHeight: 1.15 }}>
-              Engineered Specifically for <br />
-              <span style={{ background: 'linear-gradient(135deg, #6366f1, #a855f7)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-                Indian Road Transport
-              </span>
-            </h1>
-            <p style={{ color: 'rgba(255,255,255,0.65)', fontSize: '1.125rem', maxWidth: 680, margin: '1.25rem auto 0', lineHeight: 1.6 }}>
-              Every feature was designed from the ground up to solve the real operational challenges faced by fleet owners, dispatchers, and commercial accountants across India.
-            </p>
           </div>
 
-          {/* Module Grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '2rem' }}>
-            {MODULES.map((mod, i) => (
-              <div
-                key={i}
+          <h1
+            style={{
+              fontSize: 'clamp(2rem, 4vw, 3rem)',
+              fontWeight: 900,
+              color: 'var(--text-primary)',
+              lineHeight: 1.2,
+              letterSpacing: '-0.02em',
+              marginBottom: '1rem',
+            }}
+          >
+            Capabilities Engineered for Freight Mobility
+          </h1>
+
+          <p
+            style={{
+              fontSize: '1.125rem',
+              color: 'var(--text-secondary)',
+              lineHeight: 1.6,
+              maxWidth: 620,
+              margin: '0 auto 2.5rem',
+            }}
+          >
+            Explore Fleet Flow by operational domain: from roadside vehicle dispatch to audited double-entry accounting.
+          </p>
+
+          {/* Domain Category Filter Tabs */}
+          <div
+            style={{
+              display: 'flex',
+              gap: '0.5rem',
+              justifyContent: 'center',
+              flexWrap: 'wrap',
+              backgroundColor: 'var(--color-slate-100)',
+              padding: '0.375rem',
+              borderRadius: 'var(--radius-lg)',
+              maxWidth: 'fit-content',
+              margin: '0 auto',
+            }}
+          >
+            {CATEGORIES.map((cat) => (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => setActiveCategory(cat.id)}
                 style={{
-                  background: 'rgba(255,255,255,0.03)',
-                  border: '1px solid rgba(255,255,255,0.08)',
-                  borderRadius: '1rem',
-                  padding: '2rem',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '1.25rem',
-                  transition: 'transform 0.2s ease, border-color 0.2s ease',
+                  padding: '0.5rem 1rem',
+                  borderRadius: 'var(--radius-md)',
+                  border: 'none',
+                  fontSize: 'var(--font-size-sm)',
+                  fontWeight: activeCategory === cat.id ? 700 : 500,
+                  color: activeCategory === cat.id ? 'var(--color-primary-700)' : 'var(--text-secondary)',
+                  backgroundColor: activeCategory === cat.id ? 'var(--bg-surface)' : 'transparent',
+                  boxShadow: activeCategory === cat.id ? 'var(--shadow-sm)' : 'none',
+                  cursor: 'pointer',
+                  transition: 'all var(--transition-fast)',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ padding: '0.75rem', borderRadius: '0.75rem', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                {cat.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Modules Grid */}
+      <section style={{ padding: '4.5rem 1.5rem', backgroundColor: 'var(--bg-app)' }}>
+        <div style={{ maxWidth: 1200, margin: '0 auto' }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
+              gap: '2rem',
+            }}
+          >
+            {filteredModules.map((mod) => (
+              <div
+                key={mod.title}
+                style={{
+                  backgroundColor: 'var(--bg-surface)',
+                  border: '1px solid var(--border-light)',
+                  borderRadius: 'var(--radius-xl)',
+                  padding: '2.25rem',
+                  boxShadow: 'var(--shadow-sm)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
+                  <div
+                    style={{
+                      padding: '0.625rem',
+                      backgroundColor: 'var(--color-slate-100)',
+                      borderRadius: 'var(--radius-md)',
+                      display: 'flex',
+                    }}
+                  >
                     {mod.icon}
                   </div>
-                  <span style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#818cf8', letterSpacing: '0.08em' }}>
+                  <span
+                    style={{
+                      fontSize: '0.7rem',
+                      fontWeight: 700,
+                      backgroundColor: 'var(--color-slate-100)',
+                      color: 'var(--text-secondary)',
+                      borderRadius: 'var(--radius-full)',
+                      padding: '0.25rem 0.625rem',
+                      border: '1px solid var(--border-light)',
+                      letterSpacing: '0.05em',
+                    }}
+                  >
                     {mod.tag}
                   </span>
                 </div>
 
-                <div>
-                  <h3 style={{ fontSize: '1.25rem', fontWeight: 700, margin: '0 0 0.5rem 0', color: '#fff' }}>
-                    {mod.title}
-                  </h3>
-                  <p style={{ fontSize: '0.875rem', color: 'rgba(255,255,255,0.6)', margin: 0, lineHeight: 1.6 }}>
-                    {mod.desc}
-                  </p>
-                </div>
+                <h2
+                  style={{
+                    fontSize: '1.25rem',
+                    fontWeight: 700,
+                    color: 'var(--text-primary)',
+                    marginBottom: '0.75rem',
+                  }}
+                >
+                  {mod.title}
+                </h2>
 
-                <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
-                  {mod.features.map((feat, idx) => (
-                    <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.625rem', fontSize: '0.8125rem', color: 'rgba(255,255,255,0.8)' }}>
-                      <CheckCircle2 size={16} color="#10b981" style={{ flexShrink: 0, marginTop: '0.125rem' }} />
-                      <span>{feat}</span>
-                    </div>
-                  ))}
+                <p
+                  style={{
+                    fontSize: '0.875rem',
+                    color: 'var(--text-secondary)',
+                    lineHeight: 1.6,
+                    marginBottom: '1.5rem',
+                  }}
+                >
+                  {mod.desc}
+                </p>
+
+                <div
+                  style={{
+                    borderTop: '1px solid var(--border-light)',
+                    paddingTop: '1.25rem',
+                    marginTop: 'auto',
+                  }}
+                >
+                  <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>
+                    Key Capabilities Included
+                  </div>
+                  <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
+                    {mod.features.map((feat) => (
+                      <li
+                        key={feat}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'flex-start',
+                          gap: '0.5rem',
+                          fontSize: '0.8125rem',
+                          color: 'var(--text-secondary)',
+                          lineHeight: 1.45,
+                        }}
+                      >
+                        <CheckCircle2 size={15} color="var(--color-emerald-600)" style={{ flexShrink: 0, marginTop: '0.125rem' }} />
+                        <span>{feat}</span>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               </div>
             ))}
           </div>
+        </div>
+      </section>
 
-          {/* Bottom CTA Banner */}
-          <div
-            style={{
-              marginTop: '5rem',
-              borderRadius: '1.5rem',
-              background: 'linear-gradient(135deg, rgba(99,102,241,0.2), rgba(168,85,247,0.15))',
-              border: '1px solid rgba(99,102,241,0.3)',
-              padding: '3.5rem 2rem',
-              textAlign: 'center',
-            }}
-          >
-            <h2 style={{ fontSize: '2rem', fontWeight: 800, margin: 0 }}>Ready to Modernize Your Fleet Operations?</h2>
-            <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '1rem', maxWidth: 540, margin: '1rem auto 2rem' }}>
-              Start with our 7-day free trial with Starter tier features. No credit card required. Cancel anytime.
-            </p>
-            <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem' }}>
-              <Link
-                to="/register"
-                style={{
-                  padding: '0.875rem 2rem',
-                  borderRadius: '0.625rem',
-                  background: 'linear-gradient(135deg, #6366f1, #4f46e5)',
-                  color: '#fff',
-                  fontWeight: 700,
-                  textDecoration: 'none',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem',
-                  boxShadow: '0 0 25px rgba(99,102,241,0.4)',
-                }}
-              >
-                <span>Start Free 7-Day Trial</span>
-                <ArrowRight size={18} />
-              </Link>
-              <Link
-                to="/contact"
-                style={{
-                  padding: '0.875rem 2rem',
-                  borderRadius: '0.625rem',
-                  background: 'rgba(255,255,255,0.06)',
-                  border: '1px solid rgba(255,255,255,0.15)',
-                  color: '#fff',
-                  fontWeight: 600,
-                  textDecoration: 'none',
-                }}
-              >
-                Talk to Sales
-              </Link>
-            </div>
+      {/* Bottom CTA */}
+      <section
+        style={{
+          padding: '4rem 1.5rem',
+          backgroundColor: 'var(--color-slate-50)',
+          borderTop: '1px solid var(--border-light)',
+          textAlign: 'center',
+        }}
+      >
+        <div style={{ maxWidth: 600, margin: '0 auto' }}>
+          <h2 style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '0.75rem' }}>
+            Ready to experience these capabilities in action?
+          </h2>
+          <p style={{ color: 'var(--text-secondary)', marginBottom: '1.75rem', fontSize: '0.9375rem' }}>
+            Set up your company workspace in under 2 minutes with a 7-day complimentary trial.
+          </p>
+          <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+            <Link to="/register" className="btn btn-primary" style={{ padding: '0.75rem 1.75rem', textDecoration: 'none' }}>
+              Start Free Trial <ArrowRight size={16} />
+            </Link>
+            <Link to="/pricing" className="btn btn-secondary" style={{ padding: '0.75rem 1.75rem', textDecoration: 'none' }}>
+              Compare Plans
+            </Link>
           </div>
         </div>
-      </div>
+      </section>
     </PublicLayout>
   );
 };
+
 export default FeaturesPage;

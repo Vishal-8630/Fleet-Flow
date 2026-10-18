@@ -81,6 +81,8 @@ import { PrivacyPage } from './pages/marketing/PrivacyPage';
 import { TermsPage } from './pages/marketing/TermsPage';
 import { RefundPage } from './pages/marketing/RefundPage';
 import { StatusPage } from './pages/marketing/StatusPage';
+import { SecurityPage } from './pages/marketing/SecurityPage';
+import { HelpCenterPage } from './pages/marketing/HelpCenterPage';
 
 import { ToastContainer } from './components/common/ToastContainer';
 import { FeatureGate } from './components/common/FeatureGate';
@@ -163,8 +165,8 @@ export const App: React.FC = () => {
         <Route path="/pricing" element={<PricingPage />} />
         <Route path="/contact" element={<ContactPage />} />
         <Route path="/demo" element={<ContactPage />} />
-        <Route path="/security" element={<PrivacyPage />} />
-        <Route path="/help" element={<ContactPage />} />
+        <Route path="/security" element={<SecurityPage />} />
+        <Route path="/help" element={<HelpCenterPage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/terms" element={<TermsPage />} />
         <Route path="/refund-policy" element={<RefundPage />} />
@@ -257,9 +259,32 @@ export const App: React.FC = () => {
 
           {/* Phase 4 & Issue 09: Commercial Engine — LR, Invoicing, AR Aging, Settlements & Ledger */}
           <Route path="bill-entry/all" element={<LRListPage />} />
-          <Route path="commercial/entries" element={<LRListPage />} />
-          <Route path="invoices" element={<InvoiceListPage />} />
-          <Route path="commercial/invoices" element={<InvoiceListPage />} />
+          <Route
+            path="invoices"
+            element={
+              <FeatureGate
+                feature="MOD_BILLING_INVOICE"
+                pageMode={true}
+                titleOverride="GST Freight Invoicing is Deactivated"
+                descOverride="Freight invoicing, consolidated billing, and tax invoice generation are deactivated for this workspace. Manage module settings in Company Settings."
+              >
+                <InvoiceListPage />
+              </FeatureGate>
+            }
+          />
+          <Route
+            path="commercial/invoices"
+            element={
+              <FeatureGate
+                feature="MOD_BILLING_INVOICE"
+                pageMode={true}
+                titleOverride="GST Freight Invoicing is Deactivated"
+                descOverride="Freight invoicing, consolidated billing, and tax invoice generation are deactivated for this workspace. Manage module settings in Company Settings."
+              >
+                <InvoiceListPage />
+              </FeatureGate>
+            }
+          />
           <Route path="commercial/credit-notes" element={<CreditNotesPage />} />
           <Route path="credit-notes" element={<Navigate to="/commercial/credit-notes" replace />} />
           <Route path="commercial/aging" element={<AgingReportPage />} />

@@ -5,12 +5,12 @@
 - **ID:** FF-ISSUE-005
 - **Category:** UI-UX
 - **Priority:** Medium
-- **Status:** Observed
+- **Status:** Resolved (Batch H4)
 - **Affected module:** Public Pricing Page
 - **Source:** `docs/testing/FLEET_FLOW_MANUAL_TESTING_AND_DECISION_HANDOFF.md` (Section 4.A, FF-MT-006)
 - **Related issues:** [FF-ISSUE-006](FF-ISSUE-006-pricing-faq-accordion.md), [FF-ISSUE-023](FF-ISSUE-023-trial-duration-inconsistency.md)
 - **Related decisions:** [DEC-001](../../decisions/DEC-001-subscription-pricing-and-entitlements.md)
-- **Implementation status:** Not implemented
+- **Implementation status:** Implemented (Batch H4)
 
 ## 1. Summary
 
@@ -53,9 +53,9 @@ Redesign `PricingPage.tsx` using standard card primitives:
 
 ## 9. Acceptance criteria
 
-- [ ] Pricing page cards adhere to the application's clean design tokens.
-- [ ] Tier prices, truck quotas, user limits, and branch limits exactly match DEC-001.
-- [ ] Annual billing toggle clearly shows 2 months free discount calculation.
+- [x] Pricing page cards adhere to the application's clean design tokens.
+- [x] Tier prices, truck quotas, user limits, and branch limits exactly match DEC-001.
+- [x] Annual billing toggle clearly shows 2 months free discount calculation.
 
 ## 10. Required tests
 
@@ -69,4 +69,6 @@ Redesign `PricingPage.tsx` using standard card primitives:
 
 ## 12. Verification evidence
 
-- Implementation and verification evidence pending.
+- Aligned cards to clean light-mode surfaces (`var(--bg-surface)`, `var(--border-light)`, `var(--shadow-sm)`).
+- Preserved DEC-001 values: Starter ₹1,999/mo, Standard ₹3,999/mo, Pro ₹8,999/mo; Annual equivalents ₹19,990/yr, ₹39,990/yr, ₹89,990/yr.
+- Verified via `backend/src/tests/integration/phase8BatchH4PublicAndAuthShell.test.ts`.

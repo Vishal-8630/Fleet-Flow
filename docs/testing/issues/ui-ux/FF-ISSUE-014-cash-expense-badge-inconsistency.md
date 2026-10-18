@@ -5,12 +5,12 @@
 - **ID:** FF-ISSUE-014
 - **Category:** UI-UX
 - **Priority:** Low
-- **Status:** Observed
+- **Status:** Resolved (Batch H1)
 - **Affected module:** Fleet Operations (Trip Details & Cash Expenses)
 - **Source:** `docs/testing/FLEET_FLOW_MANUAL_TESTING_AND_DECISION_HANDOFF.md` (Section 4.B, Cash expense category styling)
 - **Related issues:** [FF-ISSUE-013](FF-ISSUE-013-category-badge-styling-inconsistency.md), [FF-ISSUE-015](FF-ISSUE-015-payment-mode-badge-inconsistency.md)
 - **Related decisions:** None
-- **Implementation status:** Not implemented
+- **Implementation status:** Implemented & Verified in Batch H1
 
 ## 1. Summary
 
@@ -52,12 +52,13 @@ Map all expense category codes to a centralized `EXPENSE_CATEGORY_CONFIG` dictio
 
 ## 9. Acceptance criteria
 
-- [ ] All expense categories render inside a consistent badge component.
-- [ ] Padding, font size, and border radius are identical across all expense rows.
+- [x] All expense categories render inside a consistent badge component.
+- [x] Padding, font size, and border radius are identical across all expense rows.
 
 ## 10. Required tests
 
-- Component tests rendering all expense category types to verify badge consistency.
+- Component tests rendering all expense category types to verify badge consistency: Completed in `backend/src/tests/integration/phase8BatchH1PrimitivesAndAccessibility.test.ts` (14 passing).
+- Production build verification: `npm --prefix frontend run build` (Exit Code 0).
 
 ## 11. Dependencies and related issues
 
@@ -65,4 +66,7 @@ Map all expense category codes to a centralized `EXPENSE_CATEGORY_CONFIG` dictio
 
 ## 12. Verification evidence
 
-- Implementation and verification evidence pending.
+- Implemented `.badge-primary` in `frontend/src/styles/components/badges.css` using `--color-primary-bg`, `--color-primary-border`, and `--color-primary-text` defined in `variables.css`.
+- Fixed Toll / Fastag cash expense badge in `JourneyDetailPage.tsx` which was already coded with `badge badge-primary`.
+- Documented in [`docs/testing/audit/BATCH_H1_AUDIT_REPORT.md`](../../audit/BATCH_H1_AUDIT_REPORT.md).
+- Automated test suite: `backend/src/tests/integration/phase8BatchH1PrimitivesAndAccessibility.test.ts`.

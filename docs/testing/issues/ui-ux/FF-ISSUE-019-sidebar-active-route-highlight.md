@@ -5,12 +5,12 @@
 - **ID:** FF-ISSUE-019
 - **Category:** UI-UX
 - **Priority:** Low
-- **Status:** Observed
+- **Status:** Resolved (Batch H3)
 - **Affected module:** App Shell & Navigation Sidebar
 - **Source:** `docs/testing/FLEET_FLOW_MANUAL_TESTING_AND_DECISION_HANDOFF.md` (Section 4.D, Sidebar active state missing)
 - **Related issues:** None
 - **Related decisions:** None
-- **Implementation status:** Not implemented
+- **Implementation status:** Implemented in Batch H3
 
 ## 1. Summary
 
@@ -51,12 +51,15 @@ Update sidebar active state matcher to support prefix matching:
 
 ## 9. Acceptance criteria
 
-- [ ] Navigating to `/settlements`, `/settlements/new`, or `/settlements/:id` highlights the "Settlements" sidebar link.
-- [ ] Child routes across all modules (Trips, Invoices, Trucks, Drivers) maintain active parent sidebar highlighting.
+- [x] Navigating to `/settlements`, `/settlements/new`, or `/settlements/:id` highlights the "Settlements" sidebar link.
+- [x] Navigating via Dashboard "Disburse" action to `/commercial/settlements` highlights the "Driver Settlements" sidebar link.
+- [x] Child routes across all modules (Trips, Invoices, Trucks, Drivers) maintain active parent sidebar highlighting.
+- [x] Neighboring routes (`/commercial/credit-notes`, `/commercial/aging`, `/invoices`) do not trigger false-positive active states on Settlements.
 
 ## 10. Required tests
 
-- Unit tests for Sidebar active state matching across nested paths.
+- Unit/integration tests for Sidebar active state matching across nested paths, exact items, and route aliases.
+- Tests in `backend/src/tests/integration/phase8BatchH3ConfirmDialogsAndRoutes.test.ts`.
 
 ## 11. Dependencies and related issues
 
@@ -64,4 +67,7 @@ Update sidebar active state matcher to support prefix matching:
 
 ## 12. Verification evidence
 
-- Implementation and verification evidence pending.
+- Updated `frontend/src/components/layout/Sidebar.tsx` to utilize `useLocation()` and added deterministic `isItemActive()` evaluator supporting `aliases: ['/commercial/settlements']`.
+- Added support for related commercial dual paths: `/commercial/entries`, `/commercial/invoices`, `/commercial/ledger`, and `/financials/aging`.
+- Tested and verified in `backend/src/tests/integration/phase8BatchH3ConfirmDialogsAndRoutes.test.ts` (13/13 passing).
+- Verified production bundle build via `npm --prefix frontend run build` (built in 2.72s).

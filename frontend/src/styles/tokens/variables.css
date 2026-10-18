@@ -30,6 +30,10 @@
   --color-slate-950: #020617;
 
   /* Semantic Status Colors */
+  --color-primary-bg: #eff6ff;
+  --color-primary-border: #bfdbfe;
+  --color-primary-text: #1d4ed8;
+
   --color-success-bg: #ecfdf5;
   --color-success-border: #a7f3d0;
   --color-success-text: #065f46;

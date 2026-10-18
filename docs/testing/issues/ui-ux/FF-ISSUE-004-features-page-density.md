@@ -5,12 +5,12 @@
 - **ID:** FF-ISSUE-004
 - **Category:** UI-UX
 - **Priority:** Medium
-- **Status:** Observed
+- **Status:** Resolved (Batch H4)
 - **Affected module:** Public Marketing Features Page
 - **Source:** `docs/testing/FLEET_FLOW_MANUAL_TESTING_AND_DECISION_HANDOFF.md` (Section 4.A, FF-MT-005)
 - **Related issues:** [FF-ISSUE-001](FF-ISSUE-001-public-site-color-scheme.md), [FF-ISSUE-003](FF-ISSUE-003-homepage-content-density.md)
 - **Related decisions:** None
-- **Implementation status:** Not implemented
+- **Implementation status:** Implemented (Batch H4)
 
 ## 1. Summary
 
@@ -55,9 +55,9 @@ Re-architect `FeaturesPage.tsx` with a domain-based segmented navigation bar (e.
 
 ## 9. Acceptance criteria
 
-- [ ] Features are organized into clear domain sections with concise copy.
-- [ ] Card spacing and typography adhere to design tokens with adequate whitespace.
-- [ ] Each domain highlights 3-4 key workflows with clear visual hierarchy.
+- [x] Features are organized into clear domain sections with concise copy.
+- [x] Card spacing and typography adhere to design tokens with adequate whitespace.
+- [x] Each domain highlights 3-4 key workflows with clear visual hierarchy.
 
 ## 10. Required tests
 
@@ -70,4 +70,6 @@ Re-architect `FeaturesPage.tsx` with a domain-based segmented navigation bar (e.
 
 ## 12. Verification evidence
 
-- Implementation and verification evidence pending.
+- Implemented interactive operational domain tabs (Fleet & Compliance, Dispatch & Operations, Commercial & Invoicing, Ledger & Settlements, Portals & Security).
+- Filtered module view dynamically updates with zero layout shift.
+- Verified via `backend/src/tests/integration/phase8BatchH4PublicAndAuthShell.test.ts`.

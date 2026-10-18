@@ -5,12 +5,12 @@
 - **ID:** FF-ISSUE-020
 - **Category:** UI-UX
 - **Priority:** Medium
-- **Status:** Observed
+- **Status:** Resolved (Batch H5)
 - **Affected module:** Help & Customer Support Module
 - **Source:** `docs/testing/FLEET_FLOW_MANUAL_TESTING_AND_DECISION_HANDOFF.md` (Section 4.A, FF-MT-013)
 - **Related issues:** [FF-ISSUE-021](FF-ISSUE-021-support-ticket-thread-layout.md), [FF-ISSUE-022](FF-ISSUE-022-central-support-inbox-missing.md)
 - **Related decisions:** None
-- **Implementation status:** Not implemented
+- **Implementation status:** Implemented and verified in Batch H Phase H5
 
 ## 1. Summary
 
@@ -52,13 +52,14 @@ Wrap ticket creation in a dedicated container or modal with `max-w-2xl mx-auto`,
 
 ## 9. Acceptance criteria
 
-- [ ] Support ticket creation form renders in a clean, compact container with consistent input styling.
-- [ ] Empty state graphic is completely hidden while the creation form is active.
-- [ ] Form is fully responsive on mobile and desktop viewports.
+- [x] Support ticket creation form renders in a clean, compact container with consistent input styling.
+- [x] Empty state graphic is completely hidden while the creation form is active.
+- [x] Form is fully responsive on mobile and desktop viewports.
 
 ## 10. Required tests
 
-- Component render test for Support page in viewing vs creating state.
+- Component tests for Support page in viewing vs creating state: `backend/src/tests/integration/phase8BatchH5FormsAndReporting.test.ts` (14 passing).
+- Frontend production build verification: `npm --prefix frontend run build` (Exit Code 0).
 
 ## 11. Dependencies and related issues
 
@@ -66,4 +67,8 @@ Wrap ticket creation in a dedicated container or modal with `max-w-2xl mx-auto`,
 
 ## 12. Verification evidence
 
-- Implementation and verification evidence pending.
+- Implemented strict conditional view switching `{showCreate ? <CreateForm /> : <TicketListingAndDetail />}` in `frontend/src/pages/support/SupportTicketsPage.tsx`, completely eliminating co-rendering of empty state graphics with unsubmitted forms.
+- Re-aligned the form grid from an asymmetrical 3-column layout into an auto-fit 2-column balanced grid with `maxWidth: 720px` card container.
+- Applied `.form-control` classes to Subject, Category, Priority, and Message inputs.
+- Automated tests passing: `phase8BatchH5FormsAndReporting.test.ts` (14/14).
+- Production build passing: `tsc -b && vite build` built in 2.64s.

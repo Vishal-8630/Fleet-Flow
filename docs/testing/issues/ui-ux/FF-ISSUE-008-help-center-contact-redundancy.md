@@ -5,12 +5,12 @@
 - **ID:** FF-ISSUE-008
 - **Category:** UI-UX
 - **Priority:** Medium
-- **Status:** Observed / Needs Verification
+- **Status:** Resolved (Batch H4)
 - **Affected module:** Public Navigation & Support Pages
 - **Source:** `docs/testing/FLEET_FLOW_MANUAL_TESTING_AND_DECISION_HANDOFF.md` (Section 4.A, FF-MT-009)
 - **Related issues:** None
 - **Related decisions:** None
-- **Implementation status:** Not implemented
+- **Implementation status:** Implemented (Batch H4)
 
 ## 1. Summary
 
@@ -55,8 +55,8 @@ Differentiate the pages clearly:
 
 ## 9. Acceptance criteria
 
-- [ ] Clear distinction between commercial sales contact (`/contact`) and customer help/documentation (`/help`).
-- [ ] No duplicate inquiry forms or redundant copy between the two pages.
+- [x] Clear distinction between commercial sales contact (`/contact`) and customer help/documentation (`/help`).
+- [x] No duplicate inquiry forms or redundant copy between the two pages.
 
 ## 10. Required tests
 
@@ -68,4 +68,7 @@ Differentiate the pages clearly:
 
 ## 12. Verification evidence
 
-- Implementation and verification evidence pending.
+- Created dedicated `HelpCenterPage.tsx` with searchable operational guides (Vehicle Onboarding, LR Dispatch, GST Invoicing, Settlements) and direct links to `/support/tickets`, `/track`, and `/status`.
+- Contact page `/contact` remains strictly dedicated to sales inquiries and demos.
+- Decoupled `/help` route from `ContactPage.tsx` in `App.tsx`.
+- Verified via `backend/src/tests/integration/phase8BatchH4PublicAndAuthShell.test.ts`.

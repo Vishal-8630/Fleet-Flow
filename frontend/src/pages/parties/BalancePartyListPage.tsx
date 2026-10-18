@@ -29,6 +29,7 @@ import {
 import api from '../../api/client';
 import { PageHeader } from '../../components/common/PageHeader';
 import { Modal } from '../../components/common/Modal';
+import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { Pagination } from '../../components/common/Pagination';
 import { useAuthStore } from '../../stores/authStore';
 import { toast } from '../../stores/uiStore';
@@ -64,6 +65,7 @@ export const BalancePartyListPage: React.FC = () => {
   const [typeFilter, setTypeFilter] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingParty, setEditingParty] = useState<BalancePartyRecord | null>(null);
+  const [partyToDelete, setPartyToDelete] = useState<BalancePartyRecord | null>(null);
 
   const initialBalancePartyFormData = {
     party_name: '',
@@ -137,6 +139,7 @@ export const BalancePartyListPage: React.FC = () => {
     },
     onSuccess: (resData) => {
       toast.success(resData.message || 'Vendor removed.');
+      setPartyToDelete(null);
       queryClient.invalidateQueries({ queryKey: ['balance-parties'] });
     },
     onError: (err: any) => {
@@ -443,11 +446,8 @@ export const BalancePartyListPage: React.FC = () => {
                           <button
                             type="button"
                             className="btn btn-danger btn-sm"
-                            onClick={() => {
-                              if (confirm(`Remove partner ${party.party_name}?`)) {
-                                deleteMutation.mutate(party._id);
-                              }
-                            }}
+                            title="Remove partner"
+                            onClick={() => setPartyToDelete(party)}
                           >
                             <Trash2 size={14} />
                           </button>
@@ -630,6 +630,29 @@ export const BalancePartyListPage: React.FC = () => {
           </div>
         </form>
       </Modal>
+
+      {/* Confirm Partner Deletion Dialog */}
+      <ConfirmDialog
+        isOpen={Boolean(partyToDelete)}
+        onClose={() => setPartyToDelete(null)}
+        onConfirm={() => {
+          if (partyToDelete) {
+            deleteMutation.mutate(partyToDelete._id);
+          }
+        }}
+        title="Remove Vendor / Balance Partner"
+        confirmText="Remove Partner"
+        variant="danger"
+        isLoading={deleteMutation.isPending}
+        message={
+          <>
+            Are you sure you want to remove partner <strong>{partyToDelete?.party_name}</strong> (Type: {partyToDelete?.party_type?.toUpperCase()})?
+            <div style={{ marginTop: '0.5rem', color: 'var(--color-danger-text)', fontSize: 'var(--font-size-xs)' }}>
+              Warning: Removing this partner prevents new purchase dispatches, tyre purchases, or fuel allocations. Ledger entries, past balance payouts, and financial records remain permanently intact.
+            </div>
+          </>
+        }
+      />
     </div>
   );
 };

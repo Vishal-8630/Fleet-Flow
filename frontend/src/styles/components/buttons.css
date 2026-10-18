@@ -22,6 +22,47 @@
   pointer-events: none;
 }
 
+/* Keyboard Focus Visibility (WCAG 2.1 AA Accessibility) */
+.btn:focus {
+  outline: none;
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--color-primary-600);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
+}
+
+.btn-primary:focus-visible {
+  outline: 2px solid var(--color-primary-600);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.25);
+}
+
+.btn-secondary:focus-visible {
+  outline: 2px solid var(--color-slate-600);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px rgba(100, 116, 139, 0.2);
+}
+
+.btn-outline:focus-visible {
+  outline: 2px solid var(--color-primary-600);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
+}
+
+.btn-danger:focus-visible {
+  outline: 2px solid var(--color-danger);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.25);
+}
+
+.btn-ghost:focus-visible {
+  outline: 2px solid var(--color-slate-500);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px rgba(100, 116, 139, 0.15);
+}
+
 /* Button Variants */
 .btn-primary {
   background-color: var(--color-primary-600);
@@ -143,6 +184,11 @@
 
 .nav-tab-item:focus {
   outline: none;
+}
+
+.nav-tab-item:focus-visible {
+  outline: 2px solid var(--color-primary-600);
+  outline-offset: -2px;
 }
 
 .nav-tab-item.active {

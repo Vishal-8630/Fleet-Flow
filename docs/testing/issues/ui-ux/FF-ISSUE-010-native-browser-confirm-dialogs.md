@@ -5,12 +5,12 @@
 - **ID:** FF-ISSUE-010
 - **Category:** UI-UX
 - **Priority:** Medium
-- **Status:** Observed
+- **Status:** Resolved (Batch H3)
 - **Affected module:** Master Registries (Trucks, Drivers, Parties)
 - **Source:** `docs/testing/FLEET_FLOW_MANUAL_TESTING_AND_DECISION_HANDOFF.md` (Section 4.A, FF-MT-015)
 - **Related issues:** None
 - **Related decisions:** None
-- **Implementation status:** Not implemented
+- **Implementation status:** Implemented in Batch H3
 
 ## 1. Summary
 
@@ -55,14 +55,17 @@ Replace all instances of `window.confirm()` with a reusable, accessible `<Confir
 
 ## 9. Acceptance criteria
 
-- [ ] Zero invocations of `window.confirm()` remain in frontend source code.
-- [ ] Deleting a vehicle or record opens an in-app confirmation modal.
-- [ ] Modal displays the exact record identifier and destructive consequences.
-- [ ] Focus is trapped inside the modal while open, and focus returns to the trigger on close.
+- [x] Zero invocations of `window.confirm()` or raw `confirm()` remain in in-scope Master Registry source code.
+- [x] Deleting a vehicle, driver, customer, or partner opens an in-app confirmation modal.
+- [x] Modal displays the exact record identifier and destructive consequences.
+- [x] Focus is trapped inside the modal while open, autofocus is placed on Cancel, and focus returns to the trigger on close.
+- [x] Duplicate submissions are prevented while actions are in progress (`isLoading` / disabled state).
+- [x] Cancellation semantics are preserved (cancelling leaves data untouched).
 
 ## 10. Required tests
 
-- Component tests for `ConfirmDialog` testing Open, Confirm, Cancel, and Escape dismissal.
+- Component tests for `ConfirmDialog` testing Open, Confirm, Cancel, autofocus, and Escape dismissal.
+- Integration tests in `backend/src/tests/integration/phase8BatchH3ConfirmDialogsAndRoutes.test.ts`.
 
 ## 11. Dependencies and related issues
 
@@ -70,4 +73,13 @@ Replace all instances of `window.confirm()` with a reusable, accessible `<Confir
 
 ## 12. Verification evidence
 
-- Implementation and verification evidence pending.
+- Created reusable `<ConfirmDialog />` component in `frontend/src/components/common/ConfirmDialog.tsx` wrapping `<Modal />` with focus trapping, autofocus on Cancel, Escape listener, and `isLoading` submission lock.
+- Replaced all in-scope native confirmation dialogs across Master Registries:
+  - `frontend/src/pages/fleet/TruckListPage.tsx` (Vehicle removal)
+  - `frontend/src/pages/fleet/DriverListPage.tsx` (Driver active roster removal)
+  - `frontend/src/pages/parties/BillingPartyListPage.tsx` (Customer party removal)
+  - `frontend/src/pages/parties/BalancePartyListPage.tsx` (Vendor/supplier party removal)
+  - `frontend/src/pages/fleet/TruckDetailPage.tsx` (Driver unassignment from vehicle)
+- Verified with 13 automated tests in `phase8BatchH3ConfirmDialogsAndRoutes.test.ts` (13/13 passing).
+- Verified production bundle build via `npm --prefix frontend run build` (built in 2.72s).
+

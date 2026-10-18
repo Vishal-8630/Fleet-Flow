@@ -44,6 +44,7 @@ import {
 import api from '../../api/client';
 import { PageHeader } from '../../components/common/PageHeader';
 import { Modal } from '../../components/common/Modal';
+import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { useAuthStore } from '../../stores/authStore';
 import { toast } from '../../stores/uiStore';
 
@@ -63,6 +64,7 @@ export const TruckDetailPage: React.FC = () => {
   const [docNumber, setDocNumber] = useState<string>('');
 
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
+  const [isUnassignConfirmOpen, setIsUnassignConfirmOpen] = useState(false);
   const [selectedDriverId, setSelectedDriverId] = useState<string>('');
   const [assignmentNotes, setAssignmentNotes] = useState<string>('');
 
@@ -121,6 +123,7 @@ export const TruckDetailPage: React.FC = () => {
     },
     onSuccess: (data) => {
       toast.success(data.message || 'Driver detached.');
+      setIsUnassignConfirmOpen(false);
       queryClient.invalidateQueries({ queryKey: ['truck', id] });
     },
     onError: (err: any) => {
@@ -420,11 +423,7 @@ export const TruckDetailPage: React.FC = () => {
                   <button
                     type="button"
                     className="btn btn-danger btn-sm"
-                    onClick={() => {
-                      if (confirm(`Unassign driver ${truck.current_driver_id.name} from this vehicle?`)) {
-                        unassignDriverMutation.mutate();
-                      }
-                    }}
+                    onClick={() => setIsUnassignConfirmOpen(true)}
                   >
                     <UserX size={14} /> Unassign
                   </button>
@@ -828,6 +827,25 @@ export const TruckDetailPage: React.FC = () => {
           </div>
         </form>
       </Modal>
+
+      {/* Confirm Driver Unassign Dialog */}
+      <ConfirmDialog
+        isOpen={isUnassignConfirmOpen}
+        onClose={() => setIsUnassignConfirmOpen(false)}
+        onConfirm={() => unassignDriverMutation.mutate()}
+        title="Unassign Driver from Vehicle"
+        confirmText="Unassign Driver"
+        variant="warning"
+        isLoading={unassignDriverMutation.isPending}
+        message={
+          <>
+            Are you sure you want to unassign driver <strong>{truck?.current_driver_id?.name}</strong> from vehicle <strong>{truck?.truck_no}</strong>?
+            <div style={{ marginTop: '0.5rem', color: 'var(--text-muted)', fontSize: 'var(--font-size-xs)' }}>
+              The vehicle will be left without an active primary driver until a replacement driver is attached.
+            </div>
+          </>
+        }
+      />
     </div>
   );
 };

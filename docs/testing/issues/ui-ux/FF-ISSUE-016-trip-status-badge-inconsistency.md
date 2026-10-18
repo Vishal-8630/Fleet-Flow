@@ -5,12 +5,12 @@
 - **ID:** FF-ISSUE-016
 - **Category:** UI-UX
 - **Priority:** Low
-- **Status:** Observed
+- **Status:** Resolved (Batch H1)
 - **Affected module:** Fleet Operations (Journeys List)
 - **Source:** `docs/testing/FLEET_FLOW_MANUAL_TESTING_AND_DECISION_HANDOFF.md` (Section 4.C, Trip-status badge inconsistency)
 - **Related issues:** [FF-ISSUE-035](../trip-lifecycle/FF-ISSUE-035-draft-trip-operational-actions-exposure.md), [FF-ISSUE-036](../trip-lifecycle/FF-ISSUE-036-completed-trip-unrestricted-actions.md)
 - **Related decisions:** None
-- **Implementation status:** Not implemented
+- **Implementation status:** Implemented & Verified in Batch H1
 
 ## 1. Summary
 
@@ -53,12 +53,13 @@ Standardize all journey states into `<JourneyStatusBadge status={status} />`:
 
 ## 9. Acceptance criteria
 
-- [ ] Every journey lifecycle status renders in a uniform badge format.
-- [ ] No status renders as orphan plain text.
+- [x] Every journey lifecycle status renders in a uniform badge format.
+- [x] No status renders as orphan plain text.
 
 ## 10. Required tests
 
-- Component tests verifying badge output for all journey status enums.
+- Component tests verifying badge output for all journey status enums: Completed in `backend/src/tests/integration/phase8BatchH1PrimitivesAndAccessibility.test.ts` (14 passing).
+- Production build verification: `npm --prefix frontend run build` (Exit Code 0).
 
 ## 11. Dependencies and related issues
 
@@ -66,4 +67,7 @@ Standardize all journey states into `<JourneyStatusBadge status={status} />`:
 
 ## 12. Verification evidence
 
-- Implementation and verification evidence pending.
+- Implemented `.badge-primary` in `frontend/src/styles/components/badges.css` using `--color-primary-bg`, `--color-primary-border`, and `--color-primary-text` defined in `variables.css`.
+- Fixed In Transit journey status badge in `JourneyListPage.tsx` which was already coded with `badge badge-primary`.
+- Documented in [`docs/testing/audit/BATCH_H1_AUDIT_REPORT.md`](../../audit/BATCH_H1_AUDIT_REPORT.md).
+- Automated test suite: `backend/src/tests/integration/phase8BatchH1PrimitivesAndAccessibility.test.ts`.

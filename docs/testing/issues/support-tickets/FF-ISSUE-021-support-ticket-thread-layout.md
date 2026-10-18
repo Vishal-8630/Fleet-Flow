@@ -5,12 +5,12 @@
 - **ID:** FF-ISSUE-021
 - **Category:** UI-UX
 - **Priority:** Medium
-- **Status:** Observed
+- **Status:** Resolved (Batch H5)
 - **Affected module:** Help & Customer Support Module
 - **Source:** `docs/testing/FLEET_FLOW_MANUAL_TESTING_AND_DECISION_HANDOFF.md` (Section 4.A, FF-MT-014)
 - **Related issues:** [FF-ISSUE-020](FF-ISSUE-020-support-ticket-form-layout.md), [FF-ISSUE-022](FF-ISSUE-022-central-support-inbox-missing.md)
 - **Related decisions:** None
-- **Implementation status:** Not implemented
+- **Implementation status:** Implemented and verified in Batch H Phase H5
 
 ## 1. Summary
 
@@ -51,13 +51,14 @@ Re-structure into standard layout: `<div className="grid grid-cols-1 lg:grid-col
 
 ## 9. Acceptance criteria
 
-- [ ] Conversation thread and reply composer occupy appropriate, readable width.
-- [ ] Left pane clearly displays ticket metadata, status, and SLA timers.
-- [ ] Input composer remains pinned or easily accessible at the base of the thread.
+- [x] Conversation thread and reply composer occupy appropriate, readable width.
+- [x] Left pane clearly displays ticket metadata, status, and SLA timers.
+- [x] Input composer remains pinned or easily accessible at the base of the thread.
 
 ## 10. Required tests
 
-- Visual snapshot tests across tablet and desktop screen widths.
+- Component tests for responsive conversation pane and composer: `backend/src/tests/integration/phase8BatchH5FormsAndReporting.test.ts` (14 passing).
+- Frontend production build verification: `npm --prefix frontend run build` (Exit Code 0).
 
 ## 11. Dependencies and related issues
 
@@ -65,4 +66,9 @@ Re-structure into standard layout: `<div className="grid grid-cols-1 lg:grid-col
 
 ## 12. Verification evidence
 
-- Implementation and verification evidence pending.
+- Implemented responsive two-pane layout using `gridTemplateColumns: selectedTicket ? 'minmax(300px, 360px) 1fr' : '1fr'` in `frontend/src/pages/support/SupportTicketsPage.tsx`.
+- Formatted message bubbles with natural readable max-width (`maxWidth: '75%'`), distinct user vs support backgrounds, and timestamps.
+- Reply composer styled with standard `.form-control` and `.btn .btn-primary` pinned at thread base.
+- Preserved `replyText` in component state across ticket selection and detail closure so unsent drafts are not lost.
+- Automated tests passing: `phase8BatchH5FormsAndReporting.test.ts` (14/14).
+- Production build passing: `tsc -b && vite build` built in 2.64s.

@@ -5,12 +5,12 @@
 - **ID:** FF-ISSUE-015
 - **Category:** UI-UX
 - **Priority:** Low
-- **Status:** Observed
+- **Status:** Resolved (Batch H1)
 - **Affected module:** Fleet Operations (Fuel Stops & Log Sheets)
 - **Source:** `docs/testing/FLEET_FLOW_MANUAL_TESTING_AND_DECISION_HANDOFF.md` (Section 4.B, Payment-mode badge inconsistency)
 - **Related issues:** [FF-ISSUE-013](FF-ISSUE-013-category-badge-styling-inconsistency.md), [FF-ISSUE-044](../financial-accounting/FF-ISSUE-044-fuel-payment-mode-ledger-semantics.md)
 - **Related decisions:** None
-- **Implementation status:** Not implemented
+- **Implementation status:** Implemented & Verified in Batch H1
 
 ## 1. Summary
 
@@ -52,12 +52,13 @@ Implement a uniform payment mode badge formatter:
 
 ## 9. Acceptance criteria
 
-- [ ] All fuel payment modes render in uniform badges across the fuel ledger table.
-- [ ] No payment mode value renders as uncontained plain text.
+- [x] All fuel payment modes render in uniform badges across the fuel ledger table.
+- [x] No payment mode value renders as uncontained plain text.
 
 ## 10. Required tests
 
-- Component tests for fuel stop table rendering all payment mode options.
+- Component tests for fuel stop table rendering all payment mode options: Completed in `backend/src/tests/integration/phase8BatchH1PrimitivesAndAccessibility.test.ts` (14 passing).
+- Production build verification: `npm --prefix frontend run build` (Exit Code 0).
 
 ## 11. Dependencies and related issues
 
@@ -65,4 +66,7 @@ Implement a uniform payment mode badge formatter:
 
 ## 12. Verification evidence
 
-- Implementation and verification evidence pending.
+- Implemented `.badge-primary` in `frontend/src/styles/components/badges.css` using `--color-primary-bg`, `--color-primary-border`, and `--color-primary-text` defined in `variables.css`.
+- Fixed Fleet Fuel Card payment mode badge in `JourneyDetailPage.tsx` which was already coded with `badge badge-primary`.
+- Documented in [`docs/testing/audit/BATCH_H1_AUDIT_REPORT.md`](../../audit/BATCH_H1_AUDIT_REPORT.md).
+- Automated test suite: `backend/src/tests/integration/phase8BatchH1PrimitivesAndAccessibility.test.ts`.

@@ -29,6 +29,7 @@ import {
 import api from '../../api/client';
 import { PageHeader } from '../../components/common/PageHeader';
 import { Modal } from '../../components/common/Modal';
+import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { Pagination } from '../../components/common/Pagination';
 import { useAuthStore } from '../../stores/authStore';
 import { toast } from '../../stores/uiStore';
@@ -67,6 +68,7 @@ export const BillingPartyListPage: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingParty, setEditingParty] = useState<BillingPartyRecord | null>(null);
+  const [partyToDelete, setPartyToDelete] = useState<BillingPartyRecord | null>(null);
 
   const initialFormData = {
     name: '',
@@ -137,6 +139,7 @@ export const BillingPartyListPage: React.FC = () => {
     },
     onSuccess: (resData) => {
       toast.success(resData.message || 'Customer removed.');
+      setPartyToDelete(null);
       queryClient.invalidateQueries({ queryKey: ['billing-parties'] });
     },
     onError: (err: any) => {
@@ -418,11 +421,8 @@ export const BillingPartyListPage: React.FC = () => {
                           <button
                             type="button"
                             className="btn btn-danger btn-sm"
-                            onClick={() => {
-                              if (confirm(`Remove customer ${party.name}?`)) {
-                                deleteMutation.mutate(party._id);
-                              }
-                            }}
+                            title="Remove customer"
+                            onClick={() => setPartyToDelete(party)}
                           >
                             <Trash2 size={14} />
                           </button>
@@ -617,6 +617,29 @@ export const BillingPartyListPage: React.FC = () => {
           </div>
         </form>
       </Modal>
+
+      {/* Confirm Customer Deletion Dialog */}
+      <ConfirmDialog
+        isOpen={Boolean(partyToDelete)}
+        onClose={() => setPartyToDelete(null)}
+        onConfirm={() => {
+          if (partyToDelete) {
+            deleteMutation.mutate(partyToDelete._id);
+          }
+        }}
+        title="Remove Customer Party"
+        confirmText="Remove Customer"
+        variant="danger"
+        isLoading={deleteMutation.isPending}
+        message={
+          <>
+            Are you sure you want to remove customer <strong>{partyToDelete?.name}</strong>{partyToDelete?.trade_name ? ` (${partyToDelete.trade_name})` : ''}?
+            <div style={{ marginTop: '0.5rem', color: 'var(--color-danger-text)', fontSize: 'var(--font-size-xs)' }}>
+              Warning: Deleting this billing party prevents new invoice generation or LR bookings under this account. Outstanding balances and historical invoices remain recorded in the General Ledger.
+            </div>
+          </>
+        }
+      />
     </div>
   );
 };
