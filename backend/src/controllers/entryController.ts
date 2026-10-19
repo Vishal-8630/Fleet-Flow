@@ -55,6 +55,15 @@ export const getEntries = async (req: Request, res: Response) => {
       query.status = req.query.status;
     }
 
+    if (req.query.unassigned === 'true' || req.query.unassigned === true) {
+      query.journey_id = { $in: [null, undefined] };
+      if (!req.query.status) {
+        query.status = 'active';
+      }
+    } else if (req.query.journey_id) {
+      query.journey_id = req.query.journey_id;
+    }
+
     if (req.query.from_date || req.query.to_date) {
       query.lr_date = {};
       if (req.query.from_date) query.lr_date.$gte = new Date(req.query.from_date as string);

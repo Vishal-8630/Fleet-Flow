@@ -12,6 +12,7 @@
  */
 
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../api/client';
 import { PageHeader } from '../../components/common/PageHeader';
@@ -39,6 +40,7 @@ import {
 } from 'lucide-react';
 
 export const LRListPage: React.FC = () => {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { role, enabledFeatures = [] } = useAuthStore();
   const isUnlocked = enabledFeatures.includes('MOD_LR_ENGINE');
@@ -49,7 +51,9 @@ export const LRListPage: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState('');
   const [termsFilter, setTermsFilter] = useState('');
   const [branchFilter, setBranchFilter] = useState('');
+  const [assignmentFilter, setAssignmentFilter] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedLrIds, setSelectedLrIds] = useState<string[]>([]);
 
   // Modals state
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -130,13 +134,14 @@ export const LRListPage: React.FC = () => {
   });
 
   const { data: lrsData, isLoading } = useQuery({
-    queryKey: ['lr-list', page, statusFilter, termsFilter, branchFilter, searchQuery],
+    queryKey: ['lr-list', page, statusFilter, termsFilter, branchFilter, assignmentFilter, searchQuery],
     enabled: isUnlocked,
     queryFn: async () => {
       const params: any = { page, limit: 12 };
       if (statusFilter) params.status = statusFilter;
       if (termsFilter) params.freight_terms = termsFilter;
       if (branchFilter) params.branch_id = branchFilter;
+      if (assignmentFilter === 'unassigned') params.unassigned = 'true';
       if (searchQuery) params.search = searchQuery;
       const res = await api.get('/commercial/entries', { params });
       return res.data;
@@ -463,9 +468,87 @@ export const LRListPage: React.FC = () => {
               <option value="paid">Paid</option>
               <option value="to_pay">To Pay</option>
             </select>
+
+            <select
+              className="form-control"
+              value={assignmentFilter}
+              onChange={(e) => {
+                setAssignmentFilter(e.target.value);
+                setPage(1);
+              }}
+              style={{ width: 'auto', minWidth: '150px' }}
+            >
+              <option value="">All Consignments</option>
+              <option value="unassigned">Unassigned (Ready for Trip)</option>
+            </select>
           </div>
         </div>
       </div>
+
+      {/* 3.5. LR Multi-Select Action Ribbon */}
+      {selectedLrIds.length > 0 && (
+        <div
+          className="commercial-selection-ribbon"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            backgroundColor: 'var(--color-primary-50)',
+            border: '1.5px solid var(--color-primary-300)',
+            borderRadius: 'var(--radius-md)',
+            padding: '0.875rem 1.25rem',
+            marginBottom: '1rem',
+            boxShadow: 'var(--shadow-sm)',
+            flexWrap: 'wrap',
+            gap: '0.75rem',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <span
+              style={{
+                backgroundColor: 'var(--color-primary-600)',
+                color: '#ffffff',
+                padding: '0.25rem 0.625rem',
+                borderRadius: 'var(--radius-full)',
+                fontSize: 'var(--font-size-xs)',
+                fontWeight: 700,
+              }}
+            >
+              {selectedLrIds.length}
+            </span>
+            <div>
+              <span style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600, color: 'var(--color-primary-900)' }}>
+                {selectedLrIds.length === 1 ? '1 Consignment (LR) selected' : `${selectedLrIds.length} Consignments (LRs) selected`}
+              </span>
+              <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)', marginLeft: '0.5rem' }}>
+                — Ready to bundle into a commercial customer journey
+              </span>
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => setSelectedLrIds([])}
+            >
+              Clear Selection
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={() =>
+                navigate('/operations/journeys/new', {
+                  state: { lr_ids: selectedLrIds },
+                })
+              }
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem', fontWeight: 600 }}
+            >
+              <Truck size={15} />
+              <span>Create Journey with Selected ({selectedLrIds.length})</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 4. LR Table */}
       <div className="card">
@@ -473,6 +556,36 @@ export const LRListPage: React.FC = () => {
           <table className="table">
             <thead>
               <tr>
+                <th style={{ width: '40px', textAlign: 'center' }}>
+                  <input
+                    type="checkbox"
+                    aria-label="Select all eligible LRs"
+                    checked={
+                      (lrsData?.entries || []).filter((lr: any) => lr.status === 'active' && !lr.journey_id).length > 0 &&
+                      (lrsData?.entries || [])
+                        .filter((lr: any) => lr.status === 'active' && !lr.journey_id)
+                        .every((lr: any) => selectedLrIds.includes(lr._id))
+                    }
+                    disabled={
+                      (lrsData?.entries || []).filter((lr: any) => lr.status === 'active' && !lr.journey_id).length === 0
+                    }
+                    onChange={() => {
+                      const eligibleEntries = (lrsData?.entries || []).filter(
+                        (lr: any) => lr.status === 'active' && !lr.journey_id
+                      );
+                      const allSelected =
+                        eligibleEntries.length > 0 &&
+                        eligibleEntries.every((lr: any) => selectedLrIds.includes(lr._id));
+                      if (allSelected) {
+                        const eligibleIdSet = new Set(eligibleEntries.map((l: any) => l._id));
+                        setSelectedLrIds((prev) => prev.filter((id) => !eligibleIdSet.has(id)));
+                      } else {
+                        const newSet = new Set([...selectedLrIds, ...eligibleEntries.map((l: any) => l._id)]);
+                        setSelectedLrIds(Array.from(newSet));
+                      }
+                    }}
+                  />
+                </th>
                 <th>LR Details</th>
                 <th>Branch</th>
                 <th>Vehicle & Driver</th>
@@ -487,7 +600,7 @@ export const LRListPage: React.FC = () => {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={9} style={{ textAlign: 'center', padding: '3rem' }}>
+                  <td colSpan={10} style={{ textAlign: 'center', padding: '3rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}>
                       <div style={{ width: '1.25rem', height: '1.25rem', border: '2px solid var(--color-primary-300)', borderTopColor: 'var(--color-primary-600)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
                       <span style={{ color: 'var(--text-muted)' }}>Loading Lorry Receipts...</span>
@@ -496,109 +609,175 @@ export const LRListPage: React.FC = () => {
                 </tr>
               ) : lrsData?.entries?.length === 0 ? (
                 <tr>
-                  <td colSpan={9} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+                  <td colSpan={10} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
                     No Lorry Receipts found matching current filters.
                   </td>
                 </tr>
               ) : (
-                lrsData?.entries?.map((lr: any) => (
-                  <tr key={lr._id}>
-                    <td>
-                      <div style={{ fontWeight: 'var(--font-weight-bold)', color: 'var(--color-primary-600)' }}>
-                        {lr.lr_no}
-                      </div>
-                      <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
-                        {new Date(lr.lr_date).toLocaleDateString()} • {lr.bill_no}
-                      </div>
-                    </td>
-                    <td>
-                      {lr.branch_id ? (
-                        <div>
-                          <span className="badge badge-info" style={{ fontSize: '0.6875rem' }}>
-                            {lr.branch_id.branch_code}
-                          </span>
-                          <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: '0.125rem' }}>
-                            {lr.branch_id.branch_name}
-                          </div>
+                lrsData?.entries?.map((lr: any) => {
+                  const isEligible = lr.status === 'active' && !lr.journey_id;
+                  const isSelected = selectedLrIds.includes(lr._id);
+
+                  return (
+                    <tr key={lr._id} style={{ backgroundColor: isSelected ? 'var(--color-primary-50)' : undefined }}>
+                      <td style={{ textAlign: 'center' }}>
+                        <input
+                          type="checkbox"
+                          aria-label={`Select LR ${lr.lr_no}`}
+                          checked={isSelected}
+                          disabled={!isEligible}
+                          title={
+                            !isEligible
+                              ? lr.journey_id
+                                ? 'Already assigned to a journey'
+                                : lr.status === 'invoiced'
+                                ? 'Invoiced LRs cannot be assigned to a new journey'
+                                : 'Only active unassigned LRs can be assigned'
+                              : 'Select LR to bundle into a journey'
+                          }
+                          onChange={() => {
+                            if (!isEligible) return;
+                            setSelectedLrIds((prev) =>
+                              prev.includes(lr._id) ? prev.filter((id) => id !== lr._id) : [...prev, lr._id]
+                            );
+                          }}
+                        />
+                      </td>
+                      <td>
+                        <div style={{ fontWeight: 'var(--font-weight-bold)', color: 'var(--color-primary-600)' }}>
+                          {lr.lr_no}
                         </div>
-                      ) : (
-                        <span className="badge badge-neutral" style={{ fontSize: '0.6875rem' }}>
-                          Company Direct
-                        </span>
-                      )}
-                    </td>
-                    <td>
-                      <div style={{ fontWeight: 'var(--font-weight-medium)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                        <Truck size={14} color="var(--text-muted)" />
-                        {lr.vehicle_number}
-                      </div>
-                      <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
-                        {lr.driver_name || 'Driver Not Assigned'}
-                      </div>
-                    </td>
-                    <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: 'var(--font-size-sm)' }}>
-                        <span>{lr.from_location}</span>
-                        <ArrowRight size={12} color="var(--text-muted)" />
-                        <span>{lr.to_location}</span>
-                      </div>
-                    </td>
-                    <td>
-                      <div style={{ fontWeight: 'var(--font-weight-medium)', fontSize: 'var(--font-size-xs)' }}>
-                        <span style={{ color: 'var(--text-muted)' }}>From:</span> {lr.consignor?.name}
-                      </div>
-                      <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
-                        <span>To:</span> {lr.consignee?.name}
-                      </div>
-                    </td>
-                    <td>
-                      <div style={{ fontSize: 'var(--font-size-xs)', fontWeight: 'var(--font-weight-medium)' }}>
-                        {lr.package_count} {lr.packaging_type} • {lr.goods_description}
-                      </div>
-                      <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
-                        {lr.chargeable_weight_tonnes ? `${lr.chargeable_weight_tonnes} Tonnes` : `${lr.actual_weight_tonnes} Tonnes`}
-                      </div>
-                    </td>
-                    <td>
-                      <div style={{ fontWeight: 'var(--font-weight-bold)', color: 'var(--text-primary)' }}>
-                        ₹{Number(lr.freight_amount || 0).toLocaleString('en-IN')}
-                      </div>
-                      <span className={`badge ${lr.freight_terms === 'paid' ? 'badge-success' : lr.freight_terms === 'to_pay' ? 'badge-warning' : 'badge-primary'}`}>
-                        {lr.freight_terms?.replace(/_/g, ' ')}
-                      </span>
-                    </td>
-                    <td>
-                      <span className={`badge ${lr.status === 'active' ? 'badge-primary' : lr.status === 'invoiced' ? 'badge-success' : 'badge-danger'}`}>
-                        {lr.status}
-                      </span>
-                    </td>
-                    <td style={{ textAlign: 'right' }}>
-                      <div style={{ display: 'inline-flex', gap: '0.5rem' }}>
-                        <button
-                          className="btn btn-secondary btn-sm"
-                          onClick={() => handlePrintLR(lr._id, lr)}
-                          title="Print 3-Part Stationary"
-                        >
-                          <Printer size={14} />
-                          <span>Print</span>
-                        </button>
-                        {canEdit && lr.status === 'active' && (
-                          <button
-                            className="btn btn-danger btn-sm"
-                            onClick={() => {
-                              if (confirm(`Are you sure you want to cancel LR ${lr.lr_no}?`)) {
-                                cancelMutation.mutate(lr._id);
-                              }
-                            }}
-                            title="Cancel LR"
-                          >
-                            <XCircle size={14} />
-                          </button>
+                        <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
+                          {new Date(lr.lr_date).toLocaleDateString()} • {lr.bill_no}
+                        </div>
+                        {lr.journey_id && (
+                          <div style={{ marginTop: '0.25rem' }}>
+                            <span
+                              className="badge badge-info"
+                              style={{
+                                fontSize: '0.6875rem',
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.25rem',
+                              }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const jId = lr.journey_id?._id || lr.journey_id;
+                                navigate(`/operations/journeys/${jId}`);
+                              }}
+                              title="View linked journey details"
+                            >
+                              <Truck size={10} />
+                              <span>Trip: {lr.journey_id.journey_number || 'Linked'}</span>
+                            </span>
+                          </div>
                         )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                      </td>
+                      <td>
+                        {lr.branch_id ? (
+                          <div>
+                            <span className="badge badge-info" style={{ fontSize: '0.6875rem' }}>
+                              {lr.branch_id.branch_code}
+                            </span>
+                            <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: '0.125rem' }}>
+                              {lr.branch_id.branch_name}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="badge badge-neutral" style={{ fontSize: '0.6875rem' }}>
+                            Company Direct
+                          </span>
+                        )}
+                      </td>
+                      <td>
+                        <div style={{ fontWeight: 'var(--font-weight-medium)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                          <Truck size={14} color="var(--text-muted)" />
+                          {lr.vehicle_number}
+                        </div>
+                        <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
+                          {lr.driver_name || 'Driver Not Assigned'}
+                        </div>
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: 'var(--font-size-sm)' }}>
+                          <span>{lr.from_location}</span>
+                          <ArrowRight size={12} color="var(--text-muted)" />
+                          <span>{lr.to_location}</span>
+                        </div>
+                      </td>
+                      <td>
+                        <div style={{ fontWeight: 'var(--font-weight-medium)', fontSize: 'var(--font-size-xs)' }}>
+                          <span style={{ color: 'var(--text-muted)' }}>From:</span> {lr.consignor?.name}
+                        </div>
+                        <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
+                          <span>To:</span> {lr.consignee?.name}
+                        </div>
+                      </td>
+                      <td>
+                        <div style={{ fontSize: 'var(--font-size-xs)', fontWeight: 'var(--font-weight-medium)' }}>
+                          {lr.package_count} {lr.packaging_type} • {lr.goods_description}
+                        </div>
+                        <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
+                          {lr.chargeable_weight_tonnes ? `${lr.chargeable_weight_tonnes} Tonnes` : `${lr.actual_weight_tonnes} Tonnes`}
+                        </div>
+                      </td>
+                      <td>
+                        <div style={{ fontWeight: 'var(--font-weight-bold)', color: 'var(--text-primary)' }}>
+                          ₹{Number(lr.freight_amount || 0).toLocaleString('en-IN')}
+                        </div>
+                        <span className={`badge ${lr.freight_terms === 'paid' ? 'badge-success' : lr.freight_terms === 'to_pay' ? 'badge-warning' : 'badge-primary'}`}>
+                          {lr.freight_terms?.replace(/_/g, ' ')}
+                        </span>
+                      </td>
+                      <td>
+                        <span className={`badge ${lr.status === 'active' ? 'badge-primary' : lr.status === 'invoiced' ? 'badge-success' : 'badge-danger'}`}>
+                          {lr.status}
+                        </span>
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        <div style={{ display: 'inline-flex', gap: '0.5rem', alignItems: 'center' }}>
+                          {canEdit && isEligible && (
+                            <button
+                              className="btn btn-primary btn-sm"
+                              onClick={() =>
+                                navigate('/operations/journeys/new', {
+                                  state: { lr_ids: [lr._id] },
+                                })
+                              }
+                              title="Create Journey with this LR"
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}
+                            >
+                              <Truck size={13} />
+                              <span>Create Journey</span>
+                            </button>
+                          )}
+                          <button
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => handlePrintLR(lr._id, lr)}
+                            title="Print 3-Part Stationary"
+                          >
+                            <Printer size={14} />
+                            <span>Print</span>
+                          </button>
+                          {canEdit && lr.status === 'active' && (
+                            <button
+                              className="btn btn-danger btn-sm"
+                              onClick={() => {
+                                if (confirm(`Are you sure you want to cancel LR ${lr.lr_no}?`)) {
+                                  cancelMutation.mutate(lr._id);
+                                }
+                              }}
+                              title="Cancel LR"
+                            >
+                              <XCircle size={14} />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

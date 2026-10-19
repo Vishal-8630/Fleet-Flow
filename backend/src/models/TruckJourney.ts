@@ -34,6 +34,7 @@ import mongoose, { Document, Schema, Types } from 'mongoose';
 import { tenantPlugin } from '../plugins/tenantPlugin.js';
 
 export type JourneyStatus = 'draft' | 'active' | 'completed' | 'delayed' | 'cancelled';
+export type JourneyType = 'commercial' | 'internal_repositioning' | 'maintenance';
 export type DeliveryStatus = 'pending' | 'delivered' | 'rejected';
 export type FuelPaymentMode = 'cash' | 'fuel_card' | 'credit';
 export type DelayReason = 'breakdown' | 'traffic' | 'weather' | 'rto_check' | 'other';
@@ -177,6 +178,8 @@ export interface ITruckJourney extends Document {
   truck_id: Types.ObjectId;
   driver_id: Types.ObjectId;
   driver_handover_history?: IDriverHandover[];
+  journey_type?: JourneyType; // Commercial customer trip vs internal move (OPN-LR)
+  lr_ids?: Types.ObjectId[]; // Associated Lorry Receipts carried on this trip
   billing_party_id?: Types.ObjectId; // Optional customer for commercial linkage
   branch_id?: Types.ObjectId; // Responsible / originating regional branch (DEC-010)
 
@@ -301,6 +304,20 @@ const TruckJourneySchema = new Schema<ITruckJourney>(
         notes: { type: String, trim: true },
         timestamp: { type: Date, default: Date.now },
         authorized_by: { type: Schema.Types.ObjectId, ref: 'User' },
+      },
+    ],
+    journey_type: {
+      type: String,
+      enum: ['commercial', 'internal_repositioning', 'maintenance'],
+      required: false,
+      index: true,
+      // CRITICAL: Strictly NO schema-level default! Decouples schema hydration from API inference.
+    },
+    lr_ids: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: 'Entry',
+        index: true,
       },
     ],
     billing_party_id: {

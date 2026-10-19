@@ -23,7 +23,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import api from '../../api/client';
 import { PageHeader } from '../../components/common/PageHeader';
 import { toast } from '../../stores/uiStore';
@@ -42,11 +42,35 @@ import {
   ArrowLeft,
   Package,
   Building2,
+  FileText,
+  CheckCircle2,
+  Info,
+  Layers,
+  Wrench,
 } from 'lucide-react';
 
 export const NewJourneyPage: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
+
+  // Ingest selected LR IDs from navigation state or URL query params
+  const initialLrIds: string[] = (() => {
+    if (Array.isArray(location.state?.lr_ids) && location.state.lr_ids.length > 0) {
+      return location.state.lr_ids;
+    }
+    const queryParam = searchParams.get('lr_ids');
+    if (queryParam) {
+      return queryParam.split(',').map((id: string) => id.trim()).filter(Boolean);
+    }
+    return [];
+  })();
+
+  const [selectedLrIds, setSelectedLrIds] = useState<string[]>(initialLrIds);
+  const [journeyType, setJourneyType] = useState<'commercial' | 'internal_repositioning' | 'maintenance'>(
+    initialLrIds.length > 0 ? 'commercial' : 'internal_repositioning'
+  );
 
   // Form State
   const [formData, setFormData] = useState({
@@ -143,6 +167,96 @@ export const NewJourneyPage: React.FC = () => {
     }
   }, [formData.truck_id, trucksData]);
 
+  // 4.5. Fetch attached LRs details when LRs are selected
+  const { data: selectedLrsData, isLoading: selectedLrsLoading } = useQuery({
+    queryKey: ['selected-lrs-detail', selectedLrIds],
+    queryFn: async () => {
+      if (!selectedLrIds || selectedLrIds.length === 0) return [];
+      const results = await Promise.all(
+        selectedLrIds.map(async (id) => {
+          try {
+            const res = await api.get(`/commercial/entries/${id}`);
+            return res.data?.entry || null;
+          } catch {
+            return null;
+          }
+        })
+      );
+      return results.filter(Boolean);
+    },
+    enabled: selectedLrIds.length > 0,
+  });
+
+  // Auto-prefill or clear supported cargo, weights, volume, corridor, customer, and branch when selected LRs change
+  useEffect(() => {
+    if (selectedLrsData && selectedLrsData.length > 0) {
+      const lrs = selectedLrsData;
+
+      // Check for stale or already assigned/invoiced LRs
+      const staleLrs = lrs.filter((l: any) => l.journey_id || l.status !== 'active');
+      if (staleLrs.length > 0) {
+        toast.error(`Warning: Consignment ${staleLrs.map((l: any) => l.lr_no).join(', ')} is already assigned or ineligible for new dispatch.`);
+      }
+
+      // 1. Customer derivation & mismatch detection
+      const firstCustomer = lrs[0]?.billing_party_id?._id || lrs[0]?.billing_party_id;
+      const hasMismatch = lrs.some((l: any) => {
+        const cId = l.billing_party_id?._id || l.billing_party_id;
+        return String(cId) !== String(firstCustomer);
+      });
+
+      if (hasMismatch) {
+        toast.error('Selected LRs have mismatched Billing Parties. A commercial journey must belong to a single customer.');
+      }
+
+      // 2. Branch derivation
+      const firstBranch = lrs[0]?.branch_id?._id || lrs[0]?.branch_id;
+
+      // 3. Totals
+      const totalWeight = lrs.reduce((acc: number, l: any) => acc + (Number(l.actual_weight_tonnes) || 0), 0);
+      const totalVolume = lrs.reduce((acc: number, l: any) => acc + (Number(l.cbm_volume) || 0), 0);
+      const totalFreight = lrs.reduce((acc: number, l: any) => acc + (Number(l.freight_amount) || 0), 0);
+      const cargoDescs = Array.from(new Set(lrs.map((l: any) => l.goods_description).filter(Boolean))).join(', ');
+
+      setFormData((prev) => ({
+        ...prev,
+        billing_party_id: firstCustomer ? String(firstCustomer) : '',
+        branch_id: firstBranch ? String(firstBranch) : prev.branch_id,
+        from_city: lrs[0]?.from_location || '',
+        to_city: lrs[0]?.to_location || '',
+        cargo_description: cargoDescs || '',
+        loaded_weight_tonnes: totalWeight > 0 ? totalWeight.toFixed(2) : '',
+        cbm_volume: totalVolume > 0 ? totalVolume.toFixed(2) : '',
+        freight_rate: totalFreight > 0 ? String(totalFreight) : '',
+      }));
+    } else if (selectedLrIds.length === 0 && journeyType === 'commercial') {
+      // When all LRs are removed in commercial mode, clear derived values so stale data is not retained
+      setFormData((prev) => ({
+        ...prev,
+        billing_party_id: '',
+        from_city: '',
+        to_city: '',
+        cargo_description: '',
+        loaded_weight_tonnes: '',
+        cbm_volume: '',
+        freight_rate: '',
+      }));
+    }
+  }, [selectedLrsData, selectedLrIds.length, journeyType]);
+
+  // Remove individual selected LR handler
+  const handleRemoveLr = (lrId: string) => {
+    setSelectedLrIds((prev) => prev.filter((id) => id !== lrId));
+  };
+
+  // Switch journey type handler
+  const handleJourneyTypeChange = (newType: 'commercial' | 'internal_repositioning' | 'maintenance') => {
+    setJourneyType(newType);
+    if (newType !== 'commercial') {
+      setFormData((prev) => ({ ...prev, billing_party_id: '' }));
+    }
+  };
+
   // Selected vehicle & driver conflict helpers
   const selectedTruck = trucksData?.trucks?.find((t: any) => t._id === formData.truck_id);
   const selectedDriver = driversData?.drivers?.find((d: any) => d._id === formData.driver_id);
@@ -154,11 +268,11 @@ export const NewJourneyPage: React.FC = () => {
   // 5. Create Journey Mutation
   const createMutation = useMutation({
     mutationFn: async (dispatchImmediately: boolean) => {
-      const payload = {
+      const payload: any = {
+        journey_type: journeyType,
         branch_id: formData.branch_id || undefined,
         truck_id: formData.truck_id,
         driver_id: formData.driver_id,
-        billing_party_id: formData.billing_party_id || undefined,
         from_location: {
           city: formData.from_city,
           state: formData.from_state || undefined,
@@ -185,6 +299,14 @@ export const NewJourneyPage: React.FC = () => {
         status: dispatchImmediately ? 'active' : 'draft',
       };
 
+      if (journeyType === 'commercial') {
+        payload.billing_party_id = formData.billing_party_id || undefined;
+        payload.lr_ids = selectedLrIds;
+      } else {
+        payload.billing_party_id = undefined;
+        payload.lr_ids = [];
+      }
+
       const res = await api.post('/operations/journeys', payload);
       return res.data;
     },
@@ -199,7 +321,23 @@ export const NewJourneyPage: React.FC = () => {
       navigate(`/operations/journeys/${data.journey._id}`);
     },
     onError: (err: any) => {
-      toast.error(err.response?.data?.error || err.message || 'Failed to create journey.');
+      const serverCode = err.response?.data?.code;
+      const serverError = err.response?.data?.error;
+      if (serverCode === 'LR_ALREADY_ASSIGNED') {
+        toast.error(serverError || 'One or more selected Lorry Receipts are already assigned to another journey.');
+      } else if (serverCode === 'CUSTOMER_MISMATCH') {
+        toast.error(serverError || 'Customer mismatch: All Lorry Receipts on a journey must belong to the same Billing Party customer.');
+      } else if (serverCode === 'BRANCH_MISMATCH') {
+        toast.error(serverError || 'Branch mismatch: All Lorry Receipts must originate from the selected branch.');
+      } else if (serverCode === 'INVOICED_LR_INELIGIBLE') {
+        toast.error(serverError || 'One or more selected Lorry Receipts have already been invoiced and cannot be dispatched on a new journey.');
+      } else if (serverCode === 'LR_REQUIRED_FOR_BILLING_PARTY_JOURNEY' || serverCode === 'COMMERCIAL_JOURNEY_REQUIRES_LRS') {
+        toast.error(serverError || 'A commercial Billing Party journey requires at least one eligible Lorry Receipt.');
+      } else if (serverCode === 'INTERNAL_JOURNEY_CANNOT_HAVE_BILLING_PARTY') {
+        toast.error(serverError || 'Internal repositioning and maintenance journeys cannot have a Billing Party customer.');
+      } else {
+        toast.error(serverError || err.message || 'Failed to create journey.');
+      }
     },
   });
 
@@ -215,6 +353,25 @@ export const NewJourneyPage: React.FC = () => {
 
   const handleSubmit = (e: React.FormEvent, dispatchImmediately: boolean) => {
     e.preventDefault();
+
+    // Mandatory LR rule enforcement for commercial journeys
+    if (journeyType === 'commercial') {
+      if (selectedLrIds.length === 0) {
+        toast.error('A Billing Party commercial journey must contain one or more eligible Lorry Receipts.');
+        return;
+      }
+      const ineligible = selectedLrsData?.filter((l: any) => l.journey_id || l.status !== 'active');
+      if (ineligible && ineligible.length > 0) {
+        toast.error(`Cannot submit: LR ${ineligible.map((l: any) => l.lr_no).join(', ')} is already assigned or ineligible for dispatch.`);
+        return;
+      }
+    }
+
+    if (journeyType !== 'commercial' && formData.billing_party_id) {
+      toast.error('Internal repositioning and maintenance journeys cannot be linked to a Billing Party customer.');
+      return;
+    }
+
     if (!formData.truck_id || !formData.driver_id || !formData.from_city || !formData.to_city) {
       toast.error('Please fill in vehicle, driver, origin city, and destination city.');
       return;
@@ -267,6 +424,87 @@ export const NewJourneyPage: React.FC = () => {
       />
 
       <form onSubmit={(e) => handleSubmit(e, false)}>
+        {/* SECTION 0: MOVEMENT CLASSIFICATION & JOURNEY TYPE */}
+        <div className="card" style={{ marginBottom: '1.5rem', padding: '1.75rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '0.75rem' }}>
+            <Layers size={20} color="var(--color-primary-600)" />
+            <h3 style={{ fontSize: 'var(--font-size-base)', fontWeight: 'var(--font-weight-bold)', margin: 0, color: 'var(--text-main)' }}>
+              Movement Classification & Journey Type
+            </h3>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3" style={{ gap: '1rem' }}>
+            {/* Commercial Option */}
+            <div
+              onClick={() => handleJourneyTypeChange('commercial')}
+              style={{
+                cursor: 'pointer',
+                border: journeyType === 'commercial' ? '2px solid var(--color-primary-600)' : '1px solid var(--border-color)',
+                backgroundColor: journeyType === 'commercial' ? 'var(--color-primary-50)' : 'var(--bg-app)',
+                borderRadius: 'var(--radius-md)',
+                padding: '1rem',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                <span style={{ fontWeight: 700, fontSize: 'var(--font-size-sm)', color: journeyType === 'commercial' ? 'var(--color-primary-900)' : 'var(--text-primary)' }}>
+                  Commercial Customer Journey
+                </span>
+                {journeyType === 'commercial' && <CheckCircle2 size={16} color="var(--color-primary-600)" />}
+              </div>
+              <p style={{ margin: 0, fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
+                Commercial transport carrying customer consignments. <strong>Requires one or more eligible LRs.</strong>
+              </p>
+            </div>
+
+            {/* Repositioning Option */}
+            <div
+              onClick={() => handleJourneyTypeChange('internal_repositioning')}
+              style={{
+                cursor: 'pointer',
+                border: journeyType === 'internal_repositioning' ? '2px solid var(--color-primary-600)' : '1px solid var(--border-color)',
+                backgroundColor: journeyType === 'internal_repositioning' ? 'var(--color-primary-50)' : 'var(--bg-app)',
+                borderRadius: 'var(--radius-md)',
+                padding: '1rem',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                <span style={{ fontWeight: 700, fontSize: 'var(--font-size-sm)', color: journeyType === 'internal_repositioning' ? 'var(--color-primary-900)' : 'var(--text-primary)' }}>
+                  Internal Repositioning
+                </span>
+                {journeyType === 'internal_repositioning' && <CheckCircle2 size={16} color="var(--color-primary-600)" />}
+              </div>
+              <p style={{ margin: 0, fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
+                Empty truck balancing or inter-branch asset transfer. No customer billing party or LRs.
+              </p>
+            </div>
+
+            {/* Maintenance Option */}
+            <div
+              onClick={() => handleJourneyTypeChange('maintenance')}
+              style={{
+                cursor: 'pointer',
+                border: journeyType === 'maintenance' ? '2px solid var(--color-primary-600)' : '1px solid var(--border-color)',
+                backgroundColor: journeyType === 'maintenance' ? 'var(--color-primary-50)' : 'var(--bg-app)',
+                borderRadius: 'var(--radius-md)',
+                padding: '1rem',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                <span style={{ fontWeight: 700, fontSize: 'var(--font-size-sm)', color: journeyType === 'maintenance' ? 'var(--color-primary-900)' : 'var(--text-primary)' }}>
+                  Maintenance & Garage Run
+                </span>
+                {journeyType === 'maintenance' && <CheckCircle2 size={16} color="var(--color-primary-600)" />}
+              </div>
+              <p style={{ margin: 0, fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
+                Transit to workshop, garage, fitness inspection, or bodybuilder. No commercial cargo.
+              </p>
+            </div>
+          </div>
+        </div>
+
         {/* SECTION 1: RESOURCE ALLOCATION */}
         <div className="card" style={{ marginBottom: '1.5rem', padding: '1.75rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.25rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '0.75rem' }}>
@@ -382,7 +620,7 @@ export const NewJourneyPage: React.FC = () => {
           </div>
         </div>
 
-        {/* SECTION 2: FREIGHT ROUTE & CUSTOMER */}
+        {/* SECTION 2: FREIGHT ROUTE & SHIPPER DETAILS */}
         <div className="card" style={{ marginBottom: '1.5rem', padding: '1.75rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.25rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '0.75rem' }}>
             <MapPin size={20} color="var(--color-primary-600)" />
@@ -391,22 +629,212 @@ export const NewJourneyPage: React.FC = () => {
             </h3>
           </div>
 
-          {/* Customer / Billing Party */}
-          <div className="form-group" style={{ marginBottom: '1.25rem' }}>
-            <label className="form-label">Customer / Shipper Billing Party</label>
-            <select
-              className="form-control"
-              value={formData.billing_party_id}
-              onChange={(e) => setFormData({ ...formData, billing_party_id: e.target.value })}
+          {/* Attached Consignments Card (for Commercial Journeys) */}
+          {journeyType === 'commercial' && (
+            <div style={{ marginBottom: '1.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+                <label className="form-label" style={{ marginBottom: 0, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.375rem' }}>
+                  <FileText size={16} color="var(--color-primary-600)" />
+                  Attached Consignments (Lorry Receipts) <span style={{ color: 'var(--color-danger)' }}>*</span>
+                </label>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => navigate('/bill-entry/all')}
+                  style={{ fontSize: 'var(--font-size-xs)' }}
+                >
+                  Browse Lorry Receipts
+                </button>
+              </div>
+
+              {selectedLrIds.length === 0 ? (
+                <div
+                  style={{
+                    backgroundColor: 'rgba(239, 68, 68, 0.05)',
+                    border: '1.5px dashed var(--color-danger)',
+                    borderRadius: 'var(--radius-md)',
+                    padding: '1.25rem',
+                    textAlign: 'center',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '0.5rem' }}>
+                    <AlertTriangle size={24} color="var(--color-danger)" />
+                  </div>
+                  <div style={{ fontWeight: 600, color: 'var(--color-danger)', fontSize: 'var(--font-size-sm)' }}>
+                    No Lorry Receipts Attached
+                  </div>
+                  <p style={{ margin: '0.375rem 0 1rem 0', fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
+                    Every Billing Party commercial journey must contain one or more eligible Lorry Receipts. Direct dispatches without LRs are restricted to internal repositioning and maintenance.
+                  </p>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    onClick={() => navigate('/bill-entry/all')}
+                  >
+                    Select LRs from Registry
+                  </button>
+                </div>
+              ) : selectedLrsLoading ? (
+                <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: 'var(--font-size-sm)' }}>
+                  Loading attached consignment details...
+                </div>
+              ) : (
+                <div style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
+                  <div className="table-responsive">
+                    <table className="table" style={{ margin: 0 }}>
+                      <thead style={{ backgroundColor: 'var(--color-slate-50)' }}>
+                        <tr>
+                          <th>LR #</th>
+                          <th>Parties (Consignor → Consignee)</th>
+                          <th>Cargo & Specs</th>
+                          <th>Weight / Volume</th>
+                          <th>Freight Amount</th>
+                          <th style={{ textAlign: 'right' }}>Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {selectedLrsData?.map((lr: any) => {
+                          const isLRIneligible = Boolean(lr.journey_id || lr.status !== 'active');
+                          return (
+                            <tr key={lr._id} style={{ backgroundColor: isLRIneligible ? 'rgba(239, 68, 68, 0.05)' : undefined }}>
+                              <td>
+                                <div style={{ fontWeight: 700, color: 'var(--color-primary-600)' }}>{lr.lr_no}</div>
+                                <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
+                                  {new Date(lr.lr_date).toLocaleDateString()}
+                                </div>
+                                {isLRIneligible && (
+                                  <span className="badge badge-danger" style={{ fontSize: '0.625rem', marginTop: '0.25rem' }}>
+                                    {lr.journey_id ? 'Already Assigned' : lr.status === 'invoiced' ? 'Invoiced' : 'Cancelled'}
+                                  </span>
+                                )}
+                              </td>
+                            <td>
+                              <div style={{ fontSize: 'var(--font-size-xs)', fontWeight: 600 }}>
+                                From: {lr.consignor?.name || '—'}
+                              </div>
+                              <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
+                                To: {lr.consignee?.name || '—'}
+                              </div>
+                            </td>
+                            <td>
+                              <div style={{ fontSize: 'var(--font-size-xs)' }}>
+                                {lr.package_count} {lr.packaging_type} • {lr.goods_description}
+                              </div>
+                            </td>
+                            <td>
+                              <div style={{ fontSize: 'var(--font-size-xs)', fontWeight: 600 }}>
+                                {lr.actual_weight_tonnes || 0} Tonnes
+                              </div>
+                              <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
+                                {lr.cbm_volume ? `${lr.cbm_volume} CBM` : ''}
+                              </div>
+                            </td>
+                            <td>
+                              <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
+                                ₹{Number(lr.freight_amount || 0).toLocaleString('en-IN')}
+                              </div>
+                              <span className="badge badge-primary" style={{ fontSize: '0.625rem' }}>
+                                {lr.freight_terms?.replace(/_/g, ' ')}
+                              </span>
+                            </td>
+                            <td style={{ textAlign: 'right' }}>
+                              <button
+                                type="button"
+                                className="btn btn-secondary btn-sm"
+                                onClick={() => handleRemoveLr(lr._id)}
+                                title="Remove LR from this journey"
+                                style={{ color: 'var(--color-danger)' }}
+                              >
+                                <Trash2 size={13} /> Remove
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div style={{ padding: '0.625rem 1rem', backgroundColor: 'var(--color-slate-50)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border-light)' }}>
+                    <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
+                      Total {selectedLrsData?.length} LR(s) attached. Cargo, route, and weight are prefilled from these consignments.
+                    </span>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => navigate('/bill-entry/all')}
+                    >
+                      + Add More LRs
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Internal Movement Notice Banner */}
+          {journeyType !== 'commercial' && (
+            <div
+              style={{
+                backgroundColor: 'var(--color-slate-50)',
+                border: '1px solid var(--border-color)',
+                borderRadius: 'var(--radius-md)',
+                padding: '1rem',
+                marginBottom: '1.25rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.75rem',
+              }}
             >
-              <option value="">-- Optional: Link Shippers / Consignor --</option>
-              {partiesData?.parties?.map((p: any) => (
-                <option key={p._id} value={p._id}>
-                  {p.name} {p.gstin ? `(GSTIN: ${p.gstin})` : ''}
-                </option>
-              ))}
-            </select>
-          </div>
+              <Info size={20} color="var(--color-primary-600)" style={{ flexShrink: 0 }} />
+              <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-secondary)' }}>
+                <strong>{journeyType === 'internal_repositioning' ? 'Internal Fleet Repositioning' : 'Maintenance Transit'}:</strong>{' '}
+                This movement is for internal operational purposes only. No customer Billing Party or consignments will be billed. To create a journey for a customer, switch to <strong>Commercial Customer Journey</strong> and select Lorry Receipts.
+              </div>
+            </div>
+          )}
+
+          {/* Customer / Billing Party */}
+          {journeyType === 'commercial' ? (
+            <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.375rem' }}>
+                <label className="form-label" style={{ marginBottom: 0 }}>
+                  Customer / Shipper Billing Party <span style={{ color: 'var(--color-danger)' }}>*</span>
+                </label>
+                {selectedLrIds.length > 0 && (
+                  <span className="badge badge-info" style={{ fontSize: '0.6875rem' }}>
+                    Derived from Attached LRs
+                  </span>
+                )}
+              </div>
+              <select
+                className="form-control"
+                value={formData.billing_party_id}
+                onChange={(e) => setFormData({ ...formData, billing_party_id: e.target.value })}
+                required
+              >
+                <option value="">-- Choose Customer Billing Party --</option>
+                {partiesData?.parties?.map((p: any) => (
+                  <option key={p._id} value={p._id}>
+                    {p.name} {p.gstin ? `(GSTIN: ${p.gstin})` : ''}
+                  </option>
+                ))}
+              </select>
+              <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                Commercial customer responsible for payment. Must match the customer associated with attached LRs.
+              </div>
+            </div>
+          ) : (
+            <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+              <label className="form-label" style={{ color: 'var(--text-muted)' }}>Customer Billing Party</label>
+              <input
+                type="text"
+                className="form-control"
+                disabled
+                value="N/A — Non-Commercial Internal Dispatch"
+                style={{ backgroundColor: 'var(--bg-disabled)', color: 'var(--text-muted)' }}
+              />
+            </div>
+          )}
 
           {/* Origin Details */}
           <div className="grid grid-cols-1 md:grid-cols-3" style={{ gap: '1rem', marginBottom: '1.25rem' }}>
@@ -670,7 +1098,8 @@ export const NewJourneyPage: React.FC = () => {
           <button
             type="submit"
             className="btn btn-secondary"
-            disabled={createMutation.isPending}
+            disabled={createMutation.isPending || (journeyType === 'commercial' && selectedLrIds.length === 0)}
+            title={journeyType === 'commercial' && selectedLrIds.length === 0 ? 'Commercial journeys require at least one eligible Lorry Receipt' : undefined}
             style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
           >
             <Save size={16} /> Save as Draft Plan
@@ -680,7 +1109,8 @@ export const NewJourneyPage: React.FC = () => {
             type="button"
             className="btn btn-primary"
             onClick={(e) => handleSubmit(e, true)}
-            disabled={createMutation.isPending || isTruckBusy || isTruckExpired}
+            disabled={createMutation.isPending || isTruckBusy || isTruckExpired || (journeyType === 'commercial' && selectedLrIds.length === 0)}
+            title={journeyType === 'commercial' && selectedLrIds.length === 0 ? 'Commercial journeys require at least one eligible Lorry Receipt' : undefined}
             style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
           >
             <Send size={16} />

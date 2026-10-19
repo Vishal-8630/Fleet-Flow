@@ -1428,17 +1428,29 @@
   body * {
     visibility: hidden;
   }
-  .tax-invoice-container, .tax-invoice-container * {
+  .tax-invoice-container, .tax-invoice-container *,
+  .lr-print-container, .lr-print-container * {
     visibility: visible;
   }
-  .tax-invoice-container {
+  .tax-invoice-container,
+  .lr-print-container {
     position: absolute;
     left: 0;
     top: 0;
     width: 100%;
+    margin: 0;
+    padding: 0;
+    border: none;
+    box-shadow: none;
+    background: #ffffff;
   }
-  .modal-close-btn, .btn-print-hide {
+  .modal-close-btn, .btn-print-hide, .modal-backdrop, .modal-header, .modal-footer {
     display: none !important;
   }
+  .lr-part-section {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
 }
+
 

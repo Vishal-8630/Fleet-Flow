@@ -24,7 +24,8 @@
 
 import { Request, Response } from 'express';
 import { Types } from 'mongoose';
-import { TruckJourney, JourneyStatus } from '../models/TruckJourney.js';
+import { TruckJourney, JourneyStatus, JourneyType } from '../models/TruckJourney.js';
+import { Entry } from '../models/Entry.js';
 import { Truck } from '../models/Truck.js';
 import { Driver } from '../models/Driver.js';
 import { Company } from '../models/Company.js';
@@ -99,6 +100,7 @@ export const getJourneys = async (req: Request, res: Response) => {
         .populate('driver_id', 'name phone license_number status')
         .populate('billing_party_id', 'name trade_name gstin billing_address')
         .populate('branch_id', 'branch_name branch_code is_head_office')
+        .populate('lr_ids', 'lr_no bill_no actual_weight_tonnes goods_description from_location to_location status')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit),
@@ -195,6 +197,7 @@ export const getJourneyById = async (req: Request, res: Response) => {
       .populate('truck_id')
       .populate('driver_id')
       .populate('billing_party_id')
+      .populate('lr_ids')
       .populate('branch_id', 'branch_name branch_code is_head_office')
       .populate('status_history.actor_id', 'name email role');
 
@@ -218,10 +221,12 @@ export const getJourneyById = async (req: Request, res: Response) => {
 export const createJourney = async (req: Request, res: Response) => {
   try {
     const companyId = req.tenant?.id;
-    const {
+    let {
       truck_id,
       driver_id,
       billing_party_id,
+      lr_ids = [],
+      journey_type,
       from_location,
       to_location,
       route_checkpoints,
@@ -242,14 +247,158 @@ export const createJourney = async (req: Request, res: Response) => {
       });
     }
 
-    // 1. Validate Deep Tenant Foreign Key Ownership (Anti-IDOR)
+    if (lr_ids && !Array.isArray(lr_ids)) {
+      return res.status(400).json({
+        code: 'INVALID_LR_IDS',
+        error: 'lr_ids must be an array of Lorry Receipt IDs.',
+      });
+    }
+
+    const hasLrIds = Array.isArray(lr_ids) && lr_ids.length > 0;
+
+    // 1. Resolve Omitted journey_type (Sensible Backward-Compatible Inference)
+    if (!journey_type) {
+      if (billing_party_id || hasLrIds) {
+        journey_type = 'commercial';
+      } else {
+        journey_type = 'internal_repositioning';
+      }
+    }
+
+    // 2. Validate journey_type Enum
+    const VALID_JOURNEY_TYPES = ['commercial', 'internal_repositioning', 'maintenance'];
+    if (!VALID_JOURNEY_TYPES.includes(journey_type)) {
+      return res.status(400).json({
+        code: 'INVALID_JOURNEY_TYPE',
+        error: `Invalid journey_type: '${journey_type}'. Allowed types: ${VALID_JOURNEY_TYPES.join(', ')}.`,
+      });
+    }
+
+    // 3. Reject Incompatible Internal / Non-Commercial Moves
+    if (journey_type === 'internal_repositioning' || journey_type === 'maintenance') {
+      if (billing_party_id) {
+        return res.status(400).json({
+          code: 'INTERNAL_JOURNEY_CANNOT_HAVE_BILLING_PARTY',
+          error: `An internal ${journey_type} journey cannot be assigned to a Customer Billing Party.`,
+        });
+      }
+      if (hasLrIds) {
+        return res.status(400).json({
+          code: 'INTERNAL_JOURNEY_CANNOT_HAVE_LRS',
+          error: `An internal ${journey_type} journey cannot carry commercial Lorry Receipts.`,
+        });
+      }
+    }
+
+    // 4. Enforce Mandatory-LR Rule for Commercial Journeys
+    let validatedEntries: any[] = [];
+    if (journey_type === 'commercial') {
+      if (!hasLrIds) {
+        return res.status(400).json({
+          code: billing_party_id ? 'LR_REQUIRED_FOR_BILLING_PARTY_JOURNEY' : 'COMMERCIAL_JOURNEY_REQUIRES_LRS',
+          error: billing_party_id
+            ? 'An LR is compulsory for every Billing Party journey. A Billing Party journey must be created from one or more eligible LRs.'
+            : 'A commercial cargo journey requires one or more eligible Lorry Receipts.',
+        });
+      }
+
+      for (const lrId of lr_ids) {
+        if (!Types.ObjectId.isValid(lrId)) {
+          return res.status(400).json({
+            code: 'INVALID_LR_ID',
+            error: `Invalid Lorry Receipt ID format: '${lrId}'.`,
+          });
+        }
+      }
+
+      validatedEntries = await Entry.find({
+        _id: { $in: lr_ids },
+        company_id: companyId,
+        is_deleted: false,
+      });
+
+      if (validatedEntries.length !== lr_ids.length) {
+        return res.status(404).json({
+          code: 'LR_NOT_FOUND',
+          error: 'One or more selected Lorry Receipts were not found in your workspace.',
+        });
+      }
+
+      for (const entry of validatedEntries) {
+        if (entry.status === 'invoiced') {
+          return res.status(400).json({
+            code: 'INVOICED_LR_INELIGIBLE',
+            error: `Lorry Receipt '${entry.lr_no}' is already invoiced and cannot be assigned to a new journey.`,
+          });
+        }
+        if (entry.status === 'cancelled') {
+          return res.status(400).json({
+            code: 'CANCELLED_LR_INELIGIBLE',
+            error: `Lorry Receipt '${entry.lr_no}' is cancelled and cannot be assigned to a new journey.`,
+          });
+        }
+        if (entry.journey_id) {
+          return res.status(409).json({
+            code: 'LR_ALREADY_ASSIGNED',
+            error: `Conflict: Lorry Receipt '${entry.lr_no}' is already assigned to journey '${entry.journey_id}'.`,
+          });
+        }
+      }
+
+      // Mandatory Commercial Customer Derivation & Consistency Validation
+      if (!billing_party_id) {
+        const firstCustomer = validatedEntries[0].billing_party_id;
+        if (!firstCustomer) {
+          return res.status(400).json({
+            code: 'CUSTOMER_REQUIRED_FOR_COMMERCIAL_JOURNEY',
+            error: `Lorry Receipt '${validatedEntries[0].lr_no}' does not have an assigned Billing Party. Commercial journeys require consignments with an identified billing customer.`,
+          });
+        }
+
+        const hasInconsistentCustomer = validatedEntries.some(
+          (e) => !e.billing_party_id || String(e.billing_party_id) !== String(firstCustomer)
+        );
+        if (hasInconsistentCustomer) {
+          return res.status(400).json({
+            code: 'CUSTOMER_MISMATCH',
+            error: 'Selected Lorry Receipts belong to multiple different Billing Parties or contain unassigned consignments. A commercial journey must carry consignments for exactly one consistent billing customer.',
+          });
+        }
+
+        billing_party_id = firstCustomer;
+      } else {
+        for (const entry of validatedEntries) {
+          if (!entry.billing_party_id || String(entry.billing_party_id) !== String(billing_party_id)) {
+            return res.status(400).json({
+              code: 'CUSTOMER_MISMATCH',
+              error: `Lorry Receipt '${entry.lr_no}' does not belong to the selected Billing Party.`,
+            });
+          }
+        }
+      }
+
+      // Check LR branch consistency if LRs specify branches
+      const lrBranchIds = validatedEntries.map((e) => e.branch_id).filter(Boolean);
+      if (lrBranchIds.length > 1) {
+        const firstBranch = String(lrBranchIds[0]);
+        const hasBranchMismatch = lrBranchIds.some((b) => String(b) !== firstBranch);
+        if (hasBranchMismatch) {
+          return res.status(400).json({
+            code: 'BRANCH_MISMATCH',
+            error: 'Selected Lorry Receipts originate from different regional branches. A journey cannot combine consignments from different branches.',
+          });
+        }
+      }
+    }
+
+    // 5. Validate Deep Tenant Foreign Key Ownership (Anti-IDOR)
     await validateTenantOwnership(companyId!, {
       truck_id,
       driver_id,
-      billing_party_id: req.body.billing_party_id,
+      billing_party_id,
     });
 
-    // 2. Fetch Truck & Driver
+    // 6. Fetch Truck, Driver & Company
     const [truck, driver, company] = await Promise.all([
       Truck.findById(truck_id),
       Driver.findById(driver_id),
@@ -263,7 +412,7 @@ export const createJourney = async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Selected driver not found or inactive.' });
     }
 
-    // 3. RESOURCE CONFLICT CHECK: Verify Truck is not on an active journey
+    // 7. RESOURCE CONFLICT CHECK: Verify Truck is not on an active journey
     const activeTruckJourney = await TruckJourney.findOne({
       truck_id,
       status: { $in: ['active', 'delayed'] },
@@ -275,7 +424,7 @@ export const createJourney = async (req: Request, res: Response) => {
       });
     }
 
-    // 4. RESOURCE CONFLICT CHECK: Verify Driver is not on an active journey
+    // 8. RESOURCE CONFLICT CHECK: Verify Driver is not on an active journey
     const activeDriverJourney = await TruckJourney.findOne({
       driver_id,
       status: { $in: ['active', 'delayed'] },
@@ -289,7 +438,7 @@ export const createJourney = async (req: Request, res: Response) => {
 
     let overrideAuditParams: any = null;
 
-    // 5. Check compliance if immediately dispatching
+    // 9. Check compliance if immediately dispatching
     if (status === 'active') {
       const compliance = truck.calculateComplianceStatus();
       if (compliance === 'EXPIRED') {
@@ -357,15 +506,47 @@ export const createJourney = async (req: Request, res: Response) => {
       }
     }
 
-    // 6. Validate or Auto-Resolve Operational Regional Branch (DEC-010)
+    // 10. Auto-aggregate payload from LRs if not explicitly provided
+    let calculatedWeight = loaded_weight_tonnes;
+    let calculatedCbm = cbm_volume;
+    let calculatedCargo = cargo_description;
+
+    if (validatedEntries.length > 0) {
+      if (calculatedWeight === undefined || calculatedWeight === null) {
+        calculatedWeight = validatedEntries.reduce((acc, e) => acc + (e.actual_weight_tonnes || 0), 0);
+      }
+      if (calculatedCbm === undefined || calculatedCbm === null) {
+        calculatedCbm = validatedEntries.reduce((acc, e) => acc + (e.cbm_volume || 0), 0);
+      }
+      if (!calculatedCargo) {
+        calculatedCargo = validatedEntries.map((e) => e.goods_description).filter(Boolean).join(', ');
+      }
+    }
+
+    // 11. Validate or Auto-Resolve Operational Regional Branch (DEC-010)
     let branch: any = null;
-    if (req.body.branch_id) {
-      branch = await Branch.findOne({ _id: req.body.branch_id, company_id: companyId });
+    const branchIdToResolve =
+      req.body.branch_id ||
+      (validatedEntries.length > 0 && validatedEntries[0].branch_id ? validatedEntries[0].branch_id : undefined);
+
+    if (branchIdToResolve) {
+      branch = await Branch.findOne({ _id: branchIdToResolve, company_id: companyId });
       if (!branch) {
         return res.status(404).json({ error: 'Selected regional branch not found in your workspace.' });
       }
       if (!branch.is_active) {
         return res.status(400).json({ error: 'Cannot dispatch trip for an inactive regional branch.' });
+      }
+      if (req.body.branch_id && validatedEntries.length > 0) {
+        const hasLrBranchMismatch = validatedEntries.some(
+          (e) => e.branch_id && String(e.branch_id) !== String(branch._id)
+        );
+        if (hasLrBranchMismatch) {
+          return res.status(400).json({
+            code: 'BRANCH_MISMATCH',
+            error: 'Selected Lorry Receipts originate from a branch different from the journey branch.',
+          });
+        }
       }
     } else {
       const activeBranches = await Branch.find({ company_id: companyId, is_active: true });
@@ -394,90 +575,136 @@ export const createJourney = async (req: Request, res: Response) => {
       }
     }
 
-    // 7. Concurrency-Safe Atomic Sequential Journey Number
-    const updatedCompany = await Company.findByIdAndUpdate(
-      companyId,
-      { $inc: { 'counters.journey_seq': 1 } },
-      { new: true, upsert: false }
-    );
-    const seq = updatedCompany?.counters?.journey_seq || (await TruckJourney.countDocuments({ company_id: companyId })) + 1;
-    const journey_number = `JRN-${String(seq).padStart(4, '0')}`;
-
-    // 8. Use current truck odometer if start_odometer_kms not supplied
     const initialOdometer =
       typeof start_odometer_kms === 'number' ? start_odometer_kms : truck.current_odometer_kms || 0;
 
-    const journey = new TruckJourney({
-      company_id: companyId,
-      branch_id: branch?._id || undefined,
-      journey_number,
-      status,
-      status_history: [
-        {
-          status,
-          timestamp: new Date(),
-          note: `Journey initialized in ${status.toUpperCase()} state.`,
-          actor_id: req.user?.id,
-        },
-      ],
-      truck_id,
-      driver_id,
-      billing_party_id: billing_party_id || undefined,
-      from_location,
-      to_location,
-      route_checkpoints: route_checkpoints || [],
-      start_date: start_date ? new Date(start_date) : new Date(),
-      estimated_duration_days: estimated_duration_days || 2,
-      start_odometer_kms: initialOdometer,
-      loaded_weight_tonnes: loaded_weight_tonnes || 0,
-      cbm_volume: cbm_volume || 0,
-      cargo_description: cargo_description || '',
-      freight_rate: freight_rate || 0,
-      starting_cash_advance: starting_cash_advance || 0,
-      last_known_location: `${from_location.city} (Origin)`,
-      last_location_updated_at: new Date(),
-    });
+    // 12. Execute Journey Creation, LR Linking & Resource Update Atomically
+    const result = await runInTransaction(async (session) => {
+      const updatedCompany = await Company.findByIdAndUpdate(
+        companyId,
+        { $inc: { 'counters.journey_seq': 1 } },
+        { new: true, upsert: false, session }
+      );
+      const seq =
+        updatedCompany?.counters?.journey_seq ||
+        (await TruckJourney.countDocuments({ company_id: companyId }).session(session)) + 1;
+      const journey_number = `JRN-${String(seq).padStart(4, '0')}`;
 
-    await journey.save();
+      const journey = new TruckJourney({
+        company_id: companyId,
+        branch_id: branch?._id || undefined,
+        journey_number,
+        journey_type,
+        lr_ids: hasLrIds ? lr_ids : [],
+        status,
+        status_history: [
+          {
+            status,
+            timestamp: new Date(),
+            note: `Journey initialized in ${status.toUpperCase()} state.`,
+            actor_id: req.user?.id,
+          },
+        ],
+        truck_id,
+        driver_id,
+        billing_party_id: billing_party_id || undefined,
+        from_location,
+        to_location,
+        route_checkpoints: route_checkpoints || [],
+        start_date: start_date ? new Date(start_date) : new Date(),
+        estimated_duration_days: estimated_duration_days || 2,
+        start_odometer_kms: initialOdometer,
+        loaded_weight_tonnes: calculatedWeight || 0,
+        cbm_volume: calculatedCbm || 0,
+        cargo_description: calculatedCargo || '',
+        freight_rate: freight_rate || 0,
+        starting_cash_advance: starting_cash_advance || 0,
+        last_known_location: `${from_location.city} (Origin)`,
+        last_location_updated_at: new Date(),
+      });
+
+      await journey.save({ session });
+
+      // Atomic LR linking with strict concurrency, eligibility, tenant, and branch gating
+      if (hasLrIds) {
+        const lrUpdateFilter: any = {
+          _id: { $in: lr_ids },
+          company_id: companyId,
+          is_deleted: false,
+          status: 'active',
+          journey_id: { $in: [null, undefined] },
+        };
+
+        if (branch?._id && validatedEntries.some((e) => e.branch_id)) {
+          lrUpdateFilter.$or = [
+            { branch_id: branch._id },
+            { branch_id: { $in: [null, undefined] } },
+          ];
+        }
+
+        const updateResult = await Entry.updateMany(
+          lrUpdateFilter,
+          { $set: { journey_id: journey._id } },
+          { session }
+        );
+
+        if (updateResult.matchedCount !== lr_ids.length) {
+          const err: any = new Error(
+            'Concurrency Conflict: One or more selected Lorry Receipts were already assigned, modified, or are ineligible.'
+          );
+          err.statusCode = 409;
+          err.code = 'LR_ALREADY_ASSIGNED';
+          throw err;
+        }
+      }
+
+      // If dispatched as active, update vehicle and driver status
+      if (status === 'active') {
+        truck.status = 'on_trip';
+        truck.current_driver_id = driver._id;
+        await truck.save({ session });
+      }
+
+      return journey;
+    });
 
     if (overrideAuditParams) {
       await logAuditEvent(overrideAuditParams);
     }
 
-    // 7. If dispatched as active, update vehicle and driver status
-    if (status === 'active') {
-      truck.status = 'on_trip';
-      truck.current_driver_id = driver._id;
-      await truck.save();
-
-      if (company) {
-        notifyTripDispatched(journey, driver, company).catch((err) =>
-          console.error('[Notification Trigger Error - Dispatch]:', err)
-        );
-      }
+    if (status === 'active' && company) {
+      notifyTripDispatched(result, driver, company).catch((err) =>
+        console.error('[Notification Trigger Error - Dispatch]:', err)
+      );
     }
 
     logAuditEvent({
       company_id: companyId,
       entity_type: 'journey',
-      entity_id: journey._id,
-      entity_identifier: journey.journey_number,
+      entity_id: result._id,
+      entity_identifier: result.journey_number,
       action: 'CREATE',
-      description: `Journey ${journey.journey_number} created in ${status.toUpperCase()} state (${from_location.city} → ${to_location.city}).`,
+      description: `Journey ${result.journey_number} created in ${status.toUpperCase()} state (${from_location.city} → ${to_location.city}).`,
       req,
-      after_snapshot: { journey_number: journey.journey_number, status: journey.status },
+      after_snapshot: { journey_number: result.journey_number, status: result.status },
     });
 
     return res.status(201).json({
       message: 'Journey successfully scheduled.',
-      journey,
+      journey: result,
     });
   } catch (error: any) {
     if (error instanceof TenantOwnershipError) {
       return res.status(error.statusCode).json({ error: error.message, entityType: error.entityType });
     }
+    if (error instanceof ConfigurationError) {
+      return res.status(500).json({ error: error.message, code: 'CONFIGURATION_ERROR' });
+    }
     console.error('createJourney error:', error);
-    return res.status(500).json({ error: error.message || 'Failed to create journey.' });
+    return res.status(error.statusCode || 500).json({
+      error: error.message || 'Failed to create journey.',
+      code: error.code || undefined,
+    });
   }
 };
 
@@ -2048,6 +2275,20 @@ export const cancelJourney = async (req: Request, res: Response) => {
       });
 
       await journey.save({ session });
+
+      // Unlink attached LRs if present so they return to active unassigned dispatch pool
+      const lrUnlinkFilter: any = {
+        journey_id: journey._id,
+        company_id: journey.company_id,
+      };
+      if (Array.isArray(journey.lr_ids) && journey.lr_ids.length > 0) {
+        lrUnlinkFilter._id = { $in: journey.lr_ids };
+      }
+      await Entry.updateMany(
+        lrUnlinkFilter,
+        { $unset: { journey_id: 1 } },
+        { session }
+      );
 
       let truck: any = null;
       let driver: any = null;

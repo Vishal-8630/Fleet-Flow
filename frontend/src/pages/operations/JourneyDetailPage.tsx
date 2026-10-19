@@ -50,6 +50,8 @@ import {
   Wallet,
   Lock,
   Building2,
+  FileText,
+  Printer,
 } from 'lucide-react';
 
 export const JourneyDetailPage: React.FC = () => {
@@ -71,6 +73,25 @@ export const JourneyDetailPage: React.FC = () => {
   const [isCreditWarningOpen, setIsCreditWarningOpen] = useState(false);
   const [creditExposureData, setCreditExposureData] = useState<CreditExposureData | null>(null);
   const [creditErrorMessage, setCreditErrorMessage] = useState('');
+
+  // Printable LR Stationary State
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const [selectedLrForPrint, setSelectedLrForPrint] = useState<any | null>(null);
+
+  const handlePrintLR = async (lrId: string, fallbackLr?: any) => {
+    try {
+      const res = await api.get(`/commercial/entries/${lrId}/printable`);
+      setSelectedLrForPrint(res.data);
+      setIsPrintModalOpen(true);
+    } catch (err: any) {
+      if (fallbackLr) {
+        setSelectedLrForPrint({ lr: fallbackLr, company: null });
+        setIsPrintModalOpen(true);
+      } else {
+        toast.error(err.message || 'Failed to load printable LR.');
+      }
+    }
+  };
 
   // Modal Form States
   const [milestoneForm, setMilestoneForm] = useState({ location: '', notes: '' });
@@ -119,6 +140,19 @@ export const JourneyDetailPage: React.FC = () => {
   const isJourneyActive = journey?.status === 'active' || journey?.status === 'delayed';
   const isJourneyClosed = journey?.status === 'completed' || journey?.status === 'cancelled' || !!journey?.is_settled;
   const canLogEnRoute = canEdit && isJourneyActive && !journey?.is_settled;
+
+  // Attached Consignments: Prefer populated journey.lr_ids, with fallback to entries by journey_id
+  const attachedLrs: any[] = Array.isArray(journey?.lr_ids) ? journey.lr_ids : [];
+  const { data: fallbackEntriesData } = useQuery({
+    queryKey: ['journey-fallback-lrs', id],
+    queryFn: async () => {
+      const res = await api.get('/commercial/entries', { params: { journey_id: id, limit: 100 } });
+      return res.data?.entries || [];
+    },
+    enabled: !!id && attachedLrs.length === 0,
+  });
+
+  const displayLrs: any[] = attachedLrs.length > 0 ? attachedLrs : (fallbackEntriesData || []);
 
   // 1.5 Fetch Balance Parties for Credit Pump Vendor Selection
   const { data: balancePartiesData } = useQuery({
@@ -619,7 +653,8 @@ export const JourneyDetailPage: React.FC = () => {
 
       {/* TAB 1: OVERVIEW & RESOURCES */}
       {activeTab === 'overview' && (
-        <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: '1.5rem' }}>
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: '1.5rem' }}>
           {/* Allocated Commercial Assets Card */}
           <div className="card">
             <div className="card-header">
@@ -825,6 +860,195 @@ export const JourneyDetailPage: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {/* Attached Consignments (Lorry Receipts) Card */}
+        <div className="card" style={{ marginTop: '1.5rem' }}>
+          <div className="card-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
+            <div>
+              <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <FileText size={18} color="var(--color-primary-600)" />
+                Attached Consignments (Lorry Receipts)
+              </h3>
+              <p style={{ margin: '0.25rem 0 0 0', fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
+                Consignments and cargo manifests dispatched on this fleet journey.
+              </p>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <span className="badge badge-primary" style={{ fontSize: '0.75rem' }}>
+                {displayLrs.length} Consignment{displayLrs.length !== 1 ? 's' : ''}
+              </span>
+              <span className="badge badge-info" style={{ fontSize: '0.75rem' }}>
+                Transit: {(journey.delivery_status || 'pending').toUpperCase()}
+              </span>
+            </div>
+          </div>
+
+          <div className="card-body">
+            {displayLrs.length === 0 ? (
+              <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)', backgroundColor: 'var(--color-slate-50)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)' }}>
+                <Package size={32} color="var(--color-slate-400)" style={{ margin: '0 auto 0.5rem auto' }} />
+                <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 'var(--font-size-sm)' }}>
+                  {journey.journey_type === 'internal_repositioning'
+                    ? 'Internal Repositioning Movement — No Consignments'
+                    : journey.journey_type === 'maintenance'
+                    ? 'Maintenance Transit Movement — No Consignments'
+                    : 'No Commercial Consignments Attached'}
+                </div>
+                <p style={{ fontSize: 'var(--font-size-xs)', margin: '0.25rem 0 0 0' }}>
+                  {journey.journey_type === 'internal_repositioning' || journey.journey_type === 'maintenance'
+                    ? 'This trip was dispatched for internal operations and carries no commercial customer freight.'
+                    : 'No Lorry Receipts are linked to this journey manifest.'}
+                </p>
+              </div>
+            ) : (
+              <>
+                {/* Aggregates strip */}
+                <div className="grid grid-cols-2 md:grid-cols-4" style={{ gap: '0.75rem', marginBottom: '1.25rem' }}>
+                  <div className="metric-tile">
+                    <div className="metric-tile-label">Total Consignments</div>
+                    <div className="metric-tile-value">{displayLrs.length}</div>
+                  </div>
+                  <div className="metric-tile">
+                    <div className="metric-tile-label">Total Loaded Weight</div>
+                    <div className="metric-tile-value">
+                      {displayLrs.reduce((acc: number, l: any) => acc + (Number(l.actual_weight_tonnes) || 0), 0).toFixed(2)} <span style={{ fontSize: 'var(--font-size-xs)', fontWeight: 'normal' }}>Tonnes</span>
+                    </div>
+                  </div>
+                  <div className="metric-tile">
+                    <div className="metric-tile-label">Total Volume</div>
+                    <div className="metric-tile-value">
+                      {displayLrs.reduce((acc: number, l: any) => acc + (Number(l.cbm_volume) || 0), 0).toFixed(2)} <span style={{ fontSize: 'var(--font-size-xs)', fontWeight: 'normal' }}>CBM</span>
+                    </div>
+                  </div>
+                  <div className="metric-tile" style={{ backgroundColor: 'var(--color-emerald-50)', borderColor: 'var(--color-emerald-200)' }}>
+                    <div className="metric-tile-label" style={{ color: 'var(--color-emerald-700)' }}>Total Freight Value</div>
+                    <div className="metric-tile-value" style={{ color: 'var(--color-emerald-700)' }}>
+                      ₹{displayLrs.reduce((acc: number, l: any) => acc + (Number(l.freight_amount) || 0), 0).toLocaleString('en-IN')}
+                    </div>
+                  </div>
+                </div>
+
+                {/* LRs Table */}
+                <div className="table-responsive" style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)' }}>
+                  <table className="table" style={{ margin: 0 }}>
+                    <thead style={{ backgroundColor: 'var(--color-slate-50)' }}>
+                      <tr>
+                        <th>LR Details</th>
+                        <th>Corridor</th>
+                        <th>Parties (Consignor → Consignee)</th>
+                        <th>Cargo Specs</th>
+                        <th>Weight / Volume</th>
+                        <th>Freight Amount</th>
+                        <th>Invoicing Status</th>
+                        <th style={{ textAlign: 'right' }}>Stationary</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {displayLrs.map((lr: any) => (
+                        <tr key={lr._id}>
+                          <td>
+                            <div style={{ fontWeight: 700, color: 'var(--color-primary-600)' }}>
+                              {lr.lr_no}
+                            </div>
+                            <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
+                              {new Date(lr.lr_date).toLocaleDateString()}
+                            </div>
+                          </td>
+                          <td>
+                            <div style={{ fontSize: 'var(--font-size-xs)', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                              <span>{lr.from_location}</span>
+                              <ArrowRight size={10} color="var(--text-muted)" />
+                              <span>{lr.to_location}</span>
+                            </div>
+                          </td>
+                          <td>
+                            <div style={{ fontSize: 'var(--font-size-xs)', fontWeight: 600 }}>
+                              From: {lr.consignor?.name || '—'}
+                            </div>
+                            <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
+                              To: {lr.consignee?.name || '—'}
+                            </div>
+                          </td>
+                          <td>
+                            <div style={{ fontSize: 'var(--font-size-xs)' }}>
+                              {lr.package_count} {lr.packaging_type} • {lr.goods_description}
+                            </div>
+                          </td>
+                          <td>
+                            <div style={{ fontSize: 'var(--font-size-xs)', fontWeight: 600 }}>
+                              {lr.actual_weight_tonnes || 0} T
+                            </div>
+                            <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
+                              {lr.cbm_volume ? `${lr.cbm_volume} CBM` : ''}
+                            </div>
+                          </td>
+                          <td>
+                            <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
+                              ₹{Number(lr.freight_amount || 0).toLocaleString('en-IN')}
+                            </div>
+                            <span className="badge badge-primary" style={{ fontSize: '0.625rem' }}>
+                              {lr.freight_terms?.replace(/_/g, ' ')}
+                            </span>
+                          </td>
+                          <td>
+                            {/* Distinct LR Invoicing Status (Decoupled from Journey Delivery Status) */}
+                            <span
+                              className={`badge ${
+                                lr.status === 'invoiced'
+                                  ? 'badge-success'
+                                  : lr.status === 'active'
+                                  ? 'badge-primary'
+                                  : 'badge-danger'
+                              }`}
+                              title="LR Invoicing Status is decoupled from trip delivery progression"
+                            >
+                              {lr.status === 'invoiced' ? 'Invoiced' : lr.status === 'active' ? 'Active (Unbilled)' : lr.status}
+                            </span>
+                          </td>
+                          <td style={{ textAlign: 'right' }}>
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-sm"
+                              onClick={() => handlePrintLR(lr._id, lr)}
+                              title="Print 3-Part LR Consignment Note"
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}
+                            >
+                              <Printer size={13} />
+                              <span>Stationary</span>
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Operational & Financial Decoupling Note */}
+                <div
+                  style={{
+                    marginTop: '1rem',
+                    padding: '0.875rem 1rem',
+                    backgroundColor: 'var(--color-slate-50)',
+                    border: '1px solid var(--border-light)',
+                    borderRadius: 'var(--radius-md)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.75rem',
+                    fontSize: 'var(--font-size-xs)',
+                    color: 'var(--text-muted)',
+                  }}
+                >
+                  <ShieldCheck size={18} color="var(--color-primary-600)" style={{ flexShrink: 0 }} />
+                  <div>
+                    <strong>Decoupled Invoicing & Ledger Integrity:</strong> Journey delivery status ({journey.delivery_status || 'pending'}) tracks transport progression and does not trigger automatic customer invoicing or ledger postings. Invoicing for linked consignments is processed independently via <strong>Freight Invoices</strong> during accounting billing runs.
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+        </>
       )}
 
       {/* TAB 2: MILESTONES & DELAYS */}
@@ -2033,6 +2257,150 @@ export const JourneyDetailPage: React.FC = () => {
         }}
         isSubmitting={dispatchMutation.isPending}
       />
+
+      {/* 3-PART LORRY RECEIPT PRINTABLE STATIONARY MODAL */}
+      <Modal
+        isOpen={isPrintModalOpen}
+        onClose={() => setIsPrintModalOpen(false)}
+        title={`Official Consignment Note — ${selectedLrForPrint?.lr?.lr_no || 'Lorry Receipt'}`}
+        size="lg"
+        footer={
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', width: '100%' }}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => setIsPrintModalOpen(false)}
+            >
+              Close
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => window.print()}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
+            >
+              <Printer size={16} />
+              <span>Print Stationary</span>
+            </button>
+          </div>
+        }
+      >
+        {selectedLrForPrint && (
+          <div className="lr-print-container">
+            {['CONSIGNOR COPY', 'CONSIGNEE COPY', 'TRANSPORTER COPY'].map((partName, idx) => (
+              <React.Fragment key={partName}>
+                {idx > 0 && <div className="lr-tear-line" />}
+                <div className="lr-part-section">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div>
+                      <span className="lr-part-header-tag">{partName}</span>
+                      <h3 style={{ margin: 0, color: '#0f172a', fontWeight: 800 }}>{selectedLrForPrint.company?.name}</h3>
+                      <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                        GSTIN: {selectedLrForPrint.company?.gstin || 'N/A'} • Phone: {selectedLrForPrint.company?.phone || 'N/A'}
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0284c7' }}>
+                        LR NO: {selectedLrForPrint.lr?.lr_no}
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                        Date: {new Date(selectedLrForPrint.lr?.lr_date).toLocaleDateString()} • Bill #{' '}
+                        {selectedLrForPrint.lr?.bill_no}
+                      </div>
+                    </div>
+                  </div>
+
+                  <table className="lr-table-grid">
+                    <tbody>
+                      <tr>
+                        <td style={{ width: '50%' }}>
+                          <strong>CONSIGNOR:</strong>
+                          <br />
+                          {selectedLrForPrint.lr?.consignor?.name}
+                          <br />
+                          {selectedLrForPrint.lr?.consignor?.address}
+                          <br />
+                          GSTIN: {selectedLrForPrint.lr?.consignor?.gstin || 'Unregistered'}
+                        </td>
+                        <td style={{ width: '50%' }}>
+                          <strong>CONSIGNEE:</strong>
+                          <br />
+                          {selectedLrForPrint.lr?.consignee?.name}
+                          <br />
+                          {selectedLrForPrint.lr?.consignee?.address}
+                          <br />
+                          GSTIN: {selectedLrForPrint.lr?.consignee?.gstin || 'Unregistered'}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td>
+                          <strong>TRANSIT CORRIDOR:</strong>
+                          <br />
+                          From: {selectedLrForPrint.lr?.from_location}
+                          <br />
+                          To: {selectedLrForPrint.lr?.to_location}
+                        </td>
+                        <td>
+                          <strong>VEHICLE DETAILS:</strong>
+                          <br />
+                          Truck #: {selectedLrForPrint.lr?.vehicle_number}
+                          <br />
+                          Driver: {selectedLrForPrint.lr?.driver_name || 'Assigned Driver'}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+
+                  <table className="lr-table-grid">
+                    <thead>
+                      <tr>
+                        <th>Packages</th>
+                        <th>Description of Goods</th>
+                        <th>Actual Wt (T)</th>
+                        <th>Charged Wt (T)</th>
+                        <th>Rate / Tonne</th>
+                        <th>Freight Terms</th>
+                        <th>Total Freight</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td>
+                          {selectedLrForPrint.lr?.package_count} {selectedLrForPrint.lr?.packaging_type}
+                        </td>
+                        <td>{selectedLrForPrint.lr?.goods_description}</td>
+                        <td>{selectedLrForPrint.lr?.actual_weight_tonnes || '-'}</td>
+                        <td>{selectedLrForPrint.lr?.chargeable_weight_tonnes || '-'}</td>
+                        <td>₹{selectedLrForPrint.lr?.rate_per_tonne || '-'}</td>
+                        <td>
+                          <span style={{ textTransform: 'uppercase', fontWeight: 700 }}>
+                            {selectedLrForPrint.lr?.freight_terms?.replace(/_/g, ' ')}
+                          </span>
+                        </td>
+                        <td style={{ fontWeight: 800, fontSize: '0.95rem' }}>
+                          ₹{Number(selectedLrForPrint.lr?.freight_amount || 0).toLocaleString('en-IN')}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+
+                  {selectedLrForPrint.lr?.eway_bill_number && (
+                    <div style={{ fontSize: '0.75rem', color: '#475569', marginTop: '0.25rem' }}>
+                      <strong>E-Way Bill:</strong> {selectedLrForPrint.lr.eway_bill_number}
+                    </div>
+                  )}
+
+                  <div className="lr-sign-grid">
+                    <div className="lr-sign-box">Consignor Signature</div>
+                    <div className="lr-sign-box">Driver / Carrier Signature</div>
+                    <div className="lr-sign-box">Consignee Receiving Stamp</div>
+                  </div>
+                </div>
+              </React.Fragment>
+            ))}
+          </div>
+        )}
+      </Modal>
     </div>
   );
 };
