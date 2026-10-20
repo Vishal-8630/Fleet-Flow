@@ -45,6 +45,9 @@ function makeEntryData(companyId: any, overrides: any = {}) {
 describe('Batch 4: Portals, Tracking, Live Map & Abuse Defense (TEST-004)', () => {
   let tenantA: TestTenantContext;
   let tenantB: TestTenantContext;
+  let truckA: any;
+  let driverA: any;
+  let partyA: any;
 
   beforeEach(async () => {
     await Entry.init();
@@ -58,6 +61,31 @@ describe('Batch 4: Portals, Tracking, Live Map & Abuse Defense (TEST-004)', () =
   // 1. ISS-005: Public Tracking Privacy, Cryptographic Tokens & IDOR Defenses
   // ==========================================================================
   describe('1. ISS-005: Public Consignment Tracking & IDOR Elimination', () => {
+    beforeEach(async () => {
+      truckA = await Truck.create({
+        company_id: tenantA.company._id,
+        truck_no: 'GJ05-AA-1111',
+        make: 'Tata Motors',
+        model: 'Prima',
+        tonnage_capacity: 15,
+        status: 'available',
+      });
+      driverA = await Driver.create({
+        company_id: tenantA.company._id,
+        name: 'Ramesh Patel',
+        phone: '+919876543210',
+        license_number: 'GJ0520200001',
+        status: 'active',
+      });
+      partyA = await BillingParty.create({
+        company_id: tenantA.company._id,
+        name: 'Apex Consignments Ltd',
+        phone: '+919876543299',
+        status: 'active',
+        billing_address: { city: 'Surat', state: 'Gujarat' },
+      });
+    });
+
     it('rejects unverified raw sequential LR lookup with HTTP 400', async () => {
       const clientIp = nextIp();
       await Entry.create(makeEntryData(tenantA.company._id, { lr_no: 'LR-1001', bill_no: 'BILL-1001' }));
@@ -262,6 +290,9 @@ describe('Batch 4: Portals, Tracking, Live Map & Abuse Defense (TEST-004)', () =
         .set('Authorization', `Bearer ${tenantA.token}`)
         .send({
           lr_no: 'LR-COL-02',
+          billing_party_id: partyA._id,
+          truck_id: truckA._id,
+          driver_id: driverA._id,
           from_location: 'Surat',
           to_location: 'Delhi',
           vehicle_number: 'GJ05-AA-1111',
@@ -285,6 +316,9 @@ describe('Batch 4: Portals, Tracking, Live Map & Abuse Defense (TEST-004)', () =
         .set('Authorization', `Bearer ${tenantA.token}`)
         .send({
           lr_no: 'LR-EXISTING-01',
+          billing_party_id: partyA._id,
+          truck_id: truckA._id,
+          driver_id: driverA._id,
           from_location: 'Surat',
           to_location: 'Delhi',
           vehicle_number: 'GJ05-AA-1111',
@@ -310,6 +344,9 @@ describe('Batch 4: Portals, Tracking, Live Map & Abuse Defense (TEST-004)', () =
         .set('Authorization', `Bearer ${tenantA.token}`)
         .send({
           lr_no: 'LR-CONCURRENT-01',
+          billing_party_id: partyA._id,
+          truck_id: truckA._id,
+          driver_id: driverA._id,
           from_location: 'Mumbai',
           to_location: 'Kolkata',
           vehicle_number: 'MH12-AB-2222',

@@ -52,6 +52,8 @@ import {
   Building2,
   FileText,
   Printer,
+  Briefcase,
+  RotateCcw,
 } from 'lucide-react';
 
 export const JourneyDetailPage: React.FC = () => {
@@ -77,6 +79,45 @@ export const JourneyDetailPage: React.FC = () => {
   // Printable LR Stationary State
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [selectedLrForPrint, setSelectedLrForPrint] = useState<any | null>(null);
+
+  // Driver Handover State & Mutation
+  const [isSwapDriverModalOpen, setIsSwapDriverModalOpen] = useState(false);
+  const [swapDriverForm, setSwapDriverForm] = useState({
+    new_driver_id: '',
+    handover_odometer: '',
+    reason: '',
+  });
+
+  const { data: swapDriversData } = useQuery({
+    queryKey: ['active-drivers-swap'],
+    enabled: isSwapDriverModalOpen,
+    queryFn: async () => {
+      const res = await api.get('/fleet/drivers?limit=100');
+      return res.data?.drivers || [];
+    },
+  });
+
+  const swapDriverMutation = useMutation({
+    mutationFn: async (payload: any) => {
+      const res = await api.put(`/operations/journeys/${id}/swap-driver`, payload);
+      return res.data;
+    },
+    onSuccess: () => {
+      toast.success('Driver handover recorded successfully.');
+      queryClient.invalidateQueries({ queryKey: ['journey-detail', id] });
+      queryClient.invalidateQueries({ queryKey: ['journeys'] });
+      queryClient.invalidateQueries({ queryKey: ['journey-metrics'] });
+      queryClient.invalidateQueries({ queryKey: ['available-trucks'] });
+      queryClient.invalidateQueries({ queryKey: ['trucks'] });
+      queryClient.invalidateQueries({ queryKey: ['drivers'] });
+      queryClient.invalidateQueries({ queryKey: ['active-drivers'] });
+      setIsSwapDriverModalOpen(false);
+      setSwapDriverForm({ new_driver_id: '', handover_odometer: '', reason: '' });
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.error || err.message || 'Failed to record driver handover.');
+    },
+  });
 
   const handlePrintLR = async (lrId: string, fallbackLr?: any) => {
     try {
@@ -711,23 +752,116 @@ export const JourneyDetailPage: React.FC = () => {
                       {journey.driver_id?.name || 'Unassigned Driver'}
                     </span>
                     <span className="badge badge-success" style={{ fontSize: '0.6875rem' }}>Verified Pilot</span>
+                    {journey.driver_handover_history && journey.driver_handover_history.length > 0 && (
+                      <span className="badge badge-info" style={{ fontSize: '0.6875rem' }}>
+                        Relay Pilot ({journey.driver_handover_history.length} Handover{journey.driver_handover_history.length !== 1 ? 's' : ''})
+                      </span>
+                    )}
                   </div>
                   <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-secondary)', display: 'flex', gap: '0.875rem', flexWrap: 'wrap' }}>
                     <span><strong>Phone:</strong> {journey.driver_id?.phone || '—'}</span>
                     <span><strong>License:</strong> {journey.driver_id?.license_number || '—'}</span>
                   </div>
                 </div>
-                {journey.driver_id?._id && (
-                  <button
-                    type="button"
-                    className="btn btn-secondary btn-sm"
-                    onClick={() => navigate(`/fleet/drivers/${journey.driver_id?._id}`)}
-                    style={{ flexShrink: 0 }}
-                  >
-                    <ExternalLink size={13} /> Driver Dossier
-                  </button>
-                )}
+                <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
+                  {canEdit && (journey.status === 'active' || journey.status === 'delayed') && (
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => setIsSwapDriverModalOpen(true)}
+                      title="Execute en-route driver swap"
+                    >
+                      <User size={13} /> Swap Driver
+                    </button>
+                  )}
+                  {journey.driver_id?._id && (
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => navigate(`/fleet/drivers/${journey.driver_id?._id}`)}
+                    >
+                      <ExternalLink size={13} /> Dossier
+                    </button>
+                  )}
+                </div>
               </div>
+
+              {/* En-Route Pilot Handover History & Audit Trail */}
+              {journey.driver_handover_history && journey.driver_handover_history.length > 0 && (
+                <div
+                  style={{
+                    backgroundColor: 'var(--color-slate-50)',
+                    border: '1px solid var(--border-light)',
+                    borderRadius: 'var(--radius-md)',
+                    padding: '1rem',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <RotateCcw size={15} color="var(--color-primary-600)" />
+                      <span style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600, color: 'var(--text-main)' }}>
+                        En-Route Driver Handover Audit Trail ({journey.driver_handover_history.length} Handover{journey.driver_handover_history.length !== 1 ? 's' : ''})
+                      </span>
+                    </div>
+                    <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
+                      Original LR issuance details are preserved for audit and historical reference.
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
+                    {journey.driver_handover_history.map((handover: any, idx: number) => {
+                      const outgoingName = handover.outgoing_driver_id?.name || (typeof handover.outgoing_driver_id === 'string' ? `Driver (${handover.outgoing_driver_id.slice(-6)})` : 'Outgoing Driver');
+                      const incomingName = handover.incoming_driver_id?.name || (typeof handover.incoming_driver_id === 'string' ? `Driver (${handover.incoming_driver_id.slice(-6)})` : 'Incoming Driver');
+                      const outgoingPhone = handover.outgoing_driver_id?.phone;
+                      const incomingPhone = handover.incoming_driver_id?.phone;
+                      const authorizer = handover.authorized_by?.name || (typeof handover.authorized_by === 'string' ? handover.authorized_by : null);
+
+                      return (
+                        <div
+                          key={handover._id || idx}
+                          style={{
+                            backgroundColor: '#ffffff',
+                            border: '1px solid var(--border-color)',
+                            borderRadius: 'var(--radius-sm)',
+                            padding: '0.75rem',
+                            fontSize: 'var(--font-size-xs)',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.375rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                              <span style={{ fontWeight: 600, color: 'var(--color-slate-700)' }}>
+                                Handover #{idx + 1}
+                              </span>
+                              <span style={{ color: 'var(--text-muted)' }}>•</span>
+                              <span style={{ color: 'var(--color-slate-600)' }}>
+                                {outgoingName} {outgoingPhone ? `(${outgoingPhone})` : ''}
+                              </span>
+                              <ArrowRight size={12} color="var(--text-muted)" />
+                              <span style={{ fontWeight: 600, color: 'var(--color-emerald-700)' }}>
+                                {incomingName} {incomingPhone ? `(${incomingPhone})` : ''}
+                              </span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: 'var(--text-muted)' }}>
+                              <span>Odometer: <strong>{Number(handover.handover_odometer || 0).toLocaleString('en-IN')} KM</strong></span>
+                              <span>{handover.timestamp ? new Date(handover.timestamp).toLocaleString() : '—'}</span>
+                            </div>
+                          </div>
+                          <div style={{ color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
+                            <div>
+                              <strong>Reason:</strong> {handover.reason}
+                              {handover.notes ? ` — ${handover.notes}` : ''}
+                            </div>
+                            {authorizer && (
+                              <div style={{ color: 'var(--text-muted)' }}>
+                                Authorized by: {authorizer}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Regional Branch Attribution Tile (DEC-010) */}
               <div className="operational-asset-tile">
@@ -763,6 +897,100 @@ export const JourneyDetailPage: React.FC = () => {
                   </div>
                 </div>
               </div>
+
+              {/* Commercial Billing Party Attribution Tile */}
+              {journey.journey_type === 'commercial' && (
+                <div className="operational-asset-tile">
+                  <div className="asset-icon-box" style={{ backgroundColor: 'var(--color-primary-50)', border: '1px solid var(--color-primary-200)' }}>
+                    <Briefcase size={24} color="var(--color-primary-600)" />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    {(() => {
+                      // Collect distinct parties from displayLrs or journey.billing_party_id
+                      const distinctPartiesMap = new Map<string, { id: string; name: string; gstin?: string; lrCount: number }>();
+                      displayLrs.forEach((lr: any) => {
+                        const p = lr.billing_party_id;
+                        const pId = p?._id || (typeof p === 'string' ? p : null);
+                        if (pId) {
+                          const idStr = String(pId);
+                          const name = p?.name || lr.billing_party_name || `Party (${idStr.slice(-6)})`;
+                          const gstin = p?.gstin || '';
+                          const existing = distinctPartiesMap.get(idStr);
+                          if (existing) {
+                            existing.lrCount += 1;
+                          } else {
+                            distinctPartiesMap.set(idStr, { id: idStr, name, gstin, lrCount: 1 });
+                          }
+                        }
+                      });
+
+                      if (distinctPartiesMap.size === 0 && journey.billing_party_id) {
+                        const p = journey.billing_party_id;
+                        const pId = String(p._id || p);
+                        distinctPartiesMap.set(pId, { id: pId, name: p.name || 'Customer', gstin: p.gstin || '', lrCount: displayLrs.length });
+                      }
+
+                      const distinctParties = Array.from(distinctPartiesMap.values());
+                      const isMulti = distinctParties.length > 1;
+
+                      if (isMulti) {
+                        return (
+                          <>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', marginBottom: '0.375rem', flexWrap: 'wrap' }}>
+                              <span style={{ fontWeight: 'var(--font-weight-bold)', color: 'var(--text-main)', fontSize: 'var(--font-size-base)' }}>
+                                Multi-Billing-Party Manifest
+                              </span>
+                              <span className="badge badge-info" style={{ fontSize: '0.6875rem' }}>
+                                {distinctParties.length} Distinct Billing Parties
+                              </span>
+                            </div>
+                            <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
+                              Consolidated journey carries consignments for multiple registered customers. Invoices are generated individually per customer and LR.
+                            </div>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.375rem' }}>
+                              {distinctParties.map((p) => (
+                                <span
+                                  key={p.id}
+                                  className="badge badge-neutral"
+                                  style={{ fontSize: '0.6875rem', padding: '0.25rem 0.5rem' }}
+                                  title={p.gstin ? `GSTIN: ${p.gstin}` : undefined}
+                                >
+                                  <strong>{p.name}</strong> ({p.lrCount} LR{p.lrCount !== 1 ? 's' : ''})
+                                </span>
+                              ))}
+                            </div>
+                          </>
+                        );
+                      }
+
+                      if (distinctParties.length === 1) {
+                        const singleParty = distinctParties[0];
+                        return (
+                          <>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', marginBottom: '0.375rem', flexWrap: 'wrap' }}>
+                              <span style={{ fontWeight: 'var(--font-weight-bold)', color: 'var(--text-main)', fontSize: 'var(--font-size-base)' }}>
+                                {singleParty.name}
+                              </span>
+                              <span className="badge badge-primary" style={{ fontSize: '0.6875rem' }}>
+                                Commercial Customer
+                              </span>
+                            </div>
+                            <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-secondary)' }}>
+                              <span>{singleParty.gstin ? `GSTIN: ${singleParty.gstin}` : 'Registered Billing Party'} • {displayLrs.length} Consignment{displayLrs.length !== 1 ? 's' : ''} Attached</span>
+                            </div>
+                          </>
+                        );
+                      }
+
+                      return (
+                        <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
+                          No commercial billing parties derived.
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -935,6 +1163,7 @@ export const JourneyDetailPage: React.FC = () => {
                     <thead style={{ backgroundColor: 'var(--color-slate-50)' }}>
                       <tr>
                         <th>LR Details</th>
+                        <th>Billing Party</th>
                         <th>Corridor</th>
                         <th>Parties (Consignor → Consignee)</th>
                         <th>Cargo Specs</th>
@@ -954,6 +1183,45 @@ export const JourneyDetailPage: React.FC = () => {
                             <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
                               {new Date(lr.lr_date).toLocaleDateString()}
                             </div>
+                            {(lr.vehicle_number || lr.driver_name) && (
+                              <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                                <span title="Original LR Issuance Snapshot (preserved across driver handovers)">
+                                  Issued: {lr.vehicle_number || 'Rig'} • {lr.driver_name || 'Driver unassigned'}
+                                </span>
+                              </div>
+                            )}
+                            {journey.driver_id?.name && lr.driver_name && lr.driver_name !== journey.driver_id.name && (
+                              <div style={{ marginTop: '0.25rem' }}>
+                                <span
+                                  className="badge badge-warning"
+                                  style={{ fontSize: '0.625rem', padding: '0.15rem 0.45rem', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}
+                                  title={`En-route pilot changed via relay handover. Original LR issuance details are preserved for audit and historical reference.`}
+                                >
+                                  Relay Pilot En-Route: {journey.driver_id.name}
+                                </span>
+                              </div>
+                            )}
+                            {journey.truck_id?.truck_no && lr.vehicle_number && lr.vehicle_number !== journey.truck_id.truck_no && (
+                              <div style={{ marginTop: '0.25rem' }}>
+                                <span
+                                  className="badge badge-warning"
+                                  style={{ fontSize: '0.625rem', padding: '0.15rem 0.45rem', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}
+                                  title={`En-route vehicle changed. Original legal LR booking vehicle (${lr.vehicle_number}) permanently preserved.`}
+                                >
+                                  Relay Rig En-Route: {journey.truck_id.truck_no}
+                                </span>
+                              </div>
+                            )}
+                          </td>
+                          <td>
+                            <div style={{ fontSize: 'var(--font-size-xs)', fontWeight: 600, color: 'var(--text-main)' }}>
+                              {lr.billing_party_id?.name || lr.billing_party_name || (journey.billing_party_id?.name ? journey.billing_party_id.name : '—')}
+                            </div>
+                            {lr.billing_party_id?.gstin && (
+                              <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
+                                GSTIN: {lr.billing_party_id.gstin}
+                              </div>
+                            )}
                           </td>
                           <td>
                             <div style={{ fontSize: 'var(--font-size-xs)', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
@@ -2400,6 +2668,80 @@ export const JourneyDetailPage: React.FC = () => {
             ))}
           </div>
         )}
+      </Modal>
+
+      {/* 7. Driver Handover Modal */}
+      <Modal
+        isOpen={isSwapDriverModalOpen}
+        onClose={() => setIsSwapDriverModalOpen(false)}
+        title="Execute En-Route Driver Handover"
+        subtitle="Record relief pilot swap, mid-trip handover odometer, and operational audit trail"
+        footer={
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', width: '100%' }}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => setIsSwapDriverModalOpen(false)}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={swapDriverMutation.isPending || !swapDriverForm.new_driver_id}
+              onClick={() => {
+                swapDriverMutation.mutate({
+                  new_driver_id: swapDriverForm.new_driver_id,
+                  handover_odometer: swapDriverForm.handover_odometer ? Number(swapDriverForm.handover_odometer) : undefined,
+                  reason: swapDriverForm.reason || 'Operational handover',
+                });
+              }}
+            >
+              {swapDriverMutation.isPending ? 'Recording Handover...' : 'Confirm Driver Handover'}
+            </button>
+          </div>
+        }
+      >
+        <form onSubmit={(e) => e.preventDefault()}>
+          <div className="form-group" style={{ marginBottom: '1rem' }}>
+            <label className="form-label">
+              Incoming Relief Driver <span style={{ color: 'var(--color-danger)' }}>*</span>
+            </label>
+            <select
+              className="form-control"
+              value={swapDriverForm.new_driver_id}
+              onChange={(e) => setSwapDriverForm({ ...swapDriverForm, new_driver_id: e.target.value })}
+              required
+            >
+              <option value="">-- Choose Incoming Relief Driver --</option>
+              {swapDriversData?.filter((d: any) => d.status === 'active' && !d.is_deleted && String(d._id) !== String(journey?.driver_id?._id || journey?.driver_id)).map((d: any) => (
+                <option key={d._id} value={d._id}>
+                  {d.name} ({d.phone || 'No Phone'}) — Lic: {d.license_number}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="form-group" style={{ marginBottom: '1rem' }}>
+            <label className="form-label">Handover Odometer (KM)</label>
+            <input
+              type="number"
+              className="form-control"
+              placeholder="e.g. 10850"
+              value={swapDriverForm.handover_odometer}
+              onChange={(e) => setSwapDriverForm({ ...swapDriverForm, handover_odometer: e.target.value })}
+            />
+          </div>
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label className="form-label">Handover Reason</label>
+            <input
+              type="text"
+              className="form-control"
+              placeholder="e.g. Scheduled relay change / Emergency medical relief"
+              value={swapDriverForm.reason}
+              onChange={(e) => setSwapDriverForm({ ...swapDriverForm, reason: e.target.value })}
+            />
+          </div>
+        </form>
       </Modal>
     </div>
   );

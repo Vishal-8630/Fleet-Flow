@@ -44,6 +44,20 @@ import { Pagination } from '../../components/common/Pagination';
 import { CustomFieldsRenderer } from '../../components/common/CustomFieldsRenderer';
 import { useAuthStore } from '../../stores/authStore';
 import { toast } from '../../stores/uiStore';
+import { useTableColumnVisibility } from '../../hooks/useTableColumnVisibility';
+import { TableColumnVisibilityMenu } from '../../components/common/TableColumnVisibilityMenu';
+import { ITableColumnConfig } from '../../types/table';
+
+const TRUCK_TABLE_COLUMNS: ITableColumnConfig[] = [
+  { id: 'reg_no', label: 'Registration No.', isDefaultVisible: true, isRequired: true, description: 'Commercial vehicle license plate number' },
+  { id: 'make_model', label: 'Make & Model', isDefaultVisible: true, isRequired: false, description: 'Vehicle brand, model, and manufacturing year' },
+  { id: 'body_capacity', label: 'Body & Capacity', isDefaultVisible: true, isRequired: false, description: 'Cargo body type and payload tonnage limit' },
+  { id: 'driver', label: 'Assigned Driver', isDefaultVisible: true, isRequired: false, description: 'Current primary operating driver' },
+  { id: 'odometer', label: 'Odometer', isDefaultVisible: false, isRequired: false, description: 'Current operating odometer reading and service schedule' },
+  { id: 'compliance', label: 'Compliance', isDefaultVisible: true, isRequired: false, description: 'Statutory document compliance health status' },
+  { id: 'status', label: 'Status', isDefaultVisible: true, isRequired: true, description: 'Fleet operational readiness status' },
+  { id: 'actions', label: 'Actions', isDefaultVisible: true, isRequired: true, description: 'Vehicle profile inspection and management actions' },
+];
 
 export interface TruckRecord {
   _id: string;
@@ -72,7 +86,8 @@ export interface TruckRecord {
 export const TruckListPage: React.FC = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { role } = useAuthStore();
+  const { user, role } = useAuthStore();
+  const columnVisibility = useTableColumnVisibility('truck_list', TRUCK_TABLE_COLUMNS, user?.id);
   const canEdit = ['admin', 'dispatcher'].includes(role || '');
   const isAdmin = role === 'admin';
 
@@ -314,7 +329,7 @@ export const TruckListPage: React.FC = () => {
       </div>
 
       {/* 3. Search & Filter Bar */}
-      <div className="card" style={{ padding: '1rem 1.25rem', marginBottom: '1.5rem' }}>
+      <div className="card" style={{ padding: '1rem 1.25rem', marginBottom: '1.5rem', overflow: 'visible', position: 'relative', zIndex: 20 }}>
         <div className="filter-toolbar">
           <div className="filter-toolbar-left">
             <div style={{ position: 'relative', width: '100%', maxWidth: '360px' }}>
@@ -370,6 +385,15 @@ export const TruckListPage: React.FC = () => {
               <option value="EXPIRING_SOON">Expiring Soon (15d)</option>
               <option value="EXPIRED">Expired</option>
             </select>
+
+            <TableColumnVisibilityMenu
+              columns={TRUCK_TABLE_COLUMNS}
+              visibleColumns={columnVisibility.visibleColumns}
+              isVisible={columnVisibility.isVisible}
+              toggleColumn={columnVisibility.toggleColumn}
+              resetToDefaults={columnVisibility.resetToDefaults}
+              showAllColumns={columnVisibility.showAllColumns}
+            />
           </div>
         </div>
       </div>
@@ -380,26 +404,26 @@ export const TruckListPage: React.FC = () => {
           <table className="table" style={{ width: '100%', margin: 0 }}>
             <thead>
               <tr>
-                <th>Registration No.</th>
-                <th>Make & Model</th>
-                <th>Body & Capacity</th>
-                <th>Assigned Driver</th>
-                <th>Odometer</th>
-                <th>Compliance</th>
-                <th>Status</th>
-                <th style={{ textAlign: 'right' }}>Actions</th>
+                {columnVisibility.isVisible('reg_no') && <th>Registration No.</th>}
+                {columnVisibility.isVisible('make_model') && <th>Make & Model</th>}
+                {columnVisibility.isVisible('body_capacity') && <th>Body & Capacity</th>}
+                {columnVisibility.isVisible('driver') && <th>Assigned Driver</th>}
+                {columnVisibility.isVisible('odometer') && <th>Odometer</th>}
+                {columnVisibility.isVisible('compliance') && <th>Compliance</th>}
+                {columnVisibility.isVisible('status') && <th>Status</th>}
+                {columnVisibility.isVisible('actions') && <th style={{ textAlign: 'right' }}>Actions</th>}
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={8} style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-muted)' }}>
+                  <td colSpan={columnVisibility.visibleCount || 8} style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-muted)' }}>
                     Loading vehicle assets...
                   </td>
                 </tr>
               ) : trucks.length === 0 ? (
                 <tr>
-                  <td colSpan={8} style={{ textAlign: 'center', padding: '3rem 1rem' }}>
+                  <td colSpan={columnVisibility.visibleCount || 8} style={{ textAlign: 'center', padding: '3rem 1rem' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
                       <Truck size={36} color="var(--color-slate-400)" />
                       <div style={{ fontWeight: 'var(--font-weight-semibold)', color: 'var(--text-main)' }}>No vehicles found</div>
@@ -414,113 +438,129 @@ export const TruckListPage: React.FC = () => {
               ) : (
                 trucks.map((truck) => (
                   <tr key={truck._id}>
-                    <td>
-                      <div style={{ fontWeight: 'var(--font-weight-bold)', color: 'var(--color-primary-700)', letterSpacing: '0.05em' }}>
-                        {truck.truck_no}
-                      </div>
-                      <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
-                        Year: {truck.year || 'N/A'}
-                      </div>
-                      {truck.custom_fields && Object.keys(truck.custom_fields).length > 0 && (
-                        <div style={{ marginTop: '4px', display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                          {Object.entries(truck.custom_fields).map(([k, v]) => (
-                            <span
-                              key={k}
+                    {columnVisibility.isVisible('reg_no') && (
+                      <td>
+                        <div style={{ fontWeight: 'var(--font-weight-bold)', color: 'var(--color-primary-700)', letterSpacing: '0.05em' }}>
+                          {truck.truck_no}
+                        </div>
+                        <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
+                          Year: {truck.year || 'N/A'}
+                        </div>
+                        {truck.custom_fields && Object.keys(truck.custom_fields).length > 0 && (
+                          <div style={{ marginTop: '4px', display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                            {Object.entries(truck.custom_fields).map(([k, v]) => (
+                              <span
+                                key={k}
+                                style={{
+                                  fontSize: '10px',
+                                  padding: '1px 6px',
+                                  borderRadius: '4px',
+                                  backgroundColor: 'var(--color-primary-50)',
+                                  color: 'var(--color-primary-800)',
+                                  border: '1px solid var(--color-primary-200)',
+                                  fontWeight: 600,
+                                }}
+                              >
+                                {k.replace(/_/g, ' ').toUpperCase()}: {String(v)}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </td>
+                    )}
+                    {columnVisibility.isVisible('make_model') && (
+                      <td>
+                        <div style={{ fontWeight: 'var(--font-weight-medium)', color: 'var(--text-main)' }}>{truck.make}</div>
+                        <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>{truck.model}</div>
+                      </td>
+                    )}
+                    {columnVisibility.isVisible('body_capacity') && (
+                      <td>
+                        <div style={{ fontSize: 'var(--font-size-sm)' }}>
+                          <span style={{ fontWeight: 'var(--font-weight-semibold)' }}>{truck.tonnage_capacity} MT</span>
+                          {truck.cbm_capacity ? ` / ${truck.cbm_capacity} CBM` : ''}
+                        </div>
+                        <span className="badge badge-neutral" style={{ fontSize: '10px', marginTop: '0.25rem' }}>
+                          {truck.body_type}
+                        </span>
+                      </td>
+                    )}
+                    {columnVisibility.isVisible('driver') && (
+                      <td>
+                        {truck.current_driver_id ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <div
                               style={{
-                                fontSize: '10px',
-                                padding: '1px 6px',
-                                borderRadius: '4px',
-                                backgroundColor: 'var(--color-primary-50)',
-                                color: 'var(--color-primary-800)',
-                                border: '1px solid var(--color-primary-200)',
-                                fontWeight: 600,
+                                width: '26px',
+                                height: '26px',
+                                borderRadius: '50%',
+                                backgroundColor: 'var(--color-primary-100)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                color: 'var(--color-primary-700)',
+                                fontSize: 'var(--font-size-xs)',
+                                fontWeight: 'var(--font-weight-bold)',
                               }}
                             >
-                              {k.replace(/_/g, ' ').toUpperCase()}: {String(v)}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </td>
-                    <td>
-                      <div style={{ fontWeight: 'var(--font-weight-medium)', color: 'var(--text-main)' }}>{truck.make}</div>
-                      <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>{truck.model}</div>
-                    </td>
-                    <td>
-                      <div style={{ fontSize: 'var(--font-size-sm)' }}>
-                        <span style={{ fontWeight: 'var(--font-weight-semibold)' }}>{truck.tonnage_capacity} MT</span>
-                        {truck.cbm_capacity ? ` / ${truck.cbm_capacity} CBM` : ''}
-                      </div>
-                      <span className="badge badge-neutral" style={{ fontSize: '10px', marginTop: '0.25rem' }}>
-                        {truck.body_type}
-                      </span>
-                    </td>
-                    <td>
-                      {truck.current_driver_id ? (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          <div
-                            style={{
-                              width: '26px',
-                              height: '26px',
-                              borderRadius: '50%',
-                              backgroundColor: 'var(--color-primary-100)',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              color: 'var(--color-primary-700)',
-                              fontSize: 'var(--font-size-xs)',
-                              fontWeight: 'var(--font-weight-bold)',
-                            }}
-                          >
-                            <User size={14} />
-                          </div>
-                          <div>
-                            <div style={{ fontWeight: 'var(--font-weight-medium)', fontSize: 'var(--font-size-sm)' }}>
-                              {truck.current_driver_id.name}
+                              <User size={14} />
                             </div>
-                            <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
-                              {truck.current_driver_id.phone}
+                            <div>
+                              <div style={{ fontWeight: 'var(--font-weight-medium)', fontSize: 'var(--font-size-sm)' }}>
+                                {truck.current_driver_id.name}
+                              </div>
+                              <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
+                                {truck.current_driver_id.phone}
+                              </div>
                             </div>
                           </div>
+                        ) : (
+                          <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                            Unassigned
+                          </span>
+                        )}
+                      </td>
+                    )}
+                    {columnVisibility.isVisible('odometer') && (
+                      <td>
+                        <div style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-semibold)' }}>
+                          {truck.current_odometer_kms.toLocaleString()} km
                         </div>
-                      ) : (
-                        <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)', fontStyle: 'italic' }}>
-                          Unassigned
-                        </span>
-                      )}
-                    </td>
-                    <td>
-                      <div style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-semibold)' }}>
-                        {truck.current_odometer_kms.toLocaleString()} km
-                      </div>
-                      <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
-                        Next due: {truck.next_service_due_kms.toLocaleString()} km
-                      </div>
-                    </td>
-                    <td>{getComplianceBadge(truck.compliance_status)}</td>
-                    <td>{getStatusBadge(truck.status)}</td>
-                    <td style={{ textAlign: 'right' }}>
-                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <button
-                          type="button"
-                          className="btn btn-secondary btn-sm"
-                          onClick={() => navigate(`/fleet/trucks/${truck._id}`)}
-                          style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}
-                        >
-                          Details <ArrowRight size={14} />
-                        </button>
-                        {isAdmin && (
+                        <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
+                          Next due: {truck.next_service_due_kms.toLocaleString()} km
+                        </div>
+                      </td>
+                    )}
+                    {columnVisibility.isVisible('compliance') && (
+                      <td>{getComplianceBadge(truck.compliance_status)}</td>
+                    )}
+                    {columnVisibility.isVisible('status') && (
+                      <td>{getStatusBadge(truck.status)}</td>
+                    )}
+                    {columnVisibility.isVisible('actions') && (
+                      <td style={{ textAlign: 'right' }}>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
                           <button
                             type="button"
-                            className="btn btn-danger btn-sm"
-                            title="Remove vehicle"
-                            onClick={() => setTruckToDelete(truck)}
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => navigate(`/fleet/trucks/${truck._id}`)}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}
                           >
-                            <Trash2 size={14} />
+                            Details <ArrowRight size={14} />
                           </button>
-                        )}
-                      </div>
-                    </td>
+                          {isAdmin && (
+                            <button
+                              type="button"
+                              className="btn btn-danger btn-sm"
+                              title="Remove vehicle"
+                              onClick={() => setTruckToDelete(truck)}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))
               )}

@@ -100,7 +100,11 @@ export const getJourneys = async (req: Request, res: Response) => {
         .populate('driver_id', 'name phone license_number status')
         .populate('billing_party_id', 'name trade_name gstin billing_address')
         .populate('branch_id', 'branch_name branch_code is_head_office')
-        .populate('lr_ids', 'lr_no bill_no actual_weight_tonnes goods_description from_location to_location status')
+        .populate({
+          path: 'lr_ids',
+          select: 'lr_no bill_no actual_weight_tonnes goods_description from_location to_location status billing_party_id vehicle_number driver_name driver_phone truck_id driver_id',
+          populate: { path: 'billing_party_id', select: 'name trade_name gstin' },
+        })
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit),
@@ -197,11 +201,34 @@ export const getJourneyById = async (req: Request, res: Response) => {
       .populate('truck_id')
       .populate('driver_id')
       .populate('billing_party_id')
-      .populate('lr_ids')
+      .populate({
+        path: 'lr_ids',
+        populate: [
+          {
+            path: 'billing_party_id',
+            select: 'name trade_name gstin billing_address',
+          },
+          {
+            path: 'truck_id',
+            select: 'truck_no make model body_type registration_no',
+          },
+          {
+            path: 'driver_id',
+            select: 'name phone license_number status',
+          },
+        ],
+      })
       .populate('branch_id', 'branch_name branch_code is_head_office')
-      .populate('status_history.actor_id', 'name email role');
+      .populate('status_history.actor_id', 'name email role')
+      .populate('driver_handover_history.outgoing_driver_id', 'name phone license_number')
+      .populate('driver_handover_history.incoming_driver_id', 'name phone license_number')
+      .populate('driver_handover_history.authorized_by', 'name email role');
 
     if (!journey || journey.is_deleted) {
+      return res.status(404).json({ error: 'Journey not found.' });
+    }
+
+    if (req.tenant?.id && journey.company_id && String(journey.company_id) !== String(req.tenant.id)) {
       return res.status(404).json({ error: 'Journey not found.' });
     }
 
@@ -241,9 +268,9 @@ export const createJourney = async (req: Request, res: Response) => {
       status = 'draft',
     } = req.body;
 
-    if (!truck_id || !driver_id || !from_location?.city || !to_location?.city) {
+    if (!from_location?.city || !to_location?.city) {
       return res.status(400).json({
-        error: 'Truck, Driver, Origin City, and Destination City are mandatory fields.',
+        error: 'Origin City and Destination City are mandatory fields.',
       });
     }
 
@@ -288,10 +315,16 @@ export const createJourney = async (req: Request, res: Response) => {
           error: `An internal ${journey_type} journey cannot carry commercial Lorry Receipts.`,
         });
       }
+      if (!truck_id || !driver_id) {
+        return res.status(400).json({
+          error: 'Truck, Driver, Origin City, and Destination City are mandatory fields.',
+        });
+      }
     }
 
     // 4. Enforce Mandatory-LR Rule for Commercial Journeys
     let validatedEntries: any[] = [];
+    let distinctCustomerIds: string[] = [];
     if (journey_type === 'commercial') {
       if (!hasLrIds) {
         return res.status(400).json({
@@ -345,36 +378,30 @@ export const createJourney = async (req: Request, res: Response) => {
         }
       }
 
-      // Mandatory Commercial Customer Derivation & Consistency Validation
-      if (!billing_party_id) {
-        const firstCustomer = validatedEntries[0].billing_party_id;
-        if (!firstCustomer) {
+      // 4.4. Commercial Billing Party Validation & Derivation (Phase 2 Multi-Billing-Party Alignment)
+      // Historical LRs missing a valid billing_party_id cannot enter a new commercial journey
+      for (const entry of validatedEntries) {
+        if (!entry.billing_party_id) {
           return res.status(400).json({
-            code: 'CUSTOMER_REQUIRED_FOR_COMMERCIAL_JOURNEY',
-            error: `Lorry Receipt '${validatedEntries[0].lr_no}' does not have an assigned Billing Party. Commercial journeys require consignments with an identified billing customer.`,
+            code: 'BILLING_PARTY_REQUIRED',
+            error: `Lorry Receipt '${entry.lr_no}' does not have an assigned Billing Party. Commercial journeys require consignments with an identified billing customer.`,
           });
         }
+      }
 
-        const hasInconsistentCustomer = validatedEntries.some(
-          (e) => !e.billing_party_id || String(e.billing_party_id) !== String(firstCustomer)
-        );
-        if (hasInconsistentCustomer) {
-          return res.status(400).json({
-            code: 'CUSTOMER_MISMATCH',
-            error: 'Selected Lorry Receipts belong to multiple different Billing Parties or contain unassigned consignments. A commercial journey must carry consignments for exactly one consistent billing customer.',
-          });
-        }
+      // Collect all distinct billing parties represented across selected LRs
+      distinctCustomerIds = Array.from(
+        new Set(validatedEntries.map((e) => String(e.billing_party_id)).filter(Boolean))
+      );
 
-        billing_party_id = firstCustomer;
+      // When LRs define the commercial parties, client-supplied billing_party_id is never trusted over LRs.
+      // Retain journey-level billing_party_id for backward compatibility:
+      // - Single billing party across all LRs: preserve journey.billing_party_id = that party.
+      // - Multiple billing parties: leave journey.billing_party_id unset (undefined). Never arbitrarily pick the first customer.
+      if (distinctCustomerIds.length === 1) {
+        billing_party_id = distinctCustomerIds[0];
       } else {
-        for (const entry of validatedEntries) {
-          if (!entry.billing_party_id || String(entry.billing_party_id) !== String(billing_party_id)) {
-            return res.status(400).json({
-              code: 'CUSTOMER_MISMATCH',
-              error: `Lorry Receipt '${entry.lr_no}' does not belong to the selected Billing Party.`,
-            });
-          }
-        }
+        billing_party_id = undefined;
       }
 
       // Check LR branch consistency if LRs specify branches
@@ -389,14 +416,104 @@ export const createJourney = async (req: Request, res: Response) => {
           });
         }
       }
+
+      // 4.5. Derive and Enforce Truck & Driver Consistency Across All Selected LRs
+      // Check that all selected LRs possess mandatory master references
+      const unlinkedTruckLrs = validatedEntries.filter((e) => !e.truck_id);
+      if (unlinkedTruckLrs.length > 0) {
+        return res.status(400).json({
+          code: 'LR_MISSING_ASSET_REFERENCE',
+          error: `Consignment '${unlinkedTruckLrs[0].lr_no}' was created without a registered vehicle reference. Historical or unreferenced LRs cannot be dispatched on a commercial journey until updated.`,
+        });
+      }
+
+      const unlinkedDriverLrs = validatedEntries.filter((e) => !e.driver_id);
+      if (unlinkedDriverLrs.length > 0) {
+        return res.status(400).json({
+          code: 'LR_MISSING_ASSET_REFERENCE',
+          error: `Consignment '${unlinkedDriverLrs[0].lr_no}' was created without a registered driver reference. Historical or unreferenced LRs cannot be dispatched on a commercial journey until updated.`,
+        });
+      }
+
+      // 1. Vehicle Consistency Validation across LRs
+      const firstTruckId = String(validatedEntries[0].truck_id);
+      const truckMismatchLr = validatedEntries.find(
+        (e) => String(e.truck_id) !== firstTruckId
+      );
+
+      if (truckMismatchLr) {
+        return res.status(400).json({
+          code: 'TRUCK_MISMATCH',
+          error: `Vehicle mismatch: Lorry Receipt '${validatedEntries[0].lr_no}' is assigned to vehicle '${validatedEntries[0].vehicle_number}', but '${truckMismatchLr.lr_no}' is assigned to '${truckMismatchLr.vehicle_number}'. All consignments on a commercial journey must share the same physical vehicle.`,
+          details: {
+            expected_truck: validatedEntries[0].vehicle_number,
+            conflicting_lr: truckMismatchLr.lr_no,
+            conflicting_truck: truckMismatchLr.vehicle_number,
+          },
+        });
+      }
+
+      // 2. Driver Consistency Validation across LRs
+      const firstDriverId = String(validatedEntries[0].driver_id);
+      const driverMismatchLr = validatedEntries.find(
+        (e) => String(e.driver_id) !== firstDriverId
+      );
+
+      if (driverMismatchLr) {
+        return res.status(400).json({
+          code: 'DRIVER_MISMATCH',
+          error: `Driver mismatch: Lorry Receipt '${validatedEntries[0].lr_no}' is assigned to driver '${validatedEntries[0].driver_name || 'Assigned Driver'}', but '${driverMismatchLr.lr_no}' is assigned to '${driverMismatchLr.driver_name || 'Assigned Driver'}'. All consignments on a commercial journey must share the same operating driver.`,
+          details: {
+            expected_driver: validatedEntries[0].driver_name,
+            conflicting_lr: driverMismatchLr.lr_no,
+            conflicting_driver: driverMismatchLr.driver_name,
+          },
+        });
+      }
+
+      // 3. Resolve Authoritative Truck ID & Client Conflict Check
+      if (truck_id) {
+        if (String(truck_id) !== firstTruckId) {
+          return res.status(400).json({
+            code: 'TRUCK_CONFLICT_WITH_LRS',
+            error: `Supplied vehicle does not match the vehicle '${validatedEntries[0].vehicle_number}' assigned to the selected Lorry Receipts.`,
+          });
+        }
+      } else {
+        truck_id = validatedEntries[0].truck_id;
+      }
+
+      // 4. Resolve Authoritative Driver ID & Client Conflict Check
+      if (driver_id) {
+        if (String(driver_id) !== firstDriverId) {
+          return res.status(400).json({
+            code: 'DRIVER_CONFLICT_WITH_LRS',
+            error: `Supplied driver does not match the driver '${validatedEntries[0].driver_name || 'Assigned Driver'}' assigned to the selected Lorry Receipts.`,
+          });
+        }
+      } else {
+        driver_id = validatedEntries[0].driver_id;
+      }
+    }
+
+    if (!truck_id || !driver_id) {
+      return res.status(400).json({
+        error: 'Truck, Driver, Origin City, and Destination City are mandatory fields.',
+      });
     }
 
     // 5. Validate Deep Tenant Foreign Key Ownership (Anti-IDOR)
     await validateTenantOwnership(companyId!, {
       truck_id,
       driver_id,
-      billing_party_id,
+      ...(billing_party_id ? { billing_party_id } : {}),
     });
+
+    if (distinctCustomerIds.length > 0) {
+      for (const custId of distinctCustomerIds) {
+        await validateTenantOwnership(companyId!, { billing_party_id: custId });
+      }
+    }
 
     // 6. Fetch Truck, Driver & Company
     const [truck, driver, company] = await Promise.all([
@@ -436,7 +553,7 @@ export const createJourney = async (req: Request, res: Response) => {
       });
     }
 
-    let overrideAuditParams: any = null;
+    let overrideAuditEntries: any[] = [];
 
     // 9. Check compliance if immediately dispatching
     if (status === 'active') {
@@ -447,12 +564,19 @@ export const createJourney = async (req: Request, res: Response) => {
         });
       }
 
-      // Check Customer Credit Exposure (DEC-007 Option B)
-      if (billing_party_id) {
+      // Check Customer Credit Exposure (DEC-007 Option B) for every distinct Billing Party
+      const customersToEvaluate = hasLrIds
+        ? distinctCustomerIds
+        : (billing_party_id ? [String(billing_party_id)] : []);
+
+      for (const custId of customersToEvaluate) {
+        // Active LRs in MongoDB already contribute to dispatched_unbilled_freight in creditExposureService.
+        // To avoid double-counting active LRs, pass planned_freight: 0 when journey has LRs.
+        // For legacy direct dispatches without LRs, evaluate the journey's freight_rate.
         const exposureResult = await evaluateCustomerCreditExposure({
           company_id: companyId!,
-          customer_id: billing_party_id,
-          new_order_amount: freight_rate || 0,
+          customer_id: custId,
+          new_order_amount: hasLrIds ? 0 : (freight_rate || 0),
         });
 
         if (exposureResult.is_breached) {
@@ -484,10 +608,10 @@ export const createJourney = async (req: Request, res: Response) => {
             });
           }
 
-          overrideAuditParams = {
+          overrideAuditEntries.push({
             company_id: companyId!,
             entity_type: 'party',
-            entity_id: billing_party_id,
+            entity_id: custId,
             entity_identifier: exposureResult.customer_name,
             action: 'OVERRIDE',
             description: `Credit limit override authorized for ${exposureResult.customer_name} on new journey: ${overrideReason}`,
@@ -501,7 +625,7 @@ export const createJourney = async (req: Request, res: Response) => {
               overage_amount: exposureResult.overage_amount,
               override_reason: overrideReason,
             },
-          };
+          });
         }
       }
     }
@@ -668,8 +792,10 @@ export const createJourney = async (req: Request, res: Response) => {
       return journey;
     });
 
-    if (overrideAuditParams) {
-      await logAuditEvent(overrideAuditParams);
+    if (overrideAuditEntries.length > 0) {
+      for (const auditParams of overrideAuditEntries) {
+        await logAuditEvent(auditParams);
+      }
     }
 
     if (status === 'active' && company) {
@@ -721,7 +847,7 @@ export const dispatchJourney = async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Journey not found.' });
     }
 
-    let overrideAuditParams: any = null;
+    let overrideAuditEntries: any[] = [];
 
     if (journey.status !== 'draft') {
       return res.status(400).json({
@@ -782,12 +908,29 @@ export const dispatchJourney = async (req: Request, res: Response) => {
       });
     }
 
-    // Verify Customer Credit Exposure (DEC-007 Option B)
-    if (journey.billing_party_id) {
+    // Verify Customer Credit Exposure (DEC-007 Option B) for all distinct Billing Parties on the journey
+    const linkedLrs = await Entry.find({
+      $or: [
+        { journey_id: journey._id },
+        { _id: { $in: journey.lr_ids || [] } },
+      ],
+      company_id: journey.company_id,
+      is_deleted: false,
+    });
+
+    const distinctCustomerIdsFromLrs = Array.from(
+      new Set(linkedLrs.map((lr) => lr.billing_party_id?.toString()).filter(Boolean))
+    );
+
+    const customersToEvaluate = distinctCustomerIdsFromLrs.length > 0
+      ? distinctCustomerIdsFromLrs
+      : (journey.billing_party_id ? [String(journey.billing_party_id)] : []);
+
+    for (const custId of customersToEvaluate) {
       const exposureResult = await evaluateCustomerCreditExposure({
         company_id: journey.company_id,
-        customer_id: journey.billing_party_id,
-        new_order_amount: journey.freight_rate || 0,
+        customer_id: custId,
+        new_order_amount: distinctCustomerIdsFromLrs.length > 0 ? 0 : (journey.freight_rate || 0),
       });
 
       if (exposureResult.is_breached) {
@@ -819,10 +962,10 @@ export const dispatchJourney = async (req: Request, res: Response) => {
           });
         }
 
-        overrideAuditParams = {
+        overrideAuditEntries.push({
           company_id: journey.company_id,
           entity_type: 'party',
-          entity_id: journey.billing_party_id,
+          entity_id: custId,
           entity_identifier: exposureResult.customer_name,
           action: 'OVERRIDE',
           description: `Credit limit override authorized for ${exposureResult.customer_name} on journey ${journey.journey_number}: ${overrideReason}`,
@@ -836,7 +979,7 @@ export const dispatchJourney = async (req: Request, res: Response) => {
             overage_amount: exposureResult.overage_amount,
             override_reason: overrideReason,
           },
-        };
+        });
       }
     }
 
@@ -966,9 +1109,9 @@ export const dispatchJourney = async (req: Request, res: Response) => {
       await sessDriver.save({ session });
 
       // Step 6: Audit log credit override if present
-      if (overrideAuditParams) {
+      for (const auditParams of overrideAuditEntries) {
         await logAuditEvent({
-          ...overrideAuditParams,
+          ...auditParams,
           session,
         });
       }

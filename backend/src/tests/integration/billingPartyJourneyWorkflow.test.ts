@@ -123,6 +123,10 @@ describe('Phase 1: Billing Party LR-to-Journey Workflow & Linking Safeguards', (
       lr_date: new Date(),
       billing_party_id: customerA._id,
       branch_id: branchA._id,
+      truck_id: truckA._id,
+      driver_id: driverA._id,
+      driver_name: driverA.name,
+      driver_phone: driverA.phone,
       vehicle_number: truckA.truck_no,
       from_location: 'Mumbai',
       to_location: 'Nagpur',
@@ -242,7 +246,7 @@ describe('Phase 1: Billing Party LR-to-Journey Workflow & Linking Safeguards', (
     expect(res.body.journey.billing_party_id.toString()).toBe(customerA._id.toString());
   });
 
-  it('4. Rejects customer derivation when LRs belong to multiple different customers', async () => {
+  it('4. Allows multiple LRs belonging to different Billing Parties on the same journey', async () => {
     const lr1 = await createHelperLR({ billing_party_id: customerA._id });
     const lr2 = await createHelperLR({ billing_party_id: customerB._id });
 
@@ -256,19 +260,22 @@ describe('Phase 1: Billing Party LR-to-Journey Workflow & Linking Safeguards', (
         lr_ids: [lr1._id, lr2._id],
         from_location: { city: 'Mumbai', state: 'Maharashtra' },
         to_location: { city: 'Nagpur', state: 'Maharashtra' },
+        status: 'draft',
       });
 
-    expect(res.status).toBe(400);
-    expect(res.body.code).toBe('CUSTOMER_MISMATCH');
+    expect(res.status).toBe(201);
+    expect(res.body.journey).toBeDefined();
+    expect(res.body.journey.billing_party_id).toBeUndefined();
+    expect(res.body.journey.lr_ids).toHaveLength(2);
 
-    // Confirm neither LR was linked
+    // Confirm both LRs were linked
     const check1 = await Entry.findById(lr1._id, null, { skipTenantCheck: true });
     const check2 = await Entry.findById(lr2._id, null, { skipTenantCheck: true });
-    expect(check1?.journey_id).toBeUndefined();
-    expect(check2?.journey_id).toBeUndefined();
+    expect(check1?.journey_id?.toString()).toBe(res.body.journey._id.toString());
+    expect(check2?.journey_id?.toString()).toBe(res.body.journey._id.toString());
   });
 
-  it('5. Rejects customer derivation when LRs contain unassigned customer consignments', async () => {
+  it('5. Rejects journey creation when LRs contain unassigned customer consignments', async () => {
     const lrUnassigned = await createHelperLR({ billing_party_id: undefined });
 
     const res = await request(app)
@@ -284,10 +291,10 @@ describe('Phase 1: Billing Party LR-to-Journey Workflow & Linking Safeguards', (
       });
 
     expect(res.status).toBe(400);
-    expect(res.body.code).toBe('CUSTOMER_REQUIRED_FOR_COMMERCIAL_JOURNEY');
+    expect(res.body.code).toBe('BILLING_PARTY_REQUIRED');
   });
 
-  it('6. Rejects request when LR customer does not match explicit billing_party_id', async () => {
+  it('6. Does not trust client-supplied customer ID when LRs define the commercial parties', async () => {
     const lrCustomerB = await createHelperLR({ billing_party_id: customerB._id });
 
     const res = await request(app)
@@ -297,14 +304,17 @@ describe('Phase 1: Billing Party LR-to-Journey Workflow & Linking Safeguards', (
         truck_id: truckA._id,
         driver_id: driverA._id,
         journey_type: 'commercial',
-        billing_party_id: customerA._id, // Mismatch with LR
+        billing_party_id: customerA._id, // Client-supplied mismatched customer
         lr_ids: [lrCustomerB._id],
         from_location: { city: 'Mumbai', state: 'Maharashtra' },
         to_location: { city: 'Nagpur', state: 'Maharashtra' },
+        status: 'draft',
       });
 
-    expect(res.status).toBe(400);
-    expect(res.body.code).toBe('CUSTOMER_MISMATCH');
+    expect(res.status).toBe(201);
+    expect(res.body.journey).toBeDefined();
+    // Journey billing_party_id is authoritatively derived from LR (customerB), not client-supplied customerA
+    expect(res.body.journey.billing_party_id.toString()).toBe(customerB._id.toString());
   });
 
   // --------------------------------------------------------------------------
@@ -915,8 +925,8 @@ describe('Phase 1: Billing Party LR-to-Journey Workflow & Linking Safeguards', (
         .post('/api/operations/journeys')
         .set('Authorization', `Bearer ${tenantA.token}`)
         .send({
-          truck_id: truck2._id,
-          driver_id: driver2._id,
+          truck_id: truckA._id,
+          driver_id: driverA._id,
           journey_type: 'commercial',
           billing_party_id: customerA._id,
           lr_ids: [lrShared._id],
@@ -1016,6 +1026,10 @@ describe('Phase 1: Billing Party LR-to-Journey Workflow & Linking Safeguards', (
       bill_no: `BILL-B-${Date.now()}`,
       bill_date: new Date(),
       lr_date: new Date(),
+      truck_id: truckB._id,
+      driver_id: driverB._id,
+      driver_name: driverB.name,
+      driver_phone: driverB.phone,
       vehicle_number: truckB.truck_no,
       from_location: 'Delhi',
       to_location: 'Jaipur',
@@ -1085,6 +1099,8 @@ describe('Phase 1: Billing Party LR-to-Journey Workflow & Linking Safeguards', (
       .post('/api/commercial/entries')
       .set('Authorization', `Bearer ${tenantA.token}`)
       .send({
+        truck_id: truckA._id,
+        driver_id: driverA._id,
         billing_party_id: customerA._id,
         branch_id: branchA._id,
         vehicle_number: truckA.truck_no,
@@ -1107,6 +1123,8 @@ describe('Phase 1: Billing Party LR-to-Journey Workflow & Linking Safeguards', (
       .post('/api/commercial/entries')
       .set('Authorization', `Bearer ${tenantA.token}`)
       .send({
+        truck_id: truckA._id,
+        driver_id: driverA._id,
         billing_party_id: customerA._id,
         branch_id: branchA._id,
         vehicle_number: truckA.truck_no,
@@ -1200,21 +1218,6 @@ describe('Phase 1: Billing Party LR-to-Journey Workflow & Linking Safeguards', (
     const invoiceCount = await Invoice.countDocuments({ company_id: tenantA.company._id }, { skipTenantCheck: true });
     expect(invoiceCount).toBe(0); // Zero automatic invoices created!
 
-    // 8. Test Cancellation & LR Release on a second journey
-    // Create LR3 and LR4
-    const lr3 = await createHelperLR({
-      company_id: tenantA.company._id,
-      billing_party_id: customerA._id,
-      branch_id: branchA._id,
-      actual_weight_tonnes: 10,
-    });
-    const lr4 = await createHelperLR({
-      company_id: tenantA.company._id,
-      billing_party_id: customerA._id,
-      branch_id: branchA._id,
-      actual_weight_tonnes: 8,
-    });
-
     // Create another truck for trip 2
     const truck2 = await Truck.create({
       company_id: tenantA.company._id,
@@ -1230,6 +1233,31 @@ describe('Phase 1: Billing Party LR-to-Journey Workflow & Linking Safeguards', (
       phone: `+9198${Math.floor(10000000 + Math.random() * 90000000)}`,
       license_number: `DL-MH-${Math.floor(100000 + Math.random() * 900000)}`,
       status: 'active',
+    });
+
+    // 8. Test Cancellation & LR Release on a second journey
+    // Create LR3 and LR4 for truck2 & driver2
+    const lr3 = await createHelperLR({
+      company_id: tenantA.company._id,
+      billing_party_id: customerA._id,
+      branch_id: branchA._id,
+      truck_id: truck2._id,
+      driver_id: driver2._id,
+      vehicle_number: truck2.truck_no,
+      driver_name: driver2.name,
+      driver_phone: driver2.phone,
+      actual_weight_tonnes: 10,
+    });
+    const lr4 = await createHelperLR({
+      company_id: tenantA.company._id,
+      billing_party_id: customerA._id,
+      branch_id: branchA._id,
+      truck_id: truck2._id,
+      driver_id: driver2._id,
+      vehicle_number: truck2.truck_no,
+      driver_name: driver2.name,
+      driver_phone: driver2.phone,
+      actual_weight_tonnes: 8,
     });
 
     const journey2Res = await request(app)

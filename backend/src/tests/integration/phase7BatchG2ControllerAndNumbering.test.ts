@@ -23,6 +23,8 @@ describe('Phase G2: Branch Controller Hardening & Concurrency-Safe Sequence Gene
   function makeEntryPayload(overrides: Record<string, any> = {}) {
     return {
       billing_party_id: customerA._id.toString(),
+      truck_id: truckA._id.toString(),
+      driver_id: driverA._id.toString(),
       vehicle_number: truckA.truck_no,
       driver_name: driverA.name,
       from_location: 'Mumbai',

@@ -21,6 +21,9 @@ import { Modal } from '../../components/common/Modal';
 import { toast } from '../../stores/uiStore';
 import { useAuthStore } from '../../stores/authStore';
 import { FeatureGate } from '../../components/common/FeatureGate';
+import { useTableColumnVisibility } from '../../hooks/useTableColumnVisibility';
+import { TableColumnVisibilityMenu } from '../../components/common/TableColumnVisibilityMenu';
+import { ITableColumnConfig } from '../../types/table';
 import {
   BookOpen,
   TrendingUp,
@@ -38,9 +41,22 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 
+const LEDGER_TABLE_COLUMNS: ITableColumnConfig[] = [
+  { id: 'txn_no', label: 'TXN #', isDefaultVisible: true, isRequired: true, description: 'Accounting transaction journal reference number' },
+  { id: 'date', label: 'Date', isDefaultVisible: true, isRequired: false, description: 'Transaction posting date' },
+  { id: 'category', label: 'Category', isDefaultVisible: true, isRequired: false, description: 'Double-entry accounting category' },
+  { id: 'type', label: 'Type', isDefaultVisible: true, isRequired: false, description: 'Debit or credit journal classification' },
+  { id: 'amount', label: 'Amount', isDefaultVisible: true, isRequired: true, description: 'Financial ledger transaction value' },
+  { id: 'mode', label: 'Mode', isDefaultVisible: true, isRequired: false, description: 'Payment settlement channel' },
+  { id: 'party_name', label: 'Party Name', isDefaultVisible: true, isRequired: false, description: 'Customer, vendor, or driver entity name' },
+  { id: 'description', label: 'Description', isDefaultVisible: true, isRequired: false, description: 'Ledger transaction narrative summary' },
+  { id: 'actions', label: 'Actions', isDefaultVisible: true, isRequired: true, description: 'Reversal and audit actions' },
+];
+
 export const LedgerListPage: React.FC = () => {
   const queryClient = useQueryClient();
-  const { role, enabledFeatures = [] } = useAuthStore();
+  const { user, role, enabledFeatures = [] } = useAuthStore();
+  const columnVisibility = useTableColumnVisibility('ledger_list', LEDGER_TABLE_COLUMNS, user?.id);
   const isUnlocked = enabledFeatures.includes('MOD_LEDGERS');
   const canEdit = role === 'admin' || role === 'accountant';
 
@@ -349,7 +365,7 @@ export const LedgerListPage: React.FC = () => {
       {activeTab === 'ledger' && (
         <>
           {/* Search & Filter Bar */}
-          <div className="card" style={{ padding: '1rem', marginBottom: '1.5rem' }}>
+          <div className="card" style={{ padding: '1rem', marginBottom: '1.5rem', overflow: 'visible', position: 'relative', zIndex: 20 }}>
             <div className="filter-toolbar">
               <div className="filter-toolbar-left">
                 <div style={{ display: 'flex', width: '100%', alignItems: 'center', gap: '0.5rem', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', padding: '0.5rem 0.75rem' }}>
@@ -402,6 +418,15 @@ export const LedgerListPage: React.FC = () => {
                   <option value="credit">Credits (Income / Inflow)</option>
                   <option value="debit">Debits (Expense / Outflow)</option>
                 </select>
+
+                <TableColumnVisibilityMenu
+                  columns={LEDGER_TABLE_COLUMNS}
+                  visibleColumns={columnVisibility.visibleColumns}
+                  isVisible={columnVisibility.isVisible}
+                  toggleColumn={columnVisibility.toggleColumn}
+                  resetToDefaults={columnVisibility.resetToDefaults}
+                  showAllColumns={columnVisibility.showAllColumns}
+                />
               </div>
             </div>
           </div>
@@ -412,21 +437,21 @@ export const LedgerListPage: React.FC = () => {
               <table className="table">
                 <thead>
                   <tr>
-                    <th>TXN #</th>
-                    <th>Date</th>
-                    <th>Category</th>
-                    <th>Type</th>
-                    <th>Amount</th>
-                    <th>Mode</th>
-                    <th>Party Name</th>
-                    <th>Description</th>
-                    <th style={{ textAlign: 'right' }}>Actions</th>
+                    {columnVisibility.isVisible('txn_no') && <th>TXN #</th>}
+                    {columnVisibility.isVisible('date') && <th>Date</th>}
+                    {columnVisibility.isVisible('category') && <th>Category</th>}
+                    {columnVisibility.isVisible('type') && <th>Type</th>}
+                    {columnVisibility.isVisible('amount') && <th>Amount</th>}
+                    {columnVisibility.isVisible('mode') && <th>Mode</th>}
+                    {columnVisibility.isVisible('party_name') && <th>Party Name</th>}
+                    {columnVisibility.isVisible('description') && <th>Description</th>}
+                    {columnVisibility.isVisible('actions') && <th style={{ textAlign: 'right' }}>Actions</th>}
                   </tr>
                 </thead>
                 <tbody>
                   {isLedgerLoading ? (
                     <tr>
-                      <td colSpan={9} style={{ textAlign: 'center', padding: '3rem' }}>
+                      <td colSpan={columnVisibility.visibleCount || 9} style={{ textAlign: 'center', padding: '3rem' }}>
                         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}>
                           <div style={{ width: '1.25rem', height: '1.25rem', border: '2px solid var(--color-primary-300)', borderTopColor: 'var(--color-primary-600)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
                           <span style={{ color: 'var(--text-muted)' }}>Loading Financial Journal...</span>
@@ -435,71 +460,89 @@ export const LedgerListPage: React.FC = () => {
                     </tr>
                   ) : ledgerData?.entries?.length === 0 ? (
                     <tr>
-                      <td colSpan={9} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+                      <td colSpan={columnVisibility.visibleCount || 9} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
                         No ledger transactions found matching current filters.
                       </td>
                     </tr>
                   ) : (
                     ledgerData?.entries?.map((txn: any) => (
                       <tr key={txn._id} style={{ opacity: txn.is_reversal ? 0.75 : 1 }}>
-                        <td>
-                          <div style={{ fontWeight: 'var(--font-weight-bold)', color: 'var(--color-primary-600)' }}>
-                            {txn.transaction_number}
-                          </div>
-                          {txn.is_reversal && (
-                            <span className="ledger-reversed-pill">
-                              <RotateCcw size={10} />
-                              Reversed
+                        {columnVisibility.isVisible('txn_no') && (
+                          <td>
+                            <div style={{ fontWeight: 'var(--font-weight-bold)', color: 'var(--color-primary-600)' }}>
+                              {txn.transaction_number}
+                            </div>
+                            {txn.is_reversal && (
+                              <span className="ledger-reversed-pill">
+                                <RotateCcw size={10} />
+                                Reversed
+                              </span>
+                            )}
+                          </td>
+                        )}
+                        {columnVisibility.isVisible('date') && (
+                          <td style={{ fontSize: 'var(--font-size-xs)' }}>
+                            {new Date(txn.transaction_date).toLocaleDateString()}
+                          </td>
+                        )}
+                        {columnVisibility.isVisible('category') && (
+                          <td>
+                            <span style={{ fontSize: 'var(--font-size-xs)', fontWeight: 'var(--font-weight-medium)', textTransform: 'capitalize' }}>
+                              {txn.category?.replace(/_/g, ' ')}
                             </span>
-                          )}
-                        </td>
-                        <td style={{ fontSize: 'var(--font-size-xs)' }}>
-                          {new Date(txn.transaction_date).toLocaleDateString()}
-                        </td>
-                        <td>
-                          <span style={{ fontSize: 'var(--font-size-xs)', fontWeight: 'var(--font-weight-medium)', textTransform: 'capitalize' }}>
-                            {txn.category?.replace(/_/g, ' ')}
-                          </span>
-                        </td>
-                        <td>
-                          <span className={`ledger-type-badge ${txn.balance_type}`}>
-                            {txn.balance_type === 'credit' ? '+ Credit' : '- Debit'}
-                          </span>
-                        </td>
-                        <td style={{ fontWeight: 'var(--font-weight-bold)', color: txn.balance_type === 'credit' ? '#059669' : '#dc2626' }}>
-                          ₹{Number(txn.amount || 0).toLocaleString('en-IN')}
-                        </td>
-                        <td>
-                          <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)', textTransform: 'capitalize' }}>
-                            {txn.payment_mode}
-                          </span>
-                        </td>
-                        <td>
-                          <div style={{ fontSize: 'var(--font-size-xs)', fontWeight: 'var(--font-weight-medium)' }}>
-                            {txn.party_name || '-'}
-                          </div>
-                        </td>
-                        <td>
-                          <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)', maxWidth: '280px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {txn.description}
-                          </div>
-                        </td>
-                        <td style={{ textAlign: 'right' }}>
-                          {canEdit && !txn.is_reversal && (
-                            <button
-                              className="btn btn-secondary btn-sm"
-                              onClick={() => {
-                                setSelectedEntry(txn);
-                                setReversalReason('');
-                                setIsReverseModalOpen(true);
-                              }}
-                              title="Counter-Balance Reversal"
-                            >
-                              <RotateCcw size={13} />
-                              <span>Reverse</span>
-                            </button>
-                          )}
-                        </td>
+                          </td>
+                        )}
+                        {columnVisibility.isVisible('type') && (
+                          <td>
+                            <span className={`ledger-type-badge ${txn.balance_type}`}>
+                              {txn.balance_type === 'credit' ? '+ Credit' : '- Debit'}
+                            </span>
+                          </td>
+                        )}
+                        {columnVisibility.isVisible('amount') && (
+                          <td style={{ fontWeight: 'var(--font-weight-bold)', color: txn.balance_type === 'credit' ? '#059669' : '#dc2626' }}>
+                            ₹{Number(txn.amount || 0).toLocaleString('en-IN')}
+                          </td>
+                        )}
+                        {columnVisibility.isVisible('mode') && (
+                          <td>
+                            <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)', textTransform: 'capitalize' }}>
+                              {txn.payment_mode}
+                            </span>
+                          </td>
+                        )}
+                        {columnVisibility.isVisible('party_name') && (
+                          <td>
+                            <div style={{ fontSize: 'var(--font-size-xs)', fontWeight: 'var(--font-weight-medium)' }}>
+                              {txn.party_name || '-'}
+                            </div>
+                          </td>
+                        )}
+                        {columnVisibility.isVisible('description') && (
+                          <td>
+                            <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)', maxWidth: '280px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {txn.description}
+                            </div>
+                          </td>
+                        )}
+                        {columnVisibility.isVisible('actions') && (
+                          <td style={{ textAlign: 'right' }}>
+                            {canEdit && !txn.is_reversal && (
+                              <button
+                                className="btn btn-secondary btn-sm"
+                                onClick={() => {
+                                  setSelectedEntry(txn);
+                                  setReversalReason('');
+                                  setIsReverseModalOpen(true);
+                                }}
+                                title="Counter-Balance Reversal"
+                              >
+                                <RotateCcw size={13} />
+                                <span>Reverse</span>
+                              </button>
+                            )}
+                          </td>
+                        )}
                       </tr>
                     ))
                   )}

@@ -152,6 +152,8 @@ export const NewJourneyPage: React.FC = () => {
     }
   }, [activeBranches]);
 
+  const isCommercialWithLrs = journeyType === 'commercial' && selectedLrIds.length > 0;
+
   // Automatically pre-fill odometer when a truck is selected
   useEffect(() => {
     if (formData.truck_id && trucksData?.trucks) {
@@ -160,12 +162,14 @@ export const NewJourneyPage: React.FC = () => {
         setFormData((prev) => ({
           ...prev,
           start_odometer_kms: selectedTruck.current_odometer_kms.toString(),
-          // If truck has an assigned driver, optionally pre-select
-          driver_id: prev.driver_id || (selectedTruck.current_driver_id?._id || selectedTruck.current_driver_id || ''),
+          // If truck has an assigned driver and not commercial mode with LRs, optionally pre-select
+          driver_id: isCommercialWithLrs
+            ? prev.driver_id
+            : (prev.driver_id || (selectedTruck.current_driver_id?._id || selectedTruck.current_driver_id || '')),
         }));
       }
     }
-  }, [formData.truck_id, trucksData]);
+  }, [formData.truck_id, trucksData, isCommercialWithLrs]);
 
   // 4.5. Fetch attached LRs details when LRs are selected
   const { data: selectedLrsData, isLoading: selectedLrsLoading } = useQuery({
@@ -187,7 +191,96 @@ export const NewJourneyPage: React.FC = () => {
     enabled: selectedLrIds.length > 0,
   });
 
-  // Auto-prefill or clear supported cargo, weights, volume, corridor, customer, and branch when selected LRs change
+  // LR Asset Consistency & Derivation Helpers
+  const lrValidationState = React.useMemo(() => {
+    if (!selectedLrsData || selectedLrsData.length === 0 || journeyType !== 'commercial') {
+      return {
+        hasMissingAssetRef: false,
+        missingAssetLrs: [] as string[],
+        hasTruckMismatch: false,
+        conflictingTrucks: [] as string[],
+        hasDriverMismatch: false,
+        conflictingDrivers: [] as string[],
+        derivedTruckId: '',
+        derivedDriverId: '',
+        derivedVehicleNumber: '',
+        derivedDriverName: '',
+        distinctParties: [] as Array<{ id: string; name: string; gstin?: string; lrCount: number }>,
+        isSingleParty: false,
+        isMultiParty: false,
+      };
+    }
+
+    const lrs = selectedLrsData;
+    const missing = lrs.filter((l: any) => !l.truck_id || !l.driver_id);
+    const missingLrs = missing.map((l: any) => l.lr_no || 'Unknown');
+
+    const firstTruckId = lrs[0]?.truck_id?._id || lrs[0]?.truck_id;
+    const firstDriverId = lrs[0]?.driver_id?._id || lrs[0]?.driver_id;
+    const firstVehicleNo = lrs[0]?.truck_id?.truck_no || lrs[0]?.vehicle_number || '';
+    const firstDriverName = lrs[0]?.driver_id?.name || lrs[0]?.driver_name || '';
+
+    const conflictingTrucks: string[] = [];
+    const conflictingDrivers: string[] = [];
+
+    lrs.forEach((l: any) => {
+      const tId = l.truck_id?._id || l.truck_id;
+      const vNo = l.truck_id?.truck_no || l.vehicle_number || 'Unknown';
+      if (firstTruckId && tId && String(tId) !== String(firstTruckId)) {
+        if (!conflictingTrucks.includes(vNo)) conflictingTrucks.push(vNo);
+      }
+
+      const dId = l.driver_id?._id || l.driver_id;
+      const dName = l.driver_id?.name || l.driver_name || 'Unknown';
+      if (firstDriverId && dId && String(dId) !== String(firstDriverId)) {
+        if (!conflictingDrivers.includes(dName)) conflictingDrivers.push(dName);
+      }
+    });
+
+    const hasTruckMismatch = conflictingTrucks.length > 0;
+    const hasDriverMismatch = conflictingDrivers.length > 0;
+    const hasMissingAssetRef = missing.length > 0;
+
+    // Collect distinct registered Billing Parties across selected LRs
+    const partiesMap = new Map<string, { id: string; name: string; gstin?: string; lrCount: number }>();
+    lrs.forEach((l: any) => {
+      const p = l.billing_party_id;
+      const pId = p?._id || (typeof p === 'string' ? p : null);
+      if (pId) {
+        const idStr = String(pId);
+        const name = p?.name || l.billing_party_name || `Party (${idStr.slice(-6)})`;
+        const gstin = p?.gstin || '';
+        const existing = partiesMap.get(idStr);
+        if (existing) {
+          existing.lrCount += 1;
+        } else {
+          partiesMap.set(idStr, { id: idStr, name, gstin, lrCount: 1 });
+        }
+      }
+    });
+
+    const distinctParties = Array.from(partiesMap.values());
+    const isSingleParty = distinctParties.length === 1;
+    const isMultiParty = distinctParties.length > 1;
+
+    return {
+      hasMissingAssetRef,
+      missingAssetLrs: missingLrs,
+      hasTruckMismatch,
+      conflictingTrucks: [firstVehicleNo, ...conflictingTrucks].filter(Boolean),
+      hasDriverMismatch,
+      conflictingDrivers: [firstDriverName, ...conflictingDrivers].filter(Boolean),
+      derivedTruckId: (!hasMissingAssetRef && !hasTruckMismatch && firstTruckId) ? String(firstTruckId) : '',
+      derivedDriverId: (!hasMissingAssetRef && !hasDriverMismatch && firstDriverId) ? String(firstDriverId) : '',
+      derivedVehicleNumber: firstVehicleNo,
+      derivedDriverName: firstDriverName,
+      distinctParties,
+      isSingleParty,
+      isMultiParty,
+    };
+  }, [selectedLrsData, journeyType]);
+
+  // Auto-prefill or clear supported cargo, weights, volume, corridor, customer, truck, driver, and branch when selected LRs change
   useEffect(() => {
     if (selectedLrsData && selectedLrsData.length > 0) {
       const lrs = selectedLrsData;
@@ -198,21 +291,48 @@ export const NewJourneyPage: React.FC = () => {
         toast.error(`Warning: Consignment ${staleLrs.map((l: any) => l.lr_no).join(', ')} is already assigned or ineligible for new dispatch.`);
       }
 
-      // 1. Customer derivation & mismatch detection
-      const firstCustomer = lrs[0]?.billing_party_id?._id || lrs[0]?.billing_party_id;
-      const hasMismatch = lrs.some((l: any) => {
-        const cId = l.billing_party_id?._id || l.billing_party_id;
-        return String(cId) !== String(firstCustomer);
+      // 1. Customer derivation:
+      // Multi-Billing-Party support: If all LRs belong to a single party, preserve that party ID for backward compat.
+      // If LRs belong to different parties, do not pick an arbitrary customer.
+      const distinctPartyIds = Array.from(
+        new Set(
+          lrs.map((l: any) => l.billing_party_id?._id || (typeof l.billing_party_id === 'string' ? l.billing_party_id : null)).filter(Boolean)
+        )
+      );
+      const derivedPartyId = distinctPartyIds.length === 1 ? String(distinctPartyIds[0]) : '';
+
+      // 2. Asset derivation and validation
+      const missingAssetLrs = lrs.filter((l: any) => !l.truck_id || !l.driver_id);
+      const hasMissingAssetRef = missingAssetLrs.length > 0;
+
+      const firstTruck = lrs[0]?.truck_id?._id || lrs[0]?.truck_id;
+      const firstDriver = lrs[0]?.driver_id?._id || lrs[0]?.driver_id;
+
+      const hasTruckMismatch = lrs.some((l: any) => {
+        const tId = l.truck_id?._id || l.truck_id;
+        return String(tId) !== String(firstTruck);
       });
 
-      if (hasMismatch) {
-        toast.error('Selected LRs have mismatched Billing Parties. A commercial journey must belong to a single customer.');
+      const hasDriverMismatch = lrs.some((l: any) => {
+        const dId = l.driver_id?._id || l.driver_id;
+        return String(dId) !== String(firstDriver);
+      });
+
+      if (hasMissingAssetRef) {
+        toast.error(`One or more selected historical LRs (${missingAssetLrs.map((l: any) => l.lr_no).join(', ')}) lack registered vehicle or driver references.`);
+      } else if (hasTruckMismatch) {
+        toast.error('Selected LRs reference different vehicles (TRUCK_MISMATCH). All consignments on a journey must share the same physical vehicle.');
+      } else if (hasDriverMismatch) {
+        toast.error('Selected LRs reference different drivers (DRIVER_MISMATCH). All consignments on a journey must share the same operating driver.');
       }
 
-      // 2. Branch derivation
+      const derivedTruckId = (!hasMissingAssetRef && !hasTruckMismatch && firstTruck) ? String(firstTruck) : '';
+      const derivedDriverId = (!hasMissingAssetRef && !hasDriverMismatch && firstDriver) ? String(firstDriver) : '';
+
+      // 3. Branch derivation
       const firstBranch = lrs[0]?.branch_id?._id || lrs[0]?.branch_id;
 
-      // 3. Totals
+      // 4. Totals
       const totalWeight = lrs.reduce((acc: number, l: any) => acc + (Number(l.actual_weight_tonnes) || 0), 0);
       const totalVolume = lrs.reduce((acc: number, l: any) => acc + (Number(l.cbm_volume) || 0), 0);
       const totalFreight = lrs.reduce((acc: number, l: any) => acc + (Number(l.freight_amount) || 0), 0);
@@ -220,7 +340,9 @@ export const NewJourneyPage: React.FC = () => {
 
       setFormData((prev) => ({
         ...prev,
-        billing_party_id: firstCustomer ? String(firstCustomer) : '',
+        truck_id: derivedTruckId,
+        driver_id: derivedDriverId,
+        billing_party_id: derivedPartyId,
         branch_id: firstBranch ? String(firstBranch) : prev.branch_id,
         from_city: lrs[0]?.from_location || '',
         to_city: lrs[0]?.to_location || '',
@@ -233,6 +355,9 @@ export const NewJourneyPage: React.FC = () => {
       // When all LRs are removed in commercial mode, clear derived values so stale data is not retained
       setFormData((prev) => ({
         ...prev,
+        truck_id: '',
+        driver_id: '',
+        start_odometer_kms: '',
         billing_party_id: '',
         from_city: '',
         to_city: '',
@@ -300,7 +425,16 @@ export const NewJourneyPage: React.FC = () => {
       };
 
       if (journeyType === 'commercial') {
-        payload.billing_party_id = formData.billing_party_id || undefined;
+        const distinctPartyIds = Array.from(
+          new Set(
+            selectedLrsData
+              ?.map((l: any) => l.billing_party_id?._id || (typeof l.billing_party_id === 'string' ? l.billing_party_id : null))
+              .filter(Boolean)
+          )
+        );
+        // Retain journey-level billing_party_id only if exactly 1 customer exists (backward compat).
+        // If mixed-party consignments are bundled, leave journey-level party undefined.
+        payload.billing_party_id = distinctPartyIds.length === 1 ? distinctPartyIds[0] : undefined;
         payload.lr_ids = selectedLrIds;
       } else {
         payload.billing_party_id = undefined;
@@ -325,6 +459,16 @@ export const NewJourneyPage: React.FC = () => {
       const serverError = err.response?.data?.error;
       if (serverCode === 'LR_ALREADY_ASSIGNED') {
         toast.error(serverError || 'One or more selected Lorry Receipts are already assigned to another journey.');
+      } else if (serverCode === 'TRUCK_MISMATCH') {
+        toast.error(serverError || 'Vehicle mismatch: All consignments on a commercial journey must share the same physical vehicle.');
+      } else if (serverCode === 'DRIVER_MISMATCH') {
+        toast.error(serverError || 'Driver mismatch: All consignments on a commercial journey must share the same operating driver.');
+      } else if (serverCode === 'TRUCK_CONFLICT_WITH_LRS') {
+        toast.error(serverError || 'Vehicle conflict: The supplied vehicle does not match the vehicle assigned to the selected Lorry Receipts.');
+      } else if (serverCode === 'DRIVER_CONFLICT_WITH_LRS') {
+        toast.error(serverError || 'Driver conflict: The supplied driver does not match the driver assigned to the selected Lorry Receipts.');
+      } else if (serverCode === 'LR_MISSING_ASSET_REFERENCE') {
+        toast.error(serverError || 'Historical consignment missing asset reference: Selected LRs must reference registered vehicle and driver master records.');
       } else if (serverCode === 'CUSTOMER_MISMATCH') {
         toast.error(serverError || 'Customer mismatch: All Lorry Receipts on a journey must belong to the same Billing Party customer.');
       } else if (serverCode === 'BRANCH_MISMATCH') {
@@ -358,6 +502,18 @@ export const NewJourneyPage: React.FC = () => {
     if (journeyType === 'commercial') {
       if (selectedLrIds.length === 0) {
         toast.error('A Billing Party commercial journey must contain one or more eligible Lorry Receipts.');
+        return;
+      }
+      if (lrValidationState.hasMissingAssetRef) {
+        toast.error(`Cannot dispatch journey: Selected historical LR(s) (${lrValidationState.missingAssetLrs.join(', ')}) lack registered vehicle or driver references (LR_MISSING_ASSET_REFERENCE). Update LRs before proceeding.`);
+        return;
+      }
+      if (lrValidationState.hasTruckMismatch) {
+        toast.error('Cannot dispatch journey: Selected LRs reference different vehicles (TRUCK_MISMATCH). All consignments on a journey must share the same physical vehicle.');
+        return;
+      }
+      if (lrValidationState.hasDriverMismatch) {
+        toast.error('Cannot dispatch journey: Selected LRs reference different drivers (DRIVER_MISMATCH). All consignments on a journey must share the same operating driver.');
         return;
       }
       const ineligible = selectedLrsData?.filter((l: any) => l.journey_id || l.status !== 'active');
@@ -514,17 +670,63 @@ export const NewJourneyPage: React.FC = () => {
             </h3>
           </div>
 
+          {/* Asset Consistency & Incompatibility Error Callouts */}
+          {isCommercialWithLrs && lrValidationState.hasMissingAssetRef && (
+            <div style={{ backgroundColor: 'rgba(239, 68, 68, 0.08)', border: '1.5px solid var(--color-danger)', borderRadius: 'var(--radius-md)', padding: '1rem', marginBottom: '1.25rem', display: 'flex', alignItems: 'flex-start', gap: '0.75rem' }}>
+              <AlertTriangle size={20} color="var(--color-danger)" style={{ flexShrink: 0, marginTop: '2px' }} />
+              <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-main)' }}>
+                <strong style={{ color: 'var(--color-danger)', display: 'block', marginBottom: '0.25rem', fontSize: 'var(--font-size-sm)' }}>
+                  Missing Historical Asset References (LR_MISSING_ASSET_REFERENCE)
+                </strong>
+                Consignment(s) <strong>{lrValidationState.missingAssetLrs.join(', ')}</strong> were issued without registered vehicle or driver references. Historical LRs cannot enter a commercial journey until they are explicitly updated with registered master fleet assets.
+              </div>
+            </div>
+          )}
+
+          {isCommercialWithLrs && lrValidationState.hasTruckMismatch && (
+            <div style={{ backgroundColor: 'rgba(239, 68, 68, 0.08)', border: '1.5px solid var(--color-danger)', borderRadius: 'var(--radius-md)', padding: '1rem', marginBottom: '1.25rem', display: 'flex', alignItems: 'flex-start', gap: '0.75rem' }}>
+              <AlertTriangle size={20} color="var(--color-danger)" style={{ flexShrink: 0, marginTop: '2px' }} />
+              <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-main)' }}>
+                <strong style={{ color: 'var(--color-danger)', display: 'block', marginBottom: '0.25rem', fontSize: 'var(--font-size-sm)' }}>
+                  Vehicle Mismatch (TRUCK_MISMATCH)
+                </strong>
+                The selected Lorry Receipts reference different physical vehicles (<strong>{lrValidationState.conflictingTrucks.join(' vs ')}</strong>). All consignments on a commercial journey must share the same physical vehicle.
+              </div>
+            </div>
+          )}
+
+          {isCommercialWithLrs && lrValidationState.hasDriverMismatch && (
+            <div style={{ backgroundColor: 'rgba(239, 68, 68, 0.08)', border: '1.5px solid var(--color-danger)', borderRadius: 'var(--radius-md)', padding: '1rem', marginBottom: '1.25rem', display: 'flex', alignItems: 'flex-start', gap: '0.75rem' }}>
+              <AlertTriangle size={20} color="var(--color-danger)" style={{ flexShrink: 0, marginTop: '2px' }} />
+              <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-main)' }}>
+                <strong style={{ color: 'var(--color-danger)', display: 'block', marginBottom: '0.25rem', fontSize: 'var(--font-size-sm)' }}>
+                  Driver Mismatch (DRIVER_MISMATCH)
+                </strong>
+                The selected Lorry Receipts reference different operating drivers (<strong>{lrValidationState.conflictingDrivers.join(' vs ')}</strong>). All consignments on a commercial journey must share the same operating driver.
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: '1.25rem', marginBottom: '1.25rem' }}>
             {/* Vehicle Selection */}
             <div className="form-group" style={{ marginBottom: 0 }}>
-              <label className="form-label">
-                Assigned Fleet Vehicle <span style={{ color: 'var(--color-danger)' }}>*</span>
-              </label>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.375rem' }}>
+                <label className="form-label" style={{ marginBottom: 0 }}>
+                  Assigned Fleet Vehicle <span style={{ color: 'var(--color-danger)' }}>*</span>
+                </label>
+                {isCommercialWithLrs && (
+                  <span className="badge badge-info" style={{ fontSize: '0.6875rem' }}>
+                    Inherited from Consignments
+                  </span>
+                )}
+              </div>
               <select
                 className="form-control"
                 value={formData.truck_id}
                 onChange={(e) => setFormData({ ...formData, truck_id: e.target.value })}
+                disabled={isCommercialWithLrs}
                 required
+                style={{ backgroundColor: isCommercialWithLrs ? 'var(--bg-disabled)' : undefined }}
               >
                 <option value="">-- Choose Commercial Truck --</option>
                 {trucksData?.trucks?.map((t: any) => (
@@ -533,6 +735,11 @@ export const NewJourneyPage: React.FC = () => {
                   </option>
                 ))}
               </select>
+              {isCommercialWithLrs && (
+                <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                  Assigned vehicle is inherited from attached Lorry Receipts ({selectedLrIds.length} LR{selectedLrIds.length !== 1 ? 's' : ''}).
+                </div>
+              )}
               {isTruckBusy && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', color: 'var(--color-warning-600)', fontSize: 'var(--font-size-xs)', marginTop: '0.375rem' }}>
                   <AlertTriangle size={14} /> Warning: Vehicle is currently marked On Trip.
@@ -547,14 +754,23 @@ export const NewJourneyPage: React.FC = () => {
 
             {/* Driver Selection */}
             <div className="form-group" style={{ marginBottom: 0 }}>
-              <label className="form-label">
-                Assigned Professional Driver <span style={{ color: 'var(--color-danger)' }}>*</span>
-              </label>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.375rem' }}>
+                <label className="form-label" style={{ marginBottom: 0 }}>
+                  Assigned Professional Driver <span style={{ color: 'var(--color-danger)' }}>*</span>
+                </label>
+                {isCommercialWithLrs && (
+                  <span className="badge badge-info" style={{ fontSize: '0.6875rem' }}>
+                    Inherited from Consignments
+                  </span>
+                )}
+              </div>
               <select
                 className="form-control"
                 value={formData.driver_id}
                 onChange={(e) => setFormData({ ...formData, driver_id: e.target.value })}
+                disabled={isCommercialWithLrs}
                 required
+                style={{ backgroundColor: isCommercialWithLrs ? 'var(--bg-disabled)' : undefined }}
               >
                 <option value="">-- Choose Driver --</option>
                 {driversData?.drivers?.map((d: any) => (
@@ -563,6 +779,11 @@ export const NewJourneyPage: React.FC = () => {
                   </option>
                 ))}
               </select>
+              {isCommercialWithLrs && (
+                <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                  Operating driver is inherited from attached Lorry Receipts ({selectedLrIds.length} LR{selectedLrIds.length !== 1 ? 's' : ''}).
+                </div>
+              )}
               {isDriverBusy && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', color: 'var(--color-warning-600)', fontSize: 'var(--font-size-xs)', marginTop: '0.375rem' }}>
                   <AlertTriangle size={14} /> Driver status is currently {selectedDriver?.status}.
@@ -685,6 +906,7 @@ export const NewJourneyPage: React.FC = () => {
                       <thead style={{ backgroundColor: 'var(--color-slate-50)' }}>
                         <tr>
                           <th>LR #</th>
+                          <th>Billing Party</th>
                           <th>Parties (Consignor → Consignee)</th>
                           <th>Cargo & Specs</th>
                           <th>Weight / Volume</th>
@@ -706,6 +928,16 @@ export const NewJourneyPage: React.FC = () => {
                                   <span className="badge badge-danger" style={{ fontSize: '0.625rem', marginTop: '0.25rem' }}>
                                     {lr.journey_id ? 'Already Assigned' : lr.status === 'invoiced' ? 'Invoiced' : 'Cancelled'}
                                   </span>
+                                )}
+                              </td>
+                              <td>
+                                <div style={{ fontSize: 'var(--font-size-xs)', fontWeight: 600, color: 'var(--text-main)' }}>
+                                  {lr.billing_party_id?.name || lr.billing_party_name || '—'}
+                                </div>
+                                {lr.billing_party_id?.gstin && (
+                                  <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
+                                    GSTIN: {lr.billing_party_id.gstin}
+                                  </div>
                                 )}
                               </td>
                             <td>
@@ -797,31 +1029,85 @@ export const NewJourneyPage: React.FC = () => {
           {journeyType === 'commercial' ? (
             <div className="form-group" style={{ marginBottom: '1.25rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.375rem' }}>
-                <label className="form-label" style={{ marginBottom: 0 }}>
-                  Customer / Shipper Billing Party <span style={{ color: 'var(--color-danger)' }}>*</span>
+                <label className="form-label" style={{ marginBottom: 0, fontWeight: 600 }}>
+                  Customer / Billing Party Attribution
                 </label>
-                {selectedLrIds.length > 0 && (
+                {lrValidationState.isSingleParty && (
                   <span className="badge badge-info" style={{ fontSize: '0.6875rem' }}>
-                    Derived from Attached LRs
+                    Derived from Attached LRs (Single Customer)
+                  </span>
+                )}
+                {lrValidationState.isMultiParty && (
+                  <span className="badge badge-primary" style={{ fontSize: '0.6875rem' }}>
+                    Multi-Billing-Party Journey ({lrValidationState.distinctParties.length} Customers)
                   </span>
                 )}
               </div>
-              <select
-                className="form-control"
-                value={formData.billing_party_id}
-                onChange={(e) => setFormData({ ...formData, billing_party_id: e.target.value })}
-                required
-              >
-                <option value="">-- Choose Customer Billing Party --</option>
-                {partiesData?.parties?.map((p: any) => (
-                  <option key={p._id} value={p._id}>
-                    {p.name} {p.gstin ? `(GSTIN: ${p.gstin})` : ''}
-                  </option>
-                ))}
-              </select>
-              <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-                Commercial customer responsible for payment. Must match the customer associated with attached LRs.
-              </div>
+
+              {selectedLrIds.length === 0 ? (
+                <div style={{ backgroundColor: 'var(--color-slate-50)', padding: '0.75rem 1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)', fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
+                  Attach one or more eligible Lorry Receipts above. The journey's customer billing parties will be derived automatically from the attached consignments.
+                </div>
+              ) : lrValidationState.isSingleParty ? (
+                <div style={{ backgroundColor: 'var(--color-slate-50)', padding: '0.875rem 1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: 'var(--font-size-sm)', color: 'var(--text-main)' }}>
+                        {lrValidationState.distinctParties[0]?.name}
+                      </div>
+                      <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)', marginTop: '0.125rem' }}>
+                        {lrValidationState.distinctParties[0]?.gstin ? `GSTIN: ${lrValidationState.distinctParties[0].gstin}` : 'GST: Unregistered / Exempt'}
+                      </div>
+                    </div>
+                    <span className="badge badge-neutral" style={{ fontSize: '0.75rem' }}>
+                      All {selectedLrIds.length} Consignment{selectedLrIds.length !== 1 ? 's' : ''}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ backgroundColor: 'var(--color-primary-50)', padding: '1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-primary-200)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                    <Info size={16} color="var(--color-primary-600)" />
+                    <span style={{ fontWeight: 600, fontSize: 'var(--font-size-xs)', color: 'var(--color-primary-900)' }}>
+                      Multi-Party Consolidated Commercial Movement
+                    </span>
+                  </div>
+                  <p style={{ margin: '0 0 0.75rem 0', fontSize: 'var(--font-size-xs)', color: 'var(--text-secondary)' }}>
+                    This journey consolidates consignments belonging to <strong>{lrValidationState.distinctParties.length} distinct registered Billing Parties</strong> on a single truck and driver route. Commercial invoices are created separately for each customer and their LRs through the independent invoicing workflow. Invoicing is eligible after delivery/POD by default, with authorized early invoicing permitted.
+                  </p>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                    {lrValidationState.distinctParties.map((p) => (
+                      <div
+                        key={p.id}
+                        style={{
+                          backgroundColor: '#ffffff',
+                          border: '1px solid var(--border-color)',
+                          borderRadius: 'var(--radius-sm)',
+                          padding: '0.5rem 0.75rem',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.5rem',
+                          boxShadow: 'var(--shadow-xs)',
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: 'var(--font-size-xs)', color: 'var(--text-main)' }}>
+                            {p.name}
+                          </div>
+                          {p.gstin && (
+                            <div style={{ fontSize: '0.625rem', color: 'var(--text-muted)' }}>
+                              GSTIN: {p.gstin}
+                            </div>
+                          )}
+                        </div>
+                        <span className="badge badge-info" style={{ fontSize: '0.625rem' }}>
+                          {p.lrCount} LR{p.lrCount !== 1 ? 's' : ''}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <div className="form-group" style={{ marginBottom: '1.25rem' }}>

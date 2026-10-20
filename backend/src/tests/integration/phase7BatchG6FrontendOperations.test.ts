@@ -90,10 +90,9 @@ describe('Phase G6: Operational Frontend Branch Integration (FF-ISSUE-053, DEC-0
       expect(newJourneySource).toContain('setFormData((prev) => ({ ...prev, branch_id: headOffice._id }))');
     });
 
-    it('[Contract/Static] LRListPage and InvoiceListPage implement single and Head Office defaulting in create modals', () => {
-      expect(lrListSource).toContain('isCreateModalOpen && !formData.journey_id && !formData.branch_id');
-      expect(lrListSource).toContain('activeBranches.length === 1');
-      expect(lrListSource).toContain('activeBranches.find((b: any) => b.is_head_office)');
+    it('[Contract/Static] LRListPage defaults to Company Direct and InvoiceListPage implements single/Head Office defaulting', () => {
+      expect(lrListSource).toContain("branch_id: '',");
+      expect(lrListSource).toContain('Company Direct / Head Office Sequence (LR-)');
 
       expect(invoiceListSource).toContain('isCreateModalOpen && !invoiceForm.branch_id');
       expect(invoiceListSource).toContain('activeBranches.length === 1');
@@ -178,23 +177,15 @@ describe('Phase G6: Operational Frontend Branch Integration (FF-ISSUE-053, DEC-0
     });
   });
 
-  describe('5. LR Journey Selection, Branch Inheritance, Overrides & Prefix Preview', () => {
+  describe('5. LR Responsible Branch Selection, Payload & Prefix Preview', () => {
     // Pure function replicating LR prefix preview resolution
     function resolveLrPrefix(selectedBranch?: { branch_code: string; lr_prefix?: string }): string {
       return selectedBranch ? selectedBranch.lr_prefix || `${selectedBranch.branch_code}-LR-` : 'LR-';
     }
 
-    it('[Contract/Static] LRListPage queries active journeys for trip linkage and auto-inherits branch_id', () => {
-      expect(lrListSource).toContain("queryKey: ['active-journeys-lookup']");
-      expect(lrListSource).toContain("api.get('/operations/journeys'");
-      expect(lrListSource).toContain('handleJourneyChange');
-      expect(lrListSource).toContain('selectedJourney.branch_id?._id || selectedJourney.branch_id');
-      expect(lrListSource).toContain('branch_id: journeyBranchId ? String(journeyBranchId) : prev.branch_id');
-    });
-
-    it('[Contract/Static] LRListPage detects branch inheritance and provides visual badge and explicit override capability', () => {
-      expect(lrListSource).toContain('const isBranchInherited = Boolean(');
-      expect(lrListSource).toContain('Inherited from Trip');
+    it('[Contract/Static] LRListPage provides responsible regional branch selector with Company Direct default', () => {
+      expect(lrListSource).toContain('Responsible Regional Branch');
+      expect(lrListSource).toContain('Company Direct / Head Office Sequence (LR-)');
       expect(lrListSource).toContain('previewPrefix');
       expect(lrListSource).toContain("selectedBranch.lr_prefix || `${selectedBranch.branch_code}-LR-`");
       expect(lrListSource).toContain("'LR-'");
@@ -203,7 +194,6 @@ describe('Phase G6: Operational Frontend Branch Integration (FF-ISSUE-053, DEC-0
     it('[Contract/Static] LRListPage submits branch_id in createMutation to /commercial/entries', () => {
       expect(lrListSource).toContain("api.post('/commercial/entries', payload)");
       expect(lrListSource).toContain('branch_id: formData.branch_id || undefined');
-      expect(lrListSource).toContain('journey_id: formData.journey_id || undefined');
     });
 
     it('[Behavioral Logic] verifies LR prefix resolution for configured, code-fallback, and unbranched scenarios', () => {
@@ -212,22 +202,15 @@ describe('Phase G6: Operational Frontend Branch Integration (FF-ISSUE-053, DEC-0
       expect(resolveLrPrefix(undefined)).toBe('LR-');
     });
 
-    it('[Behavioral Logic] verifies manual branch override resets isBranchInherited flag', () => {
-      const selectedJourney = { _id: 'j1', branch_id: { _id: 'br-mum', branch_code: 'MUM' } };
-      let currentForm = { journey_id: 'j1', branch_id: 'br-mum' };
+    it('[Behavioral Logic] verifies manual branch selection updates branch_id and preserves Company Direct default', () => {
+      let currentForm = { branch_id: '' };
+      const setBranch = (bId: string) => ({ ...currentForm, branch_id: bId });
 
-      const checkInherited = (form: typeof currentForm) =>
-        Boolean(
-          form.journey_id &&
-            selectedJourney.branch_id &&
-            form.branch_id === selectedJourney.branch_id._id
-        );
-
-      expect(checkInherited(currentForm)).toBe(true);
-
-      // User performs explicit override in dropdown
-      currentForm = { ...currentForm, branch_id: 'br-pune' };
-      expect(checkInherited(currentForm)).toBe(false);
+      expect(currentForm.branch_id).toBe(''); // Company Direct default
+      currentForm = setBranch('br-pune');
+      expect(currentForm.branch_id).toBe('br-pune');
+      currentForm = setBranch('');
+      expect(currentForm.branch_id).toBe(''); // User selects back to Company Direct
     });
   });
 
@@ -293,7 +276,7 @@ describe('Phase G6: Operational Frontend Branch Integration (FF-ISSUE-053, DEC-0
 
     it('[Contract/Static] LRListPage and InvoiceListPage handle empty states and party selection prompts', () => {
       expect(lrListSource).toContain('No Lorry Receipts found matching current filters.');
-      expect(lrListSource).toContain('-- Standalone Consignment (No Trip Link) --');
+      expect(lrListSource).toContain('Company Direct / Head Office Sequence (LR-)');
       expect(invoiceListSource).toContain('Please select a Billing Party to load active Lorry Receipts.');
       expect(invoiceListSource).toContain('No active unbilled LRs found for this customer.');
     });

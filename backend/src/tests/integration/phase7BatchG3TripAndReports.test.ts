@@ -38,6 +38,8 @@ describe('Phase G3: Operational Trip Dispatch & Commercial Report Integration (F
   function makeEntryPayload(overrides: Record<string, any> = {}) {
     return {
       billing_party_id: customerA._id.toString(),
+      truck_id: truckA._id.toString(),
+      driver_id: driverA._id.toString(),
       vehicle_number: truckA.truck_no,
       driver_name: driverA.name,
       from_location: 'Mumbai',

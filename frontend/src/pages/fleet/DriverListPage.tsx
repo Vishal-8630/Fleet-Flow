@@ -44,6 +44,19 @@ import { Pagination } from '../../components/common/Pagination';
 import { CustomFieldsRenderer } from '../../components/common/CustomFieldsRenderer';
 import { useAuthStore } from '../../stores/authStore';
 import { toast } from '../../stores/uiStore';
+import { useTableColumnVisibility } from '../../hooks/useTableColumnVisibility';
+import { TableColumnVisibilityMenu } from '../../components/common/TableColumnVisibilityMenu';
+import { ITableColumnConfig } from '../../types/table';
+
+const DRIVER_TABLE_COLUMNS: ITableColumnConfig[] = [
+  { id: 'identity', label: 'Driver Identity', isDefaultVisible: true, isRequired: true, description: 'Driver full legal name and phone credentials' },
+  { id: 'license', label: 'Commercial License', isDefaultVisible: true, isRequired: false, description: 'Commercial driving license number and expiration' },
+  { id: 'aadhaar', label: 'Aadhaar KYC', isDefaultVisible: true, isRequired: false, description: 'Masked Aadhaar KYC identification number' },
+  { id: 'vehicle', label: 'Assigned Vehicle', isDefaultVisible: true, isRequired: false, description: 'Currently allocated fleet vehicle asset' },
+  { id: 'advance', label: 'Running Advance', isDefaultVisible: true, isRequired: false, description: 'Running trip advance financial balance' },
+  { id: 'status', label: 'Status', isDefaultVisible: true, isRequired: true, description: 'Driver duty and operational employment status' },
+  { id: 'actions', label: 'Actions', isDefaultVisible: true, isRequired: true, description: 'Profile inspection and management actions' },
+];
 
 export interface DriverRecord {
   _id: string;
@@ -68,7 +81,8 @@ export interface DriverRecord {
 export const DriverListPage: React.FC = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { role } = useAuthStore();
+  const { user, role } = useAuthStore();
+  const columnVisibility = useTableColumnVisibility('driver_list', DRIVER_TABLE_COLUMNS, user?.id);
   const canEdit = ['admin', 'dispatcher'].includes(role || '');
   const isAdmin = role === 'admin';
 
@@ -269,7 +283,7 @@ export const DriverListPage: React.FC = () => {
       </div>
 
       {/* 3. Search & Filter Bar */}
-      <div className="card" style={{ padding: '1rem 1.25rem', marginBottom: '1.5rem' }}>
+      <div className="card" style={{ padding: '1rem 1.25rem', marginBottom: '1.5rem', overflow: 'visible', position: 'relative', zIndex: 20 }}>
         <div className="filter-toolbar">
           <div className="filter-toolbar-left">
             <div style={{ position: 'relative', width: '100%', maxWidth: '360px' }}>
@@ -309,6 +323,15 @@ export const DriverListPage: React.FC = () => {
                 <option value="terminated">Terminated</option>
               </select>
             </div>
+
+            <TableColumnVisibilityMenu
+              columns={DRIVER_TABLE_COLUMNS}
+              visibleColumns={columnVisibility.visibleColumns}
+              isVisible={columnVisibility.isVisible}
+              toggleColumn={columnVisibility.toggleColumn}
+              resetToDefaults={columnVisibility.resetToDefaults}
+              showAllColumns={columnVisibility.showAllColumns}
+            />
           </div>
         </div>
       </div>
@@ -319,25 +342,25 @@ export const DriverListPage: React.FC = () => {
           <table className="table" style={{ width: '100%', margin: 0 }}>
             <thead>
               <tr>
-                <th>Driver Identity</th>
-                <th>Commercial License</th>
-                <th>Aadhaar KYC</th>
-                <th>Assigned Vehicle</th>
-                <th>Running Advance</th>
-                <th>Status</th>
-                <th style={{ textAlign: 'right' }}>Actions</th>
+                {columnVisibility.isVisible('identity') && <th>Driver Identity</th>}
+                {columnVisibility.isVisible('license') && <th>Commercial License</th>}
+                {columnVisibility.isVisible('aadhaar') && <th>Aadhaar KYC</th>}
+                {columnVisibility.isVisible('vehicle') && <th>Assigned Vehicle</th>}
+                {columnVisibility.isVisible('advance') && <th>Running Advance</th>}
+                {columnVisibility.isVisible('status') && <th>Status</th>}
+                {columnVisibility.isVisible('actions') && <th style={{ textAlign: 'right' }}>Actions</th>}
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={7} style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-muted)' }}>
+                  <td colSpan={columnVisibility.visibleCount || 7} style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-muted)' }}>
                     Loading driver directory...
                   </td>
                 </tr>
               ) : drivers.length === 0 ? (
                 <tr>
-                  <td colSpan={7} style={{ textAlign: 'center', padding: '3rem 1rem' }}>
+                  <td colSpan={columnVisibility.visibleCount || 7} style={{ textAlign: 'center', padding: '3rem 1rem' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
                       <UserSquare2 size={36} color="var(--color-slate-400)" />
                       <div style={{ fontWeight: 'var(--font-weight-semibold)', color: 'var(--text-main)' }}>No drivers found</div>
@@ -352,92 +375,106 @@ export const DriverListPage: React.FC = () => {
               ) : (
                 drivers.map((driver) => (
                   <tr key={driver._id}>
-                    <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                        <div
-                          style={{
-                            width: '34px',
-                            height: '34px',
-                            borderRadius: '50%',
-                            backgroundColor: 'var(--color-primary-100)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            color: 'var(--color-primary-700)',
-                            fontWeight: 'var(--font-weight-bold)',
-                            fontSize: 'var(--font-size-sm)',
-                          }}
-                        >
-                          {driver.name.charAt(0).toUpperCase()}
-                        </div>
-                        <div>
-                          <div style={{ fontWeight: 'var(--font-weight-semibold)', color: 'var(--text-main)' }}>
-                            {driver.name}
+                    {columnVisibility.isVisible('identity') && (
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                          <div
+                            style={{
+                              width: '34px',
+                              height: '34px',
+                              borderRadius: '50%',
+                              backgroundColor: 'var(--color-primary-100)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              color: 'var(--color-primary-700)',
+                              fontWeight: 'var(--font-weight-bold)',
+                              fontSize: 'var(--font-size-sm)',
+                            }}
+                          >
+                            {driver.name.charAt(0).toUpperCase()}
                           </div>
-                          <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                            <Phone size={11} /> {driver.phone}
+                          <div>
+                            <div style={{ fontWeight: 'var(--font-weight-semibold)', color: 'var(--text-main)' }}>
+                              {driver.name}
+                            </div>
+                            <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                              <Phone size={11} /> {driver.phone}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </td>
-                    <td>
-                      <div style={{ fontWeight: 'var(--font-weight-medium)', letterSpacing: '0.05em' }}>
-                        {driver.license_number}
-                      </div>
-                      <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
-                        {driver.license_expiry_date
-                          ? `Exp: ${new Date(driver.license_expiry_date).toLocaleDateString()}`
-                          : 'No expiry logged'}
-                      </div>
-                    </td>
-                    <td>
-                      <span className="badge badge-neutral" style={{ fontFamily: 'monospace', letterSpacing: '0.05em' }}>
-                        {driver.aadhaar_number || 'Unverified'}
-                      </span>
-                    </td>
-                    <td>
-                      {driver.current_truck_id ? (
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem' }}>
-                          <Truck size={14} color="var(--color-primary-600)" />
-                          <span style={{ fontWeight: 'var(--font-weight-semibold)', color: 'var(--color-primary-700)' }}>
-                            {driver.current_truck_id.truck_no}
-                          </span>
+                      </td>
+                    )}
+                    {columnVisibility.isVisible('license') && (
+                      <td>
+                        <div style={{ fontWeight: 'var(--font-weight-medium)', letterSpacing: '0.05em' }}>
+                          {driver.license_number}
                         </div>
-                      ) : (
-                        <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)', fontStyle: 'italic' }}>
-                          Unassigned
+                        <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
+                          {driver.license_expiry_date
+                            ? `Exp: ${new Date(driver.license_expiry_date).toLocaleDateString()}`
+                            : 'No expiry logged'}
+                        </div>
+                      </td>
+                    )}
+                    {columnVisibility.isVisible('aadhaar') && (
+                      <td>
+                        <span className="badge badge-neutral" style={{ fontFamily: 'monospace', letterSpacing: '0.05em' }}>
+                          {driver.aadhaar_number || 'Unverified'}
                         </span>
-                      )}
-                    </td>
-                    <td>
-                      <div style={{ fontWeight: 'var(--font-weight-semibold)', fontSize: 'var(--font-size-sm)' }}>
-                        ₹{(driver.running_advance_balance || 0).toLocaleString()}
-                      </div>
-                      <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>Advance Balance</div>
-                    </td>
-                    <td>{getStatusBadge(driver.status)}</td>
-                    <td style={{ textAlign: 'right' }}>
-                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <button
-                          type="button"
-                          className="btn btn-secondary btn-sm"
-                          onClick={() => navigate(`/fleet/drivers/${driver._id}`)}
-                          style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}
-                        >
-                          Profile <ArrowRight size={14} />
-                        </button>
-                        {isAdmin && (
+                      </td>
+                    )}
+                    {columnVisibility.isVisible('vehicle') && (
+                      <td>
+                        {driver.current_truck_id ? (
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem' }}>
+                            <Truck size={14} color="var(--color-primary-600)" />
+                            <span style={{ fontWeight: 'var(--font-weight-semibold)', color: 'var(--color-primary-700)' }}>
+                              {driver.current_truck_id.truck_no}
+                            </span>
+                          </div>
+                        ) : (
+                          <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                            Unassigned
+                          </span>
+                        )}
+                      </td>
+                    )}
+                    {columnVisibility.isVisible('advance') && (
+                      <td>
+                        <div style={{ fontWeight: 'var(--font-weight-semibold)', fontSize: 'var(--font-size-sm)' }}>
+                          ₹{(driver.running_advance_balance || 0).toLocaleString()}
+                        </div>
+                        <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>Advance Balance</div>
+                      </td>
+                    )}
+                    {columnVisibility.isVisible('status') && (
+                      <td>{getStatusBadge(driver.status)}</td>
+                    )}
+                    {columnVisibility.isVisible('actions') && (
+                      <td style={{ textAlign: 'right' }}>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
                           <button
                             type="button"
-                            className="btn btn-danger btn-sm"
-                            title="Remove driver"
-                            onClick={() => setDriverToDelete(driver)}
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => navigate(`/fleet/drivers/${driver._id}`)}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}
                           >
-                            <Trash2 size={14} />
+                            Profile <ArrowRight size={14} />
                           </button>
-                        )}
-                      </div>
-                    </td>
+                          {isAdmin && (
+                            <button
+                              type="button"
+                              className="btn btn-danger btn-sm"
+                              title="Remove driver"
+                              onClick={() => setDriverToDelete(driver)}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))
               )}

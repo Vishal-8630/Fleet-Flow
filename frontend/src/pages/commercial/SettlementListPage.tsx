@@ -21,6 +21,9 @@ import { Modal } from '../../components/common/Modal';
 import { toast } from '../../stores/uiStore';
 import { useAuthStore } from '../../stores/authStore';
 import { FeatureGate } from '../../components/common/FeatureGate';
+import { useTableColumnVisibility } from '../../hooks/useTableColumnVisibility';
+import { TableColumnVisibilityMenu } from '../../components/common/TableColumnVisibilityMenu';
+import { ITableColumnConfig } from '../../types/table';
 import {
   BadgeCent,
   CheckCircle2,
@@ -37,9 +40,23 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 
+const SETTLEMENT_TABLE_COLUMNS: ITableColumnConfig[] = [
+  { id: 'settlement_no', label: 'Settlement #', isDefaultVisible: true, isRequired: true, description: 'Unique trip settlement voucher number' },
+  { id: 'driver', label: 'Driver', isDefaultVisible: true, isRequired: false, description: 'Settled commercial driver name and phone' },
+  { id: 'date', label: 'Settlement Date', isDefaultVisible: true, isRequired: false, description: 'Date settlement statement was compiled' },
+  { id: 'kms', label: 'Total Kms', isDefaultVisible: true, isRequired: false, description: 'Total odometer kilometers audited across journeys' },
+  { id: 'gross', label: 'Gross Earnings', isDefaultVisible: true, isRequired: false, description: 'Total gross driver wage entitlement' },
+  { id: 'advances', label: 'Advances', isDefaultVisible: true, isRequired: false, description: 'Total trip advance money deducted' },
+  { id: 'fuel_penalty', label: 'Fuel Penalty', isDefaultVisible: true, isRequired: false, description: 'Diesel mileage variance penalty deduction' },
+  { id: 'net', label: 'Net Settlement', isDefaultVisible: true, isRequired: true, description: 'Final payable or receivable settlement amount' },
+  { id: 'status', label: 'Payment Status', isDefaultVisible: true, isRequired: true, description: 'Voucher disbursement status' },
+  { id: 'actions', label: 'Actions', isDefaultVisible: true, isRequired: true, description: 'Statement slip printing and payout actions' },
+];
+
 export const SettlementListPage: React.FC = () => {
   const queryClient = useQueryClient();
-  const { role, enabledFeatures = [] } = useAuthStore();
+  const { user, role, enabledFeatures = [] } = useAuthStore();
+  const columnVisibility = useTableColumnVisibility('settlement_list', SETTLEMENT_TABLE_COLUMNS, user?.id);
   const isUnlocked = enabledFeatures.includes('MOD_SETTLEMENTS');
   const canEdit = role === 'admin' || role === 'accountant';
 
@@ -351,7 +368,7 @@ export const SettlementListPage: React.FC = () => {
       </div>
 
       {/* 3. Search & Filter Bar */}
-      <div className="card" style={{ padding: '1rem', marginBottom: '1.5rem' }}>
+      <div className="card" style={{ padding: '1rem', marginBottom: '1.5rem', overflow: 'visible', position: 'relative', zIndex: 20 }}>
         <div className="filter-toolbar">
           <div className="filter-toolbar-left">
             <div style={{ display: 'flex', width: '100%', alignItems: 'center', gap: '0.5rem', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', padding: '0.5rem 0.75rem' }}>
@@ -383,6 +400,15 @@ export const SettlementListPage: React.FC = () => {
               <option value="unpaid">Unpaid / Pending</option>
               <option value="paid">Disbursed (Paid)</option>
             </select>
+
+            <TableColumnVisibilityMenu
+              columns={SETTLEMENT_TABLE_COLUMNS}
+              visibleColumns={columnVisibility.visibleColumns}
+              isVisible={columnVisibility.isVisible}
+              toggleColumn={columnVisibility.toggleColumn}
+              resetToDefaults={columnVisibility.resetToDefaults}
+              showAllColumns={columnVisibility.showAllColumns}
+            />
           </div>
         </div>
       </div>
@@ -393,22 +419,22 @@ export const SettlementListPage: React.FC = () => {
           <table className="table">
             <thead>
               <tr>
-                <th>Settlement #</th>
-                <th>Driver</th>
-                <th>Settlement Date</th>
-                <th>Total Kms</th>
-                <th>Gross Earnings</th>
-                <th>Advances</th>
-                <th>Fuel Penalty</th>
-                <th>Net Settlement</th>
-                <th>Payment Status</th>
-                <th style={{ textAlign: 'right' }}>Actions</th>
+                {columnVisibility.isVisible('settlement_no') && <th>Settlement #</th>}
+                {columnVisibility.isVisible('driver') && <th>Driver</th>}
+                {columnVisibility.isVisible('date') && <th>Settlement Date</th>}
+                {columnVisibility.isVisible('kms') && <th>Total Kms</th>}
+                {columnVisibility.isVisible('gross') && <th>Gross Earnings</th>}
+                {columnVisibility.isVisible('advances') && <th>Advances</th>}
+                {columnVisibility.isVisible('fuel_penalty') && <th>Fuel Penalty</th>}
+                {columnVisibility.isVisible('net') && <th>Net Settlement</th>}
+                {columnVisibility.isVisible('status') && <th>Payment Status</th>}
+                {columnVisibility.isVisible('actions') && <th style={{ textAlign: 'right' }}>Actions</th>}
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={10} style={{ textAlign: 'center', padding: '3rem' }}>
+                  <td colSpan={columnVisibility.visibleCount || 10} style={{ textAlign: 'center', padding: '3rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}>
                       <div style={{ width: '1.25rem', height: '1.25rem', border: '2px solid var(--color-primary-300)', borderTopColor: 'var(--color-primary-600)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
                       <span style={{ color: 'var(--text-muted)' }}>Loading Settlements...</span>
@@ -417,88 +443,108 @@ export const SettlementListPage: React.FC = () => {
                 </tr>
               ) : settlementsData?.settlements?.length === 0 ? (
                 <tr>
-                  <td colSpan={10} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+                  <td colSpan={columnVisibility.visibleCount || 10} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
                     No settlements found matching current filters.
                   </td>
                 </tr>
               ) : (
                 settlementsData?.settlements?.map((s: any) => (
                   <tr key={s._id}>
-                    <td>
-                      <div style={{ fontWeight: 'var(--font-weight-bold)', color: 'var(--color-primary-600)' }}>
-                        {s.settlement_number}
-                      </div>
-                      <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
-                        {s.journey_ids?.length || 0} Journey(s)
-                      </div>
-                    </td>
-                    <td>
-                      <div style={{ fontWeight: 'var(--font-weight-medium)' }}>
-                        {s.driver_snapshot?.name || 'Driver'}
-                      </div>
-                      <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
-                        {s.driver_snapshot?.phone}
-                      </div>
-                    </td>
-                    <td>
-                      <div style={{ fontSize: 'var(--font-size-xs)' }}>
-                        {new Date(s.settlement_date).toLocaleDateString()}
-                      </div>
-                    </td>
-                    <td>{s.total_kms} km</td>
-                    <td>₹{Number(s.gross_earnings || 0).toLocaleString('en-IN')}</td>
-                    <td style={{ color: '#dc2626' }}>₹{Number(s.total_advances || 0).toLocaleString('en-IN')}</td>
-                    <td>
-                      {s.fuel_variance_penalty > 0 ? (
-                        <span style={{ color: '#dc2626', fontWeight: 600 }}>
-                          -₹{Number(s.fuel_variance_penalty).toLocaleString('en-IN')}
+                    {columnVisibility.isVisible('settlement_no') && (
+                      <td>
+                        <div style={{ fontWeight: 'var(--font-weight-bold)', color: 'var(--color-primary-600)' }}>
+                          {s.settlement_number}
+                        </div>
+                        <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
+                          {s.journey_ids?.length || 0} Journey(s)
+                        </div>
+                      </td>
+                    )}
+                    {columnVisibility.isVisible('driver') && (
+                      <td>
+                        <div style={{ fontWeight: 'var(--font-weight-medium)' }}>
+                          {s.driver_snapshot?.name || 'Driver'}
+                        </div>
+                        <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
+                          {s.driver_snapshot?.phone}
+                        </div>
+                      </td>
+                    )}
+                    {columnVisibility.isVisible('date') && (
+                      <td>
+                        <div style={{ fontSize: 'var(--font-size-xs)' }}>
+                          {new Date(s.settlement_date).toLocaleDateString()}
+                        </div>
+                      </td>
+                    )}
+                    {columnVisibility.isVisible('kms') && (
+                      <td>{s.total_kms} km</td>
+                    )}
+                    {columnVisibility.isVisible('gross') && (
+                      <td>₹{Number(s.gross_earnings || 0).toLocaleString('en-IN')}</td>
+                    )}
+                    {columnVisibility.isVisible('advances') && (
+                      <td style={{ color: '#dc2626' }}>₹{Number(s.total_advances || 0).toLocaleString('en-IN')}</td>
+                    )}
+                    {columnVisibility.isVisible('fuel_penalty') && (
+                      <td>
+                        {s.fuel_variance_penalty > 0 ? (
+                          <span style={{ color: '#dc2626', fontWeight: 600 }}>
+                            -₹{Number(s.fuel_variance_penalty).toLocaleString('en-IN')}
+                          </span>
+                        ) : (
+                          <span style={{ color: '#059669' }}>₹0</span>
+                        )}
+                      </td>
+                    )}
+                    {columnVisibility.isVisible('net') && (
+                      <td>
+                        <div style={{ fontWeight: 'var(--font-weight-bold)', color: s.net_amount >= 0 ? '#059669' : '#d97706' }}>
+                          {s.net_amount >= 0 ? `+₹${s.net_amount.toLocaleString('en-IN')}` : `-₹${Math.abs(s.net_amount).toLocaleString('en-IN')}`}
+                        </div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                          {s.settlement_type === 'payable_to_driver' ? 'Payable to Driver' : s.settlement_type === 'receivable_from_driver' ? 'Driver Owes Co.' : 'Even'}
+                        </div>
+                      </td>
+                    )}
+                    {columnVisibility.isVisible('status') && (
+                      <td>
+                        <span className={`badge ${s.payment_status === 'paid' ? 'badge-success' : 'badge-warning'}`}>
+                          {s.payment_status}
                         </span>
-                      ) : (
-                        <span style={{ color: '#059669' }}>₹0</span>
-                      )}
-                    </td>
-                    <td>
-                      <div style={{ fontWeight: 'var(--font-weight-bold)', color: s.net_amount >= 0 ? '#059669' : '#d97706' }}>
-                        {s.net_amount >= 0 ? `+₹${s.net_amount.toLocaleString('en-IN')}` : `-₹${Math.abs(s.net_amount).toLocaleString('en-IN')}`}
-                      </div>
-                      <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                        {s.settlement_type === 'payable_to_driver' ? 'Payable to Driver' : s.settlement_type === 'receivable_from_driver' ? 'Driver Owes Co.' : 'Even'}
-                      </div>
-                    </td>
-                    <td>
-                      <span className={`badge ${s.payment_status === 'paid' ? 'badge-success' : 'badge-warning'}`}>
-                        {s.payment_status}
-                      </span>
-                    </td>
-                    <td style={{ textAlign: 'right' }}>
-                      <div style={{ display: 'inline-flex', gap: '0.5rem' }}>
-                        <button
-                          className="btn btn-secondary btn-sm"
-                          onClick={() => {
-                            setSelectedSettlement(s);
-                            setIsStatementModalOpen(true);
-                          }}
-                          title="View Statement Slip"
-                        >
-                          <Printer size={14} />
-                          <span>Slip</span>
-                        </button>
-                        {canEdit && s.payment_status === 'unpaid' && (
+                      </td>
+                    )}
+                    {columnVisibility.isVisible('actions') && (
+                      <td style={{ textAlign: 'right' }}>
+                        <div style={{ display: 'inline-flex', gap: '0.5rem' }}>
                           <button
-                            className={`btn btn-sm ${s.settlement_type === 'payable_to_driver' ? 'btn-primary' : 'btn-secondary'}`}
+                            className="btn btn-secondary btn-sm"
                             onClick={() => {
                               setSelectedSettlement(s);
-                              setDisburseForm({ payment_mode: 'bank_transfer', payment_ref: '' });
-                              setIsDisburseModalOpen(true);
+                              setIsStatementModalOpen(true);
                             }}
-                            title={s.settlement_type === 'payable_to_driver' ? 'Disburse Payout to Driver' : 'Record Collection from Driver'}
+                            title="View Statement Slip"
                           >
-                            <CreditCard size={14} />
-                            <span>{s.settlement_type === 'payable_to_driver' ? 'Pay' : 'Collect'}</span>
+                            <Printer size={14} />
+                            <span>Slip</span>
                           </button>
-                        )}
-                      </div>
-                    </td>
+                          {canEdit && s.payment_status === 'unpaid' && (
+                            <button
+                              className={`btn btn-sm ${s.settlement_type === 'payable_to_driver' ? 'btn-primary' : 'btn-secondary'}`}
+                              onClick={() => {
+                                setSelectedSettlement(s);
+                                setDisburseForm({ payment_mode: 'bank_transfer', payment_ref: '' });
+                                setIsDisburseModalOpen(true);
+                              }}
+                              title={s.settlement_type === 'payable_to_driver' ? 'Disburse Payout to Driver' : 'Record Collection from Driver'}
+                            >
+                              <CreditCard size={14} />
+                              <span>{s.settlement_type === 'payable_to_driver' ? 'Pay' : 'Collect'}</span>
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))
               )}

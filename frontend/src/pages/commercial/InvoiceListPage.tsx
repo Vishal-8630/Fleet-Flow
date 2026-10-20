@@ -35,12 +35,31 @@ import {
   ShieldAlert,
   Percent,
 } from 'lucide-react';
+import { useTableColumnVisibility } from '../../hooks/useTableColumnVisibility';
+import { TableColumnVisibilityMenu } from '../../components/common/TableColumnVisibilityMenu';
+import { ITableColumnConfig } from '../../types/table';
+
+const INVOICE_TABLE_COLUMNS: ITableColumnConfig[] = [
+  { id: 'invoice_no', label: 'Invoice #', isDefaultVisible: true, isRequired: true, description: 'Statutory GST tax invoice number' },
+  { id: 'branch', label: 'Branch', isDefaultVisible: true, isRequired: false, description: 'Issuing regional branch code and name' },
+  { id: 'billed_customer', label: 'Billed Customer', isDefaultVisible: true, isRequired: false, description: 'Corporate billing party and GSTIN' },
+  { id: 'dates', label: 'Date & Due', isDefaultVisible: true, isRequired: false, description: 'Invoice date and credit due date' },
+  { id: 'tax_category', label: 'Tax Category', isDefaultVisible: false, isRequired: false, description: 'RCM Reverse Charge vs Forward Charge' },
+  { id: 'total_invoiced', label: 'Total Invoiced', isDefaultVisible: true, isRequired: false, description: 'Total gross taxable + GST invoice amount' },
+  { id: 'paid_amount', label: 'Paid Amount', isDefaultVisible: true, isRequired: false, description: 'Total collections and advances cleared' },
+  { id: 'balance_due', label: 'Balance Due', isDefaultVisible: true, isRequired: false, description: 'Outstanding balance pending settlement' },
+  { id: 'status', label: 'Status', isDefaultVisible: true, isRequired: true, description: 'Invoice payment lifecycle status' },
+  { id: 'actions', label: 'Actions', isDefaultVisible: true, isRequired: true, description: 'View, Print, and Payment operations' },
+];
 
 export const InvoiceListPage: React.FC = () => {
   const queryClient = useQueryClient();
-  const { role, enabledFeatures = [] } = useAuthStore();
+  const { user, role, enabledFeatures = [] } = useAuthStore();
   const isUnlocked = enabledFeatures.includes('MOD_BILLING_INVOICE');
   const canEdit = role === 'admin' || role === 'accountant';
+
+  // Table Column Visibility hook
+  const columnVisibility = useTableColumnVisibility('invoice_list', INVOICE_TABLE_COLUMNS, user?.id);
 
   // State
   const [page, setPage] = useState(1);
@@ -366,7 +385,7 @@ export const InvoiceListPage: React.FC = () => {
       </div>
 
       {/* 3. Search & Filter Bar */}
-      <div className="card" style={{ padding: '1rem', marginBottom: '1.5rem' }}>
+      <div className="card" style={{ padding: '1rem', marginBottom: '1.5rem', overflow: 'visible', position: 'relative', zIndex: 20 }}>
         <div className="filter-toolbar">
           <div className="filter-toolbar-left">
             <div style={{ display: 'flex', width: '100%', alignItems: 'center', gap: '0.5rem', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', padding: '0.5rem 0.75rem' }}>
@@ -433,6 +452,15 @@ export const InvoiceListPage: React.FC = () => {
               <option value="true">RCM Invoices</option>
               <option value="false">Forward Charge</option>
             </select>
+
+            <TableColumnVisibilityMenu
+              columns={INVOICE_TABLE_COLUMNS}
+              visibleColumns={columnVisibility.visibleColumns}
+              isVisible={columnVisibility.isVisible}
+              toggleColumn={columnVisibility.toggleColumn}
+              resetToDefaults={columnVisibility.resetToDefaults}
+              showAllColumns={columnVisibility.showAllColumns}
+            />
           </div>
         </div>
       </div>
@@ -443,22 +471,22 @@ export const InvoiceListPage: React.FC = () => {
           <table className="table">
             <thead>
               <tr>
-                <th>Invoice #</th>
-                <th>Branch</th>
-                <th>Billed Customer</th>
-                <th>Date & Due</th>
-                <th>Tax Category</th>
-                <th>Total Invoiced</th>
-                <th>Paid Amount</th>
-                <th>Balance Due</th>
-                <th>Status</th>
-                <th style={{ textAlign: 'right' }}>Actions</th>
+                {columnVisibility.isVisible('invoice_no') && <th>Invoice #</th>}
+                {columnVisibility.isVisible('branch') && <th>Branch</th>}
+                {columnVisibility.isVisible('billed_customer') && <th>Billed Customer</th>}
+                {columnVisibility.isVisible('dates') && <th>Date & Due</th>}
+                {columnVisibility.isVisible('tax_category') && <th>Tax Category</th>}
+                {columnVisibility.isVisible('total_invoiced') && <th>Total Invoiced</th>}
+                {columnVisibility.isVisible('paid_amount') && <th>Paid Amount</th>}
+                {columnVisibility.isVisible('balance_due') && <th>Balance Due</th>}
+                {columnVisibility.isVisible('status') && <th>Status</th>}
+                {columnVisibility.isVisible('actions') && <th style={{ textAlign: 'right' }}>Actions</th>}
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={10} style={{ textAlign: 'center', padding: '3rem' }}>
+                  <td colSpan={columnVisibility.visibleCount || 10} style={{ textAlign: 'center', padding: '3rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}>
                       <div style={{ width: '1.25rem', height: '1.25rem', border: '2px solid var(--color-primary-300)', borderTopColor: 'var(--color-primary-600)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
                       <span style={{ color: 'var(--text-muted)' }}>Loading Freight Invoices...</span>
@@ -467,79 +495,98 @@ export const InvoiceListPage: React.FC = () => {
                 </tr>
               ) : invoicesData?.invoices?.length === 0 ? (
                 <tr>
-                  <td colSpan={10} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+                  <td colSpan={columnVisibility.visibleCount || 10} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
                     No freight invoices found matching current criteria.
                   </td>
                 </tr>
               ) : (
                 invoicesData?.invoices?.map((inv: any) => (
                   <tr key={inv._id}>
-                    <td>
-                      <div style={{ fontWeight: 'var(--font-weight-bold)', color: 'var(--color-primary-600)' }}>
-                        {inv.invoice_number}
-                      </div>
-                      <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
-                        {inv.lr_ids?.length || 0} Linked LR(s)
-                      </div>
-                    </td>
-                    <td>
-                      {inv.branch_id ? (
-                        <div>
-                          <span className="badge badge-info" style={{ fontSize: '0.6875rem' }}>
-                            {inv.branch_id.branch_code}
-                          </span>
-                          <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: '0.125rem' }}>
-                            {inv.branch_id.branch_name}
-                          </div>
+                    {columnVisibility.isVisible('invoice_no') && (
+                      <td>
+                        <div style={{ fontWeight: 'var(--font-weight-bold)', color: 'var(--color-primary-600)' }}>
+                          {inv.invoice_number}
                         </div>
-                      ) : (
-                        <span className="badge badge-neutral" style={{ fontSize: '0.6875rem' }}>
-                          Company Direct
+                        <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
+                          {inv.lr_ids?.length || 0} Linked LR(s)
+                        </div>
+                      </td>
+                    )}
+                    {columnVisibility.isVisible('branch') && (
+                      <td>
+                        {inv.branch_id ? (
+                          <div>
+                            <span className="badge badge-info" style={{ fontSize: '0.6875rem' }}>
+                              {inv.branch_id.branch_code}
+                            </span>
+                            <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: '0.125rem' }}>
+                              {inv.branch_id.branch_name}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="badge badge-neutral" style={{ fontSize: '0.6875rem' }}>
+                            Company Direct
+                          </span>
+                        )}
+                      </td>
+                    )}
+                    {columnVisibility.isVisible('billed_customer') && (
+                      <td>
+                        <div style={{ fontWeight: 'var(--font-weight-medium)' }}>
+                          {inv.billing_party_snapshot?.name || 'Customer'}
+                        </div>
+                        <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
+                          GSTIN: {inv.billing_party_snapshot?.gstin || 'Unregistered'}
+                        </div>
+                      </td>
+                    )}
+                    {columnVisibility.isVisible('dates') && (
+                      <td>
+                        <div style={{ fontSize: 'var(--font-size-xs)' }}>
+                          Issued: {new Date(inv.invoice_date).toLocaleDateString()}
+                        </div>
+                        <div style={{ fontSize: 'var(--font-size-xs)', color: new Date(inv.due_date) < new Date() && inv.balance_amount > 0 ? 'var(--color-danger)' : 'var(--text-muted)' }}>
+                          Due: {new Date(inv.due_date).toLocaleDateString()}
+                        </div>
+                      </td>
+                    )}
+                    {columnVisibility.isVisible('tax_category') && (
+                      <td>
+                        {inv.is_rcm ? (
+                          <span className="badge badge-primary" title="Recipient pays GST under RCM Section 9(3)">
+                            RCM (5%)
+                          </span>
+                        ) : (
+                          <span className="badge badge-warning" title="Carrier collects and deposits GST">
+                            Forward Charge ({inv.is_interstate ? `IGST ${inv.igst_rate}%` : `CGST+SGST`})
+                          </span>
+                        )}
+                      </td>
+                    )}
+                    {columnVisibility.isVisible('total_invoiced') && (
+                      <td style={{ fontWeight: 'var(--font-weight-bold)' }}>
+                        ₹{Number(inv.total_amount || 0).toLocaleString('en-IN')}
+                      </td>
+                    )}
+                    {columnVisibility.isVisible('paid_amount') && (
+                      <td style={{ color: '#059669', fontWeight: 'var(--font-weight-medium)' }}>
+                        ₹{Number(inv.paid_amount || 0).toLocaleString('en-IN')}
+                      </td>
+                    )}
+                    {columnVisibility.isVisible('balance_due') && (
+                      <td style={{ fontWeight: 'var(--font-weight-bold)', color: inv.balance_amount > 0 ? '#dc2626' : '#059669' }}>
+                        ₹{Number(inv.balance_amount || 0).toLocaleString('en-IN')}
+                      </td>
+                    )}
+                    {columnVisibility.isVisible('status') && (
+                      <td>
+                        <span className={`badge ${inv.status === 'paid' ? 'badge-success' : inv.status === 'partially_paid' ? 'badge-warning' : inv.status === 'issued' ? 'badge-primary' : 'badge-danger'}`}>
+                          {inv.status?.replace(/_/g, ' ')}
                         </span>
-                      )}
-                    </td>
-                    <td>
-                      <div style={{ fontWeight: 'var(--font-weight-medium)' }}>
-                        {inv.billing_party_snapshot?.name || 'Customer'}
-                      </div>
-                      <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
-                        GSTIN: {inv.billing_party_snapshot?.gstin || 'Unregistered'}
-                      </div>
-                    </td>
-                    <td>
-                      <div style={{ fontSize: 'var(--font-size-xs)' }}>
-                        Issued: {new Date(inv.invoice_date).toLocaleDateString()}
-                      </div>
-                      <div style={{ fontSize: 'var(--font-size-xs)', color: new Date(inv.due_date) < new Date() && inv.balance_amount > 0 ? 'var(--color-danger)' : 'var(--text-muted)' }}>
-                        Due: {new Date(inv.due_date).toLocaleDateString()}
-                      </div>
-                    </td>
-                    <td>
-                      {inv.is_rcm ? (
-                        <span className="badge badge-primary" title="Recipient pays GST under RCM Section 9(3)">
-                          RCM (5%)
-                        </span>
-                      ) : (
-                        <span className="badge badge-warning" title="Carrier collects and deposits GST">
-                          Forward Charge ({inv.is_interstate ? `IGST ${inv.igst_rate}%` : `CGST+SGST`})
-                        </span>
-                      )}
-                    </td>
-                    <td style={{ fontWeight: 'var(--font-weight-bold)' }}>
-                      ₹{Number(inv.total_amount || 0).toLocaleString('en-IN')}
-                    </td>
-                    <td style={{ color: '#059669', fontWeight: 'var(--font-weight-medium)' }}>
-                      ₹{Number(inv.paid_amount || 0).toLocaleString('en-IN')}
-                    </td>
-                    <td style={{ fontWeight: 'var(--font-weight-bold)', color: inv.balance_amount > 0 ? '#dc2626' : '#059669' }}>
-                      ₹{Number(inv.balance_amount || 0).toLocaleString('en-IN')}
-                    </td>
-                    <td>
-                      <span className={`badge ${inv.status === 'paid' ? 'badge-success' : inv.status === 'partially_paid' ? 'badge-warning' : inv.status === 'issued' ? 'badge-primary' : 'badge-danger'}`}>
-                        {inv.status?.replace(/_/g, ' ')}
-                      </span>
-                    </td>
-                    <td style={{ textAlign: 'right' }}>
+                      </td>
+                    )}
+                    {columnVisibility.isVisible('actions') && (
+                      <td style={{ textAlign: 'right' }}>
                       <div style={{ display: 'inline-flex', gap: '0.5rem' }}>
                         <button
                           className="btn btn-secondary btn-sm"
@@ -584,6 +631,7 @@ export const InvoiceListPage: React.FC = () => {
                         )}
                       </div>
                     </td>
+                    )}
                   </tr>
                 ))
               )}

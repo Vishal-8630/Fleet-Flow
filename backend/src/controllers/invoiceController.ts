@@ -216,21 +216,31 @@ export const createInvoice = async (req: Request, res: Response) => {
 
     // Resolve Line Items: If items are empty but lr_ids are provided, auto-populate from LRs
     let processedItems = items;
-    if (lr_ids.length > 0 && (!items || items.length === 0)) {
+    if (lr_ids.length > 0) {
       const entries = await Entry.find({ _id: { $in: lr_ids }, company_id: companyId });
-      processedItems = entries.map((e) => ({
-        entry_id: e._id,
-        lr_no: e.lr_no,
-        lr_date: e.lr_date || new Date(),
-        vehicle_no: e.vehicle_number || 'UNKNOWN',
-        from_location: e.from_location || '-',
-        to_location: e.to_location || '-',
-        goods_description: e.goods_description || 'Transport of Goods',
-        chargeable_weight: e.chargeable_weight_tonnes || 0,
-        rate: e.rate_per_tonne || e.freight_amount || 0,
-        rate_type: e.rate_per_tonne ? 'per_tonne' : 'fixed',
-        amount: e.freight_amount || 0,
-      }));
+      for (const entry of entries) {
+        if (entry.billing_party_id && String(entry.billing_party_id) !== String(billing_party_id)) {
+          return res.status(400).json({
+            code: 'BILLING_PARTY_MISMATCH',
+            error: `Lorry Receipt '${entry.lr_no}' belongs to a different Billing Party and cannot be combined into this invoice.`,
+          });
+        }
+      }
+      if (!items || items.length === 0) {
+        processedItems = entries.map((e) => ({
+          entry_id: e._id,
+          lr_no: e.lr_no,
+          lr_date: e.lr_date || new Date(),
+          vehicle_no: e.vehicle_number || 'UNKNOWN',
+          from_location: e.from_location || '-',
+          to_location: e.to_location || '-',
+          goods_description: e.goods_description || 'Transport of Goods',
+          chargeable_weight: e.chargeable_weight_tonnes || 0,
+          rate: e.rate_per_tonne || e.freight_amount || 0,
+          rate_type: e.rate_per_tonne ? 'per_tonne' : 'fixed',
+          amount: e.freight_amount || 0,
+        }));
+      }
     } else {
       // Ensure all required fields exist on passed items
       processedItems = items.map((it: any) => ({

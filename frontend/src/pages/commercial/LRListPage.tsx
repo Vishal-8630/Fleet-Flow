@@ -21,6 +21,9 @@ import { Modal } from '../../components/common/Modal';
 import { toast } from '../../stores/uiStore';
 import { useAuthStore } from '../../stores/authStore';
 import { FeatureGate } from '../../components/common/FeatureGate';
+import { useTableColumnVisibility } from '../../hooks/useTableColumnVisibility';
+import { TableColumnVisibilityMenu } from '../../components/common/TableColumnVisibilityMenu';
+import { ITableColumnConfig } from '../../types/table';
 import {
   Receipt,
   FileCheck2,
@@ -37,14 +40,31 @@ import {
   Shield,
   Layers,
   Building2,
+  AlertTriangle,
 } from 'lucide-react';
+
+const LR_TABLE_COLUMNS: ITableColumnConfig[] = [
+  { id: 'select', label: 'Select', isDefaultVisible: true, isRequired: true, description: 'Selection checkbox for journey bundling' },
+  { id: 'lr_details', label: 'LR Details', isDefaultVisible: true, isRequired: true, description: 'Consignment number, date, billing ref, and linked trip' },
+  { id: 'branch', label: 'Branch', isDefaultVisible: false, isRequired: false, description: 'Originating regional branch code and name' },
+  { id: 'vehicle_driver', label: 'Vehicle & Driver', isDefaultVisible: true, isRequired: false, description: 'Assigned truck registration number and operating driver' },
+  { id: 'route', label: 'Route Corridor', isDefaultVisible: true, isRequired: false, description: 'Origin and destination dispatch corridor' },
+  { id: 'parties', label: 'Consignor & Consignee', isDefaultVisible: true, isRequired: false, description: 'Shipper and consignee business party names' },
+  { id: 'cargo_weight', label: 'Cargo & Weight', isDefaultVisible: false, isRequired: false, description: 'Commodity description, package count, and weight in tonnes' },
+  { id: 'freight_terms', label: 'Freight & Terms', isDefaultVisible: false, isRequired: false, description: 'Total freight amount and billing payment terms' },
+  { id: 'status', label: 'Status', isDefaultVisible: true, isRequired: true, description: 'Consignment lifecycle status' },
+  { id: 'actions', label: 'Actions', isDefaultVisible: true, isRequired: true, description: 'Operational actions (Create Journey, Print, Cancel)' },
+];
 
 export const LRListPage: React.FC = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { role, enabledFeatures = [] } = useAuthStore();
+  const { user, role, enabledFeatures = [] } = useAuthStore();
   const isUnlocked = enabledFeatures.includes('MOD_LR_ENGINE');
   const canEdit = role === 'admin' || role === 'dispatcher' || role === 'accountant';
+
+  // Table Column Visibility hook
+  const columnVisibility = useTableColumnVisibility('lr_list', LR_TABLE_COLUMNS, user?.id);
 
   // State
   const [page, setPage] = useState(1);
@@ -63,7 +83,8 @@ export const LRListPage: React.FC = () => {
   // Form state (persists until Cancel or Submit)
   const initialForm = {
     branch_id: '',
-    journey_id: '',
+    truck_id: '',
+    driver_id: '',
     lr_no: '',
     bill_no: '',
     lr_date: new Date().toISOString().split('T')[0],
@@ -117,21 +138,11 @@ export const LRListPage: React.FC = () => {
     },
   });
 
-  const activeBranches = Array.isArray(branchesData)
-    ? branchesData.filter((b: any) => b.is_active)
-    : [];
-
-  // Active journeys for linked LR creation
-  const { data: activeJourneysData } = useQuery({
-    queryKey: ['active-journeys-lookup'],
-    enabled: isUnlocked && isCreateModalOpen,
-    queryFn: async () => {
-      const res = await api.get('/operations/journeys', {
-        params: { status: 'active', limit: 100 },
-      });
-      return res.data?.journeys || [];
-    },
-  });
+  const activeBranches = React.useMemo(() => {
+    return Array.isArray(branchesData)
+      ? branchesData.filter((b: any) => b.is_active)
+      : [];
+  }, [branchesData]);
 
   const { data: lrsData, isLoading } = useQuery({
     queryKey: ['lr-list', page, statusFilter, termsFilter, branchFilter, assignmentFilter, searchQuery],
@@ -157,6 +168,26 @@ export const LRListPage: React.FC = () => {
     },
   });
 
+  // Registered fleet trucks for asset selector
+  const { data: trucksData, isLoading: trucksLoading } = useQuery({
+    queryKey: ['available-trucks-lookup'],
+    enabled: isUnlocked && isCreateModalOpen,
+    queryFn: async () => {
+      const res = await api.get('/fleet/trucks?limit=100');
+      return res.data?.trucks || [];
+    },
+  });
+
+  // Registered professional drivers for asset selector
+  const { data: driversData, isLoading: driversLoading } = useQuery({
+    queryKey: ['active-drivers-lookup'],
+    enabled: isUnlocked && isCreateModalOpen,
+    queryFn: async () => {
+      const res = await api.get('/fleet/drivers?limit=100');
+      return res.data?.drivers || [];
+    },
+  });
+
   // Mutations
   const createMutation = useMutation({
     mutationFn: async (payload: any) => {
@@ -171,7 +202,12 @@ export const LRListPage: React.FC = () => {
       setFormData(initialForm);
     },
     onError: (err: any) => {
-      toast.error(err.message || 'Failed to create Lorry Receipt.');
+      const errorMsg =
+        err.response?.data?.error ||
+        err.response?.data?.message ||
+        err.message ||
+        'Failed to create Lorry Receipt.';
+      toast.error(errorMsg);
     },
   });
 
@@ -190,62 +226,111 @@ export const LRListPage: React.FC = () => {
     },
   });
 
-  // Default branch assignment rules when opening create modal (DEC-010)
-  React.useEffect(() => {
-    if (isCreateModalOpen && !formData.journey_id && !formData.branch_id) {
-      if (activeBranches.length === 1) {
-        setFormData((prev) => ({ ...prev, branch_id: activeBranches[0]._id }));
-      } else if (activeBranches.length > 1) {
-        const headOffice = activeBranches.find((b: any) => b.is_head_office);
-        if (headOffice) {
-          setFormData((prev) => ({ ...prev, branch_id: headOffice._id }));
-        }
-      }
-    }
-  }, [isCreateModalOpen, activeBranches]);
 
-  const handleJourneyChange = (journeyId: string) => {
-    if (!journeyId) {
-      setFormData((prev) => ({ ...prev, journey_id: '' }));
-      return;
-    }
+  const availableTrucks: any[] = Array.isArray(trucksData)
+    ? trucksData
+    : (trucksData as any)?.trucks || [];
+  const registeredDrivers: any[] = Array.isArray(driversData)
+    ? driversData
+    : (driversData as any)?.drivers || [];
 
-    const selectedJourney = activeJourneysData?.find((j: any) => j._id === journeyId);
-    if (!selectedJourney) return;
+  // Filter out deleted, decommissioned, or otherwise ineligible trucks for new LRs
+  const eligibleTrucks = availableTrucks.filter((t: any) => {
+    if (t.is_deleted) return false;
+    if (t.status === 'decommissioned') return false;
+    return true;
+  });
 
-    const journeyBranchId = selectedJourney.branch_id?._id || selectedJourney.branch_id;
-    const originCity = selectedJourney.from_location?.city;
-    const originState = selectedJourney.from_location?.state;
-    const destCity = selectedJourney.to_location?.city;
-    const destState = selectedJourney.to_location?.state;
-
-    setFormData((prev) => ({
-      ...prev,
-      journey_id: journeyId,
-      branch_id: journeyBranchId ? String(journeyBranchId) : prev.branch_id,
-      vehicle_number: selectedJourney.truck_id?.truck_no || prev.vehicle_number,
-      driver_name: selectedJourney.driver_id?.name || prev.driver_name,
-      driver_phone: selectedJourney.driver_id?.phone || prev.driver_phone,
-      from_location: originCity ? [originCity, originState].filter(Boolean).join(', ') : prev.from_location,
-      to_location: destCity ? [destCity, destState].filter(Boolean).join(', ') : prev.to_location,
-      billing_party_id: (selectedJourney.billing_party_id?._id || selectedJourney.billing_party_id) ? String(selectedJourney.billing_party_id?._id || selectedJourney.billing_party_id) : prev.billing_party_id,
-    }));
-  };
+  // Filter out deleted, terminated, or on-leave drivers
+  const eligibleDrivers = registeredDrivers.filter((d: any) => {
+    if (d.is_deleted) return false;
+    if (d.status === 'terminated' || d.status === 'on_leave') return false;
+    return true;
+  });
 
   const selectedBranch = activeBranches.find((b: any) => b._id === formData.branch_id);
-  const selectedJourney = activeJourneysData?.find((j: any) => j._id === formData.journey_id);
-  const isBranchInherited = Boolean(
-    formData.journey_id &&
-    selectedJourney?.branch_id &&
-    formData.branch_id === String(selectedJourney.branch_id?._id || selectedJourney.branch_id)
+  const displayTrucks = eligibleTrucks;
+  const displayDrivers = eligibleDrivers;
+
+  const selectedTruck = availableTrucks.find((t: any) => String(t._id) === String(formData.truck_id)) || null;
+  const selectedDriver = registeredDrivers.find((d: any) => String(d._id) === String(formData.driver_id)) || null;
+  const selectedTruckComplianceExpired = Boolean(
+    selectedTruck && (selectedTruck.compliance_status === 'EXPIRED' || selectedTruck.is_compliant === false)
   );
+
   const previewPrefix = selectedBranch
     ? (selectedBranch.lr_prefix || `${selectedBranch.branch_code}-LR-`)
     : 'LR-';
 
+  const handleTruckChange = (truckId: string) => {
+    const truck = availableTrucks.find((t: any) => String(t._id) === String(truckId));
+    if (!truck) {
+      setFormData((prev) => ({
+        ...prev,
+        truck_id: '',
+        vehicle_number: '',
+      }));
+      return;
+    }
+
+    setFormData((prev) => {
+      let newDriverId = prev.driver_id;
+      let newDriverName = prev.driver_name;
+      let newDriverPhone = prev.driver_phone;
+
+      // Default Driver Convenience: If truck has a registered current driver and no driver has yet been selected
+      const assignedDriverId = truck.current_driver_id?._id || truck.current_driver_id;
+      if (!prev.driver_id && assignedDriverId) {
+        const assignedDriver = registeredDrivers.find((d: any) => String(d._id) === String(assignedDriverId));
+        if (assignedDriver && assignedDriver.status === 'active' && !assignedDriver.is_deleted) {
+          newDriverId = String(assignedDriver._id);
+          newDriverName = assignedDriver.name || '';
+          newDriverPhone = assignedDriver.phone || '';
+        }
+      }
+
+      return {
+        ...prev,
+        truck_id: String(truck._id),
+        vehicle_number: truck.truck_no || '',
+        driver_id: newDriverId,
+        driver_name: newDriverName,
+        driver_phone: newDriverPhone,
+      };
+    });
+  };
+
+  const handleDriverChange = (driverId: string) => {
+    const driver = registeredDrivers.find((d: any) => String(d._id) === String(driverId));
+    if (!driver) {
+      setFormData((prev) => ({
+        ...prev,
+        driver_id: '',
+        driver_name: '',
+        driver_phone: '',
+      }));
+      return;
+    }
+
+    setFormData((prev) => ({
+      ...prev,
+      driver_id: String(driver._id),
+      driver_name: driver.name || '',
+      driver_phone: driver.phone || '',
+    }));
+  };
+
   const handleCreateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.vehicle_number || !formData.from_location || !formData.to_location) {
+    if (!formData.billing_party_id) {
+      toast.error('A registered Billing Party is mandatory to issue a Lorry Receipt.');
+      return;
+    }
+    if (!formData.truck_id || !formData.driver_id) {
+      toast.error('Registered Commercial Vehicle and Professional Driver are mandatory.');
+      return;
+    }
+    if (!formData.from_location || !formData.to_location) {
       toast.error('Vehicle number, from location, and to location are required.');
       return;
     }
@@ -256,7 +341,8 @@ export const LRListPage: React.FC = () => {
 
     const payload = {
       branch_id: formData.branch_id || undefined,
-      journey_id: formData.journey_id || undefined,
+      truck_id: formData.truck_id,
+      driver_id: formData.driver_id,
       lr_no: formData.lr_no || undefined,
       bill_no: formData.bill_no || undefined,
       lr_date: new Date(formData.lr_date),
@@ -265,7 +351,7 @@ export const LRListPage: React.FC = () => {
       driver_phone: formData.driver_phone,
       from_location: formData.from_location,
       to_location: formData.to_location,
-      billing_party_id: formData.billing_party_id || undefined,
+      billing_party_id: formData.billing_party_id,
       consignor: {
         name: formData.consignor_name,
         address: formData.consignor_address,
@@ -401,7 +487,7 @@ export const LRListPage: React.FC = () => {
       </div>
 
       {/* 3. Search & Filter Bar */}
-      <div className="card" style={{ padding: '1rem', marginBottom: '1.5rem' }}>
+      <div className="card" style={{ padding: '1rem', marginBottom: '1.5rem', overflow: 'visible', position: 'relative', zIndex: 20 }}>
         <div className="filter-toolbar">
           <div className="filter-toolbar-left">
             <div style={{ display: 'flex', width: '100%', alignItems: 'center', gap: '0.5rem', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', padding: '0.5rem 0.75rem' }}>
@@ -481,6 +567,15 @@ export const LRListPage: React.FC = () => {
               <option value="">All Consignments</option>
               <option value="unassigned">Unassigned (Ready for Trip)</option>
             </select>
+
+            <TableColumnVisibilityMenu
+              columns={LR_TABLE_COLUMNS}
+              visibleColumns={columnVisibility.visibleColumns}
+              isVisible={columnVisibility.isVisible}
+              toggleColumn={columnVisibility.toggleColumn}
+              resetToDefaults={columnVisibility.resetToDefaults}
+              showAllColumns={columnVisibility.showAllColumns}
+            />
           </div>
         </div>
       </div>
@@ -556,51 +651,53 @@ export const LRListPage: React.FC = () => {
           <table className="table">
             <thead>
               <tr>
-                <th style={{ width: '40px', textAlign: 'center' }}>
-                  <input
-                    type="checkbox"
-                    aria-label="Select all eligible LRs"
-                    checked={
-                      (lrsData?.entries || []).filter((lr: any) => lr.status === 'active' && !lr.journey_id).length > 0 &&
-                      (lrsData?.entries || [])
-                        .filter((lr: any) => lr.status === 'active' && !lr.journey_id)
-                        .every((lr: any) => selectedLrIds.includes(lr._id))
-                    }
-                    disabled={
-                      (lrsData?.entries || []).filter((lr: any) => lr.status === 'active' && !lr.journey_id).length === 0
-                    }
-                    onChange={() => {
-                      const eligibleEntries = (lrsData?.entries || []).filter(
-                        (lr: any) => lr.status === 'active' && !lr.journey_id
-                      );
-                      const allSelected =
-                        eligibleEntries.length > 0 &&
-                        eligibleEntries.every((lr: any) => selectedLrIds.includes(lr._id));
-                      if (allSelected) {
-                        const eligibleIdSet = new Set(eligibleEntries.map((l: any) => l._id));
-                        setSelectedLrIds((prev) => prev.filter((id) => !eligibleIdSet.has(id)));
-                      } else {
-                        const newSet = new Set([...selectedLrIds, ...eligibleEntries.map((l: any) => l._id)]);
-                        setSelectedLrIds(Array.from(newSet));
+                {columnVisibility.isVisible('select') && (
+                  <th style={{ width: '40px', textAlign: 'center' }}>
+                    <input
+                      type="checkbox"
+                      aria-label="Select all eligible LRs"
+                      checked={
+                        (lrsData?.entries || []).filter((lr: any) => lr.status === 'active' && !lr.journey_id).length > 0 &&
+                        (lrsData?.entries || [])
+                          .filter((lr: any) => lr.status === 'active' && !lr.journey_id)
+                          .every((lr: any) => selectedLrIds.includes(lr._id))
                       }
-                    }}
-                  />
-                </th>
-                <th>LR Details</th>
-                <th>Branch</th>
-                <th>Vehicle & Driver</th>
-                <th>Route Corridor</th>
-                <th>Consignor & Consignee</th>
-                <th>Cargo & Weight</th>
-                <th>Freight & Terms</th>
-                <th>Status</th>
-                <th style={{ textAlign: 'right' }}>Actions</th>
+                      disabled={
+                        (lrsData?.entries || []).filter((lr: any) => lr.status === 'active' && !lr.journey_id).length === 0
+                      }
+                      onChange={() => {
+                        const eligibleEntries = (lrsData?.entries || []).filter(
+                          (lr: any) => lr.status === 'active' && !lr.journey_id
+                        );
+                        const allSelected =
+                          eligibleEntries.length > 0 &&
+                          eligibleEntries.every((lr: any) => selectedLrIds.includes(lr._id));
+                        if (allSelected) {
+                          const eligibleIdSet = new Set(eligibleEntries.map((l: any) => l._id));
+                          setSelectedLrIds((prev) => prev.filter((id) => !eligibleIdSet.has(id)));
+                        } else {
+                          const newSet = new Set([...selectedLrIds, ...eligibleEntries.map((l: any) => l._id)]);
+                          setSelectedLrIds(Array.from(newSet));
+                        }
+                      }}
+                    />
+                  </th>
+                )}
+                {columnVisibility.isVisible('lr_details') && <th>LR Details</th>}
+                {columnVisibility.isVisible('branch') && <th>Branch</th>}
+                {columnVisibility.isVisible('vehicle_driver') && <th>Vehicle & Driver</th>}
+                {columnVisibility.isVisible('route') && <th>Route Corridor</th>}
+                {columnVisibility.isVisible('parties') && <th>Consignor & Consignee</th>}
+                {columnVisibility.isVisible('cargo_weight') && <th>Cargo & Weight</th>}
+                {columnVisibility.isVisible('freight_terms') && <th>Freight & Terms</th>}
+                {columnVisibility.isVisible('status') && <th>Status</th>}
+                {columnVisibility.isVisible('actions') && <th style={{ textAlign: 'right' }}>Actions</th>}
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={10} style={{ textAlign: 'center', padding: '3rem' }}>
+                  <td colSpan={columnVisibility.visibleCount || 7} style={{ textAlign: 'center', padding: '3rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}>
                       <div style={{ width: '1.25rem', height: '1.25rem', border: '2px solid var(--color-primary-300)', borderTopColor: 'var(--color-primary-600)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
                       <span style={{ color: 'var(--text-muted)' }}>Loading Lorry Receipts...</span>
@@ -609,7 +706,7 @@ export const LRListPage: React.FC = () => {
                 </tr>
               ) : lrsData?.entries?.length === 0 ? (
                 <tr>
-                  <td colSpan={10} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+                  <td colSpan={columnVisibility.visibleCount || 7} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
                     No Lorry Receipts found matching current filters.
                   </td>
                 </tr>
@@ -620,161 +717,181 @@ export const LRListPage: React.FC = () => {
 
                   return (
                     <tr key={lr._id} style={{ backgroundColor: isSelected ? 'var(--color-primary-50)' : undefined }}>
-                      <td style={{ textAlign: 'center' }}>
-                        <input
-                          type="checkbox"
-                          aria-label={`Select LR ${lr.lr_no}`}
-                          checked={isSelected}
-                          disabled={!isEligible}
-                          title={
-                            !isEligible
-                              ? lr.journey_id
-                                ? 'Already assigned to a journey'
-                                : lr.status === 'invoiced'
-                                ? 'Invoiced LRs cannot be assigned to a new journey'
-                                : 'Only active unassigned LRs can be assigned'
-                              : 'Select LR to bundle into a journey'
-                          }
-                          onChange={() => {
-                            if (!isEligible) return;
-                            setSelectedLrIds((prev) =>
-                              prev.includes(lr._id) ? prev.filter((id) => id !== lr._id) : [...prev, lr._id]
-                            );
-                          }}
-                        />
-                      </td>
-                      <td>
-                        <div style={{ fontWeight: 'var(--font-weight-bold)', color: 'var(--color-primary-600)' }}>
-                          {lr.lr_no}
-                        </div>
-                        <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
-                          {new Date(lr.lr_date).toLocaleDateString()} • {lr.bill_no}
-                        </div>
-                        {lr.journey_id && (
-                          <div style={{ marginTop: '0.25rem' }}>
-                            <span
-                              className="badge badge-info"
-                              style={{
-                                fontSize: '0.6875rem',
-                                cursor: 'pointer',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '0.25rem',
-                              }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                const jId = lr.journey_id?._id || lr.journey_id;
-                                navigate(`/operations/journeys/${jId}`);
-                              }}
-                              title="View linked journey details"
-                            >
-                              <Truck size={10} />
-                              <span>Trip: {lr.journey_id.journey_number || 'Linked'}</span>
-                            </span>
+                      {columnVisibility.isVisible('select') && (
+                        <td style={{ textAlign: 'center' }}>
+                          <input
+                            type="checkbox"
+                            aria-label={`Select LR ${lr.lr_no}`}
+                            checked={isSelected}
+                            disabled={!isEligible}
+                            title={
+                              !isEligible
+                                ? lr.journey_id
+                                  ? 'Already assigned to a journey'
+                                  : lr.status === 'invoiced'
+                                  ? 'Invoiced LRs cannot be assigned to a new journey'
+                                  : 'Only active unassigned LRs can be assigned'
+                                : 'Select LR to bundle into a journey'
+                            }
+                            onChange={() => {
+                              if (!isEligible) return;
+                              setSelectedLrIds((prev) =>
+                                prev.includes(lr._id) ? prev.filter((id) => id !== lr._id) : [...prev, lr._id]
+                              );
+                            }}
+                          />
+                        </td>
+                      )}
+                      {columnVisibility.isVisible('lr_details') && (
+                        <td>
+                          <div style={{ fontWeight: 'var(--font-weight-bold)', color: 'var(--color-primary-600)' }}>
+                            {lr.lr_no}
                           </div>
-                        )}
-                      </td>
-                      <td>
-                        {lr.branch_id ? (
-                          <div>
-                            <span className="badge badge-info" style={{ fontSize: '0.6875rem' }}>
-                              {lr.branch_id.branch_code}
-                            </span>
-                            <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: '0.125rem' }}>
-                              {lr.branch_id.branch_name}
+                          <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
+                            {new Date(lr.lr_date).toLocaleDateString()} • {lr.bill_no}
+                          </div>
+                          {lr.journey_id && (
+                            <div style={{ marginTop: '0.25rem' }}>
+                              <span
+                                className="badge badge-info"
+                                style={{
+                                  fontSize: '0.6875rem',
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.25rem',
+                                }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const jId = lr.journey_id?._id || lr.journey_id;
+                                  navigate(`/operations/journeys/${jId}`);
+                                }}
+                                title="View linked journey details"
+                              >
+                                <Truck size={10} />
+                                <span>Trip: {lr.journey_id.journey_number || 'Linked'}</span>
+                              </span>
                             </div>
+                          )}
+                        </td>
+                      )}
+                      {columnVisibility.isVisible('branch') && (
+                        <td>
+                          {lr.branch_id ? (
+                            <div>
+                              <span className="badge badge-info" style={{ fontSize: '0.6875rem' }}>
+                                {lr.branch_id.branch_code}
+                              </span>
+                              <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: '0.125rem' }}>
+                                {lr.branch_id.branch_name}
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="badge badge-neutral" style={{ fontSize: '0.6875rem' }}>
+                              Company Direct
+                            </span>
+                          )}
+                        </td>
+                      )}
+                      {columnVisibility.isVisible('vehicle_driver') && (
+                        <td>
+                          <div style={{ fontWeight: 'var(--font-weight-medium)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                            <Truck size={14} color="var(--text-muted)" />
+                            {lr.vehicle_number}
                           </div>
-                        ) : (
-                          <span className="badge badge-neutral" style={{ fontSize: '0.6875rem' }}>
-                            Company Direct
+                          <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
+                            {lr.driver_name || 'Driver Not Assigned'}
+                          </div>
+                        </td>
+                      )}
+                      {columnVisibility.isVisible('route') && (
+                        <td>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: 'var(--font-size-sm)' }}>
+                            <span>{lr.from_location}</span>
+                            <ArrowRight size={12} color="var(--text-muted)" />
+                            <span>{lr.to_location}</span>
+                          </div>
+                        </td>
+                      )}
+                      {columnVisibility.isVisible('parties') && (
+                        <td>
+                          <div style={{ fontWeight: 'var(--font-weight-medium)', fontSize: 'var(--font-size-xs)' }}>
+                            <span style={{ color: 'var(--text-muted)' }}>From:</span> {lr.consignor?.name}
+                          </div>
+                          <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
+                            <span>To:</span> {lr.consignee?.name}
+                          </div>
+                        </td>
+                      )}
+                      {columnVisibility.isVisible('cargo_weight') && (
+                        <td>
+                          <div style={{ fontSize: 'var(--font-size-xs)', fontWeight: 'var(--font-weight-medium)' }}>
+                            {lr.package_count} {lr.packaging_type} • {lr.goods_description}
+                          </div>
+                          <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
+                            {lr.chargeable_weight_tonnes ? `${lr.chargeable_weight_tonnes} Tonnes` : `${lr.actual_weight_tonnes} Tonnes`}
+                          </div>
+                        </td>
+                      )}
+                      {columnVisibility.isVisible('freight_terms') && (
+                        <td>
+                          <div style={{ fontWeight: 'var(--font-weight-bold)', color: 'var(--text-primary)' }}>
+                            ₹{Number(lr.freight_amount || 0).toLocaleString('en-IN')}
+                          </div>
+                          <span className={`badge ${lr.freight_terms === 'paid' ? 'badge-success' : lr.freight_terms === 'to_pay' ? 'badge-warning' : 'badge-primary'}`}>
+                            {lr.freight_terms?.replace(/_/g, ' ')}
                           </span>
-                        )}
-                      </td>
-                      <td>
-                        <div style={{ fontWeight: 'var(--font-weight-medium)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                          <Truck size={14} color="var(--text-muted)" />
-                          {lr.vehicle_number}
-                        </div>
-                        <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
-                          {lr.driver_name || 'Driver Not Assigned'}
-                        </div>
-                      </td>
-                      <td>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: 'var(--font-size-sm)' }}>
-                          <span>{lr.from_location}</span>
-                          <ArrowRight size={12} color="var(--text-muted)" />
-                          <span>{lr.to_location}</span>
-                        </div>
-                      </td>
-                      <td>
-                        <div style={{ fontWeight: 'var(--font-weight-medium)', fontSize: 'var(--font-size-xs)' }}>
-                          <span style={{ color: 'var(--text-muted)' }}>From:</span> {lr.consignor?.name}
-                        </div>
-                        <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
-                          <span>To:</span> {lr.consignee?.name}
-                        </div>
-                      </td>
-                      <td>
-                        <div style={{ fontSize: 'var(--font-size-xs)', fontWeight: 'var(--font-weight-medium)' }}>
-                          {lr.package_count} {lr.packaging_type} • {lr.goods_description}
-                        </div>
-                        <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
-                          {lr.chargeable_weight_tonnes ? `${lr.chargeable_weight_tonnes} Tonnes` : `${lr.actual_weight_tonnes} Tonnes`}
-                        </div>
-                      </td>
-                      <td>
-                        <div style={{ fontWeight: 'var(--font-weight-bold)', color: 'var(--text-primary)' }}>
-                          ₹{Number(lr.freight_amount || 0).toLocaleString('en-IN')}
-                        </div>
-                        <span className={`badge ${lr.freight_terms === 'paid' ? 'badge-success' : lr.freight_terms === 'to_pay' ? 'badge-warning' : 'badge-primary'}`}>
-                          {lr.freight_terms?.replace(/_/g, ' ')}
-                        </span>
-                      </td>
-                      <td>
-                        <span className={`badge ${lr.status === 'active' ? 'badge-primary' : lr.status === 'invoiced' ? 'badge-success' : 'badge-danger'}`}>
-                          {lr.status}
-                        </span>
-                      </td>
-                      <td style={{ textAlign: 'right' }}>
-                        <div style={{ display: 'inline-flex', gap: '0.5rem', alignItems: 'center' }}>
-                          {canEdit && isEligible && (
-                            <button
-                              className="btn btn-primary btn-sm"
-                              onClick={() =>
-                                navigate('/operations/journeys/new', {
-                                  state: { lr_ids: [lr._id] },
-                                })
-                              }
-                              title="Create Journey with this LR"
-                              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}
-                            >
-                              <Truck size={13} />
-                              <span>Create Journey</span>
-                            </button>
-                          )}
-                          <button
-                            className="btn btn-secondary btn-sm"
-                            onClick={() => handlePrintLR(lr._id, lr)}
-                            title="Print 3-Part Stationary"
-                          >
-                            <Printer size={14} />
-                            <span>Print</span>
-                          </button>
-                          {canEdit && lr.status === 'active' && (
-                            <button
-                              className="btn btn-danger btn-sm"
-                              onClick={() => {
-                                if (confirm(`Are you sure you want to cancel LR ${lr.lr_no}?`)) {
-                                  cancelMutation.mutate(lr._id);
+                        </td>
+                      )}
+                      {columnVisibility.isVisible('status') && (
+                        <td>
+                          <span className={`badge ${lr.status === 'active' ? 'badge-primary' : lr.status === 'invoiced' ? 'badge-success' : 'badge-danger'}`}>
+                            {lr.status}
+                          </span>
+                        </td>
+                      )}
+                      {columnVisibility.isVisible('actions') && (
+                        <td style={{ textAlign: 'right' }}>
+                          <div style={{ display: 'inline-flex', gap: '0.5rem', alignItems: 'center' }}>
+                            {canEdit && isEligible && (
+                              <button
+                                className="btn btn-primary btn-sm"
+                                onClick={() =>
+                                  navigate('/operations/journeys/new', {
+                                    state: { lr_ids: [lr._id] },
+                                  })
                                 }
-                              }}
-                              title="Cancel LR"
+                                title="Create Journey with this LR"
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}
+                              >
+                                <Truck size={13} />
+                                <span>Create Journey</span>
+                              </button>
+                            )}
+                            <button
+                              className="btn btn-secondary btn-sm"
+                              onClick={() => handlePrintLR(lr._id, lr)}
+                              title="Print 3-Part Stationary"
                             >
-                              <XCircle size={14} />
+                              <Printer size={14} />
+                              <span>Print</span>
                             </button>
-                          )}
-                        </div>
-                      </td>
+                            {canEdit && lr.status === 'active' && (
+                              <button
+                                className="btn btn-danger btn-sm"
+                                onClick={() => {
+                                  if (confirm(`Are you sure you want to cancel LR ${lr.lr_no}?`)) {
+                                    cancelMutation.mutate(lr._id);
+                                  }
+                                }}
+                                title="Cancel LR"
+                              >
+                                <XCircle size={14} />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   );
                 })
@@ -835,42 +952,12 @@ export const LRListPage: React.FC = () => {
               </span>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem' }}>
-              {/* Linked Trip Selector */}
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label" style={{ fontSize: 'var(--font-size-xs)' }}>
-                  Link to Originating Trip (Optional)
-                </label>
-                <select
-                  className="form-control"
-                  value={formData.journey_id}
-                  onChange={(e) => handleJourneyChange(e.target.value)}
-                  style={{ fontSize: 'var(--font-size-xs)', height: '38px' }}
-                >
-                  <option value="">-- Standalone Consignment (No Trip Link) --</option>
-                  {activeJourneysData?.map((j: any) => (
-                    <option key={j._id} value={j._id}>
-                      {j.journey_number} — {j.truck_id?.truck_no || 'Rig'} ({j.from_location?.city} → {j.to_location?.city})
-                    </option>
-                  ))}
-                </select>
-                <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-                  Selecting a trip auto-fills vehicle, driver, route corridor, and responsible branch.
-                </div>
-              </div>
-
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1rem' }}>
               {/* Responsible Branch Selector */}
               <div className="form-group" style={{ marginBottom: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
-                  <label className="form-label" style={{ fontSize: 'var(--font-size-xs)', marginBottom: 0 }}>
-                    Responsible Regional Branch
-                  </label>
-                  {isBranchInherited && (
-                    <span className="badge badge-info" style={{ fontSize: '0.625rem' }}>
-                      Inherited from Trip
-                    </span>
-                  )}
-                </div>
+                <label className="form-label" style={{ fontSize: 'var(--font-size-xs)', marginBottom: '0.25rem' }}>
+                  Responsible Regional Branch
+                </label>
                 <select
                   className="form-control"
                   value={formData.branch_id}
@@ -919,7 +1006,9 @@ export const LRListPage: React.FC = () => {
               />
             </div>
             <div className="form-group">
-              <label className="form-label">LR Date</label>
+              <label className="form-label">
+                LR Date <span style={{ color: 'var(--color-danger)' }}>*</span>
+              </label>
               <input
                 type="date"
                 className="form-control"
@@ -928,26 +1017,95 @@ export const LRListPage: React.FC = () => {
                 required
               />
             </div>
-            <div className="form-group">
-              <label className="form-label">Vehicle Number</label>
-              <input
-                type="text"
-                className="form-control"
-                placeholder="e.g. MH-12-AB-1234"
-                value={formData.vehicle_number}
-                onChange={(e) => setFormData({ ...formData, vehicle_number: e.target.value.toUpperCase() })}
-                required
-              />
+          </div>
+
+          {/* Assigned Fleet Vehicle & Professional Driver Card */}
+          <div style={{ backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', padding: '1rem', marginBottom: '1rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Truck size={16} color="var(--color-primary-600)" />
+                <span style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-semibold)', color: 'var(--text-main)' }}>
+                  Assigned Fleet Vehicle & Professional Driver
+                </span>
+              </div>
             </div>
-            <div className="form-group">
-              <label className="form-label">Driver Name & Phone</label>
-              <input
-                type="text"
-                className="form-control"
-                placeholder="e.g. Rameshwar (9876543210)"
-                value={formData.driver_name}
-                onChange={(e) => setFormData({ ...formData, driver_name: e.target.value })}
-              />
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
+              {/* Truck Selector */}
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                  <label className="form-label" style={{ fontSize: 'var(--font-size-xs)', marginBottom: 0 }}>
+                    Assigned Commercial Vehicle <span style={{ color: 'var(--color-danger)' }}>*</span>
+                  </label>
+                  {selectedTruck?.compliance_status === 'COMPLIANT' && (
+                    <span className="badge badge-success" style={{ fontSize: '0.625rem' }}>
+                      COMPLIANT
+                    </span>
+                  )}
+                  {selectedTruckComplianceExpired && (
+                    <span className="badge badge-warning" style={{ fontSize: '0.625rem' }}>
+                      COMPLIANCE_EXPIRED
+                    </span>
+                  )}
+                </div>
+                <select
+                  className="form-control"
+                  value={formData.truck_id}
+                  onChange={(e) => handleTruckChange(e.target.value)}
+                  disabled={trucksLoading}
+                  required
+                  style={{ fontSize: 'var(--font-size-xs)', height: '38px' }}
+                >
+                  <option value="">{trucksLoading ? 'Loading fleet vehicles...' : '-- Choose Registered Vehicle --'}</option>
+                  {displayTrucks.map((t: any) => {
+                    const compBadge = t.compliance_status || (t.is_compliant ? 'COMPLIANT' : 'UNKNOWN');
+                    const specs = [t.make, t.model].filter(Boolean).join(' ');
+                    const bodyInfo = [t.body_type, t.tonnage_capacity ? `${t.tonnage_capacity}T` : null].filter(Boolean).join(', ');
+                    return (
+                      <option key={t._id} value={t._id}>
+                        {t.truck_no} — {specs} {bodyInfo ? `(${bodyInfo})` : ''} [{compBadge}]
+                      </option>
+                    );
+                  })}
+                </select>
+                {selectedTruckComplianceExpired && (
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.375rem', color: '#b45309', backgroundColor: '#fffbeb', border: '1px solid #fcd34d', padding: '0.5rem 0.625rem', borderRadius: 'var(--radius-sm)', fontSize: '0.6875rem', marginTop: '0.375rem' }}>
+                    <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: '1px' }} />
+                    <span>
+                      <strong>Advisory (COMPLIANCE_EXPIRED):</strong> Statutory certificates for {selectedTruck?.truck_no} have expired. Advance LR booking is permitted; renewal required prior to physical dispatch.
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Driver Selector */}
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                  <label className="form-label" style={{ fontSize: 'var(--font-size-xs)', marginBottom: 0 }}>
+                    Assigned Professional Driver <span style={{ color: 'var(--color-danger)' }}>*</span>
+                  </label>
+                  {selectedDriver?.status && (
+                    <span className={`badge ${selectedDriver.status === 'active' ? 'badge-success' : 'badge-neutral'}`} style={{ fontSize: '0.625rem' }}>
+                      {selectedDriver.status.toUpperCase()}
+                    </span>
+                  )}
+                </div>
+                <select
+                  className="form-control"
+                  value={formData.driver_id}
+                  onChange={(e) => handleDriverChange(e.target.value)}
+                  disabled={driversLoading}
+                  required
+                  style={{ fontSize: 'var(--font-size-xs)', height: '38px' }}
+                >
+                  <option value="">{driversLoading ? 'Loading registered drivers...' : '-- Choose Professional Driver --'}</option>
+                  {displayDrivers.map((d: any) => (
+                    <option key={d._id} value={d._id}>
+                      {d.name} ({d.phone || 'No Phone'}) {d.license_number ? `— Lic: ${d.license_number}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
 
@@ -977,13 +1135,14 @@ export const LRListPage: React.FC = () => {
           </div>
 
           <div className="form-group" style={{ marginBottom: '1rem' }}>
-            <label className="form-label">Billing Party / Customer (Optional for Invoicing)</label>
+            <label className="form-label">Billing Party / Customer *</label>
             <select
               className="form-control"
               value={formData.billing_party_id}
               onChange={(e) => setFormData({ ...formData, billing_party_id: e.target.value })}
+              required
             >
-              <option value="">Select Customer / Shipper</option>
+              <option value="">Select Billing Party *</option>
               {partiesData?.map((p: any) => (
                 <option key={p._id} value={p._id}>
                   {p.name} {p.gstin ? `(${p.gstin})` : ''}

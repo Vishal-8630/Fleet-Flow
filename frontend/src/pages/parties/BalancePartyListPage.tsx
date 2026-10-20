@@ -33,6 +33,20 @@ import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { Pagination } from '../../components/common/Pagination';
 import { useAuthStore } from '../../stores/authStore';
 import { toast } from '../../stores/uiStore';
+import { useTableColumnVisibility } from '../../hooks/useTableColumnVisibility';
+import { TableColumnVisibilityMenu } from '../../components/common/TableColumnVisibilityMenu';
+import { ITableColumnConfig } from '../../types/table';
+
+const BALANCE_PARTY_TABLE_COLUMNS: ITableColumnConfig[] = [
+  { id: 'partner_name', label: 'Partner Legal Name', isDefaultVisible: true, isRequired: true, description: 'Vendor, broker, or sub-contractor trade name' },
+  { id: 'category', label: 'Category', isDefaultVisible: true, isRequired: false, description: 'Partner classification category' },
+  { id: 'contact_info', label: 'Contact Info', isDefaultVisible: true, isRequired: false, description: 'Primary coordinator and phone contact' },
+  { id: 'pan', label: 'PAN', isDefaultVisible: true, isRequired: false, description: 'Income tax permanent account number' },
+  { id: 'bank_coordinates', label: 'Bank Coordinates', isDefaultVisible: true, isRequired: false, description: 'Settlement bank account and IFSC details' },
+  { id: 'current_balance', label: 'Current Balance', isDefaultVisible: true, isRequired: false, description: 'Outstanding payable or receivable balance' },
+  { id: 'status', label: 'Status', isDefaultVisible: true, isRequired: true, description: 'Supply partner account status' },
+  { id: 'actions', label: 'Actions', isDefaultVisible: true, isRequired: true, description: 'Partner profile editing and removal actions' },
+];
 
 export interface BalancePartyRecord {
   _id: string;
@@ -56,7 +70,8 @@ export interface BalancePartyRecord {
 
 export const BalancePartyListPage: React.FC = () => {
   const queryClient = useQueryClient();
-  const { role } = useAuthStore();
+  const { user, role } = useAuthStore();
+  const columnVisibility = useTableColumnVisibility('balance_party_list', BALANCE_PARTY_TABLE_COLUMNS, user?.id);
   const canEdit = ['admin', 'dispatcher', 'accountant'].includes(role || '');
   const isAdmin = role === 'admin';
 
@@ -305,7 +320,7 @@ export const BalancePartyListPage: React.FC = () => {
       </div>
 
       {/* Search & Filters */}
-      <div className="card" style={{ padding: '1rem 1.25rem', marginBottom: '1.5rem' }}>
+      <div className="card" style={{ padding: '1rem 1.25rem', marginBottom: '1.5rem', overflow: 'visible', position: 'relative', zIndex: 20 }}>
         <div className="filter-toolbar">
           <div className="filter-toolbar-left">
             <div style={{ position: 'relative', width: '100%', maxWidth: '360px' }}>
@@ -346,6 +361,15 @@ export const BalancePartyListPage: React.FC = () => {
                 <option value="petrol_pump">Diesel Pump</option>
               </select>
             </div>
+
+            <TableColumnVisibilityMenu
+              columns={BALANCE_PARTY_TABLE_COLUMNS}
+              visibleColumns={columnVisibility.visibleColumns}
+              isVisible={columnVisibility.isVisible}
+              toggleColumn={columnVisibility.toggleColumn}
+              resetToDefaults={columnVisibility.resetToDefaults}
+              showAllColumns={columnVisibility.showAllColumns}
+            />
           </div>
         </div>
       </div>
@@ -356,26 +380,26 @@ export const BalancePartyListPage: React.FC = () => {
           <table className="table" style={{ width: '100%', margin: 0 }}>
             <thead>
               <tr>
-                <th>Partner Legal Name</th>
-                <th>Category</th>
-                <th>Contact Info</th>
-                <th>PAN</th>
-                <th>Bank Settlement Coordinates</th>
-                <th>Current Balance</th>
-                <th>Status</th>
-                <th style={{ textAlign: 'right' }}>Actions</th>
+                {columnVisibility.isVisible('partner_name') && <th>Partner Legal Name</th>}
+                {columnVisibility.isVisible('category') && <th>Category</th>}
+                {columnVisibility.isVisible('contact_info') && <th>Contact Info</th>}
+                {columnVisibility.isVisible('pan') && <th>PAN</th>}
+                {columnVisibility.isVisible('bank_coordinates') && <th>Bank Settlement Coordinates</th>}
+                {columnVisibility.isVisible('current_balance') && <th>Current Balance</th>}
+                {columnVisibility.isVisible('status') && <th>Status</th>}
+                {columnVisibility.isVisible('actions') && <th style={{ textAlign: 'right' }}>Actions</th>}
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={8} style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-muted)' }}>
+                  <td colSpan={columnVisibility.visibleCount || 8} style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-muted)' }}>
                     Loading balance parties...
                   </td>
                 </tr>
               ) : parties.length === 0 ? (
                 <tr>
-                  <td colSpan={8} style={{ textAlign: 'center', padding: '3rem 1rem' }}>
+                  <td colSpan={columnVisibility.visibleCount || 8} style={{ textAlign: 'center', padding: '3rem 1rem' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
                       <Briefcase size={36} color="var(--color-slate-400)" />
                       <div style={{ fontWeight: 'var(--font-weight-semibold)', color: 'var(--text-main)' }}>No vendors or brokers found</div>
@@ -388,72 +412,88 @@ export const BalancePartyListPage: React.FC = () => {
               ) : (
                 parties.map((party) => (
                   <tr key={party._id}>
-                    <td>
-                      <div style={{ fontWeight: 'var(--font-weight-semibold)', color: 'var(--text-main)' }}>
-                        {party.party_name}
-                      </div>
-                    </td>
-                    <td>{getTypeBadge(party.party_type)}</td>
-                    <td>
-                      <div style={{ fontSize: 'var(--font-size-sm)' }}>{party.contact_person || 'N/A'}</div>
-                      <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>{party.phone}</div>
-                    </td>
-                    <td>
-                      {party.pan_number ? (
-                        <span style={{ fontFamily: 'monospace', fontWeight: 'var(--font-weight-medium)' }}>
-                          {party.pan_number}
-                        </span>
-                      ) : (
-                        <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>None</span>
-                      )}
-                    </td>
-                    <td>
-                      {party.bank_details?.account_number ? (
-                        <div>
-                          <div style={{ fontSize: 'var(--font-size-xs)', fontFamily: 'monospace' }}>
-                            A/C: {party.bank_details.account_number}
-                          </div>
-                          <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
-                            {party.bank_details.ifsc_code} &bull; {party.bank_details.bank_name || 'Bank'}
-                          </div>
+                    {columnVisibility.isVisible('partner_name') && (
+                      <td>
+                        <div style={{ fontWeight: 'var(--font-weight-semibold)', color: 'var(--text-main)' }}>
+                          {party.party_name}
                         </div>
-                      ) : (
-                        <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>No bank logged</span>
-                      )}
-                    </td>
-                    <td>
-                      <span style={{ fontWeight: 'var(--font-weight-bold)', color: party.current_balance > 0 ? 'var(--color-danger)' : 'inherit' }}>
-                        ₹{(party.current_balance || 0).toLocaleString()}
-                      </span>
-                    </td>
-                    <td>
-                      <span className={`badge ${party.status === 'active' ? 'badge-success' : 'badge-neutral'}`}>
-                        {party.status}
-                      </span>
-                    </td>
-                    <td style={{ textAlign: 'right' }}>
-                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
-                        {canEdit && (
-                          <button
-                            type="button"
-                            className="btn btn-secondary btn-sm"
-                            onClick={() => openEditModal(party)}
-                          >
-                            <Edit size={14} />
-                          </button>
+                      </td>
+                    )}
+                    {columnVisibility.isVisible('category') && (
+                      <td>{getTypeBadge(party.party_type)}</td>
+                    )}
+                    {columnVisibility.isVisible('contact_info') && (
+                      <td>
+                        <div style={{ fontSize: 'var(--font-size-sm)' }}>{party.contact_person || 'N/A'}</div>
+                        <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>{party.phone}</div>
+                      </td>
+                    )}
+                    {columnVisibility.isVisible('pan') && (
+                      <td>
+                        {party.pan_number ? (
+                          <span style={{ fontFamily: 'monospace', fontWeight: 'var(--font-weight-medium)' }}>
+                            {party.pan_number}
+                          </span>
+                        ) : (
+                          <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>None</span>
                         )}
-                        {isAdmin && (
-                          <button
-                            type="button"
-                            className="btn btn-danger btn-sm"
-                            title="Remove partner"
-                            onClick={() => setPartyToDelete(party)}
-                          >
-                            <Trash2 size={14} />
-                          </button>
+                      </td>
+                    )}
+                    {columnVisibility.isVisible('bank_coordinates') && (
+                      <td>
+                        {party.bank_details?.account_number ? (
+                          <div>
+                            <div style={{ fontSize: 'var(--font-size-xs)', fontFamily: 'monospace' }}>
+                              A/C: {party.bank_details.account_number}
+                            </div>
+                            <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
+                              {party.bank_details.ifsc_code} &bull; {party.bank_details.bank_name || 'Bank'}
+                            </div>
+                          </div>
+                        ) : (
+                          <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>No bank logged</span>
                         )}
-                      </div>
-                    </td>
+                      </td>
+                    )}
+                    {columnVisibility.isVisible('current_balance') && (
+                      <td>
+                        <span style={{ fontWeight: 'var(--font-weight-bold)', color: party.current_balance > 0 ? 'var(--color-danger)' : 'inherit' }}>
+                          ₹{(party.current_balance || 0).toLocaleString()}
+                        </span>
+                      </td>
+                    )}
+                    {columnVisibility.isVisible('status') && (
+                      <td>
+                        <span className={`badge ${party.status === 'active' ? 'badge-success' : 'badge-neutral'}`}>
+                          {party.status}
+                        </span>
+                      </td>
+                    )}
+                    {columnVisibility.isVisible('actions') && (
+                      <td style={{ textAlign: 'right' }}>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+                          {canEdit && (
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-sm"
+                              onClick={() => openEditModal(party)}
+                            >
+                              <Edit size={14} />
+                            </button>
+                          )}
+                          {isAdmin && (
+                            <button
+                              type="button"
+                              className="btn btn-danger btn-sm"
+                              title="Remove partner"
+                              onClick={() => setPartyToDelete(party)}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))
               )}

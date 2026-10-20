@@ -47,12 +47,18 @@ export interface IEntry extends Document {
   // Commercial billing customer
   billing_party_id?: Types.ObjectId;
 
+  // Master Fleet Relational References (DEC-009 / LR-TRUCK-DRIVER)
+  truck_id?: Types.ObjectId;
+  driver_id?: Types.ObjectId;
+
   // Shipper & Consignee details
   consignor: ILREntity;
   consignee: ILREntity;
 
-  // Transit Corridor
+  // Transit Corridor & Authoritative Legal Snapshots
   vehicle_number: string;
+  driver_name?: string;
+  driver_phone?: string;
   from_location: string;
   to_location: string;
 
@@ -150,12 +156,34 @@ const EntrySchema = new Schema<IEntry>(
       phone: { type: String, trim: true, default: '' },
     },
 
+    // Master Fleet Relational References (DEC-009 / LR-TRUCK-DRIVER)
+    truck_id: {
+      type: Schema.Types.ObjectId,
+      ref: 'Truck',
+      index: true,
+    },
+    driver_id: {
+      type: Schema.Types.ObjectId,
+      ref: 'Driver',
+      index: true,
+    },
+
     vehicle_number: {
       type: String,
       required: true,
       trim: true,
       uppercase: true,
       index: true,
+    },
+    driver_name: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    driver_phone: {
+      type: String,
+      trim: true,
+      default: '',
     },
     from_location: {
       type: String,
@@ -286,6 +314,8 @@ EntrySchema.index({ company_id: 1, bill_no: 1 });
 EntrySchema.index({ company_id: 1, lr_date: -1 });
 EntrySchema.index({ company_id: 1, branch_id: 1, lr_date: -1 });
 EntrySchema.index({ company_id: 1, status: 1, lr_date: -1 });
+EntrySchema.index({ company_id: 1, truck_id: 1, lr_date: -1 });
+EntrySchema.index({ company_id: 1, driver_id: 1, lr_date: -1 });
 EntrySchema.index({ 'custom_fields.$**': 1 });
 
 // Multi-tenant isolation plugin

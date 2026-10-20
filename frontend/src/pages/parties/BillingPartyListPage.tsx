@@ -33,6 +33,20 @@ import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { Pagination } from '../../components/common/Pagination';
 import { useAuthStore } from '../../stores/authStore';
 import { toast } from '../../stores/uiStore';
+import { useTableColumnVisibility } from '../../hooks/useTableColumnVisibility';
+import { TableColumnVisibilityMenu } from '../../components/common/TableColumnVisibilityMenu';
+import { ITableColumnConfig } from '../../types/table';
+
+const BILLING_PARTY_TABLE_COLUMNS: ITableColumnConfig[] = [
+  { id: 'customer_name', label: 'Customer Legal Name', isDefaultVisible: true, isRequired: true, description: 'Shipper or consignor company and trade name' },
+  { id: 'gstin_pan', label: 'GSTIN / PAN', isDefaultVisible: true, isRequired: false, description: 'Statutory GSTIN and PAN tax identifiers' },
+  { id: 'contact_person', label: 'Contact Person', isDefaultVisible: true, isRequired: false, description: 'Primary coordinator and phone contact' },
+  { id: 'payment_terms', label: 'Payment Terms', isDefaultVisible: true, isRequired: false, description: 'Standard billing credit window in days' },
+  { id: 'credit_limit', label: 'Credit Limit', isDefaultVisible: true, isRequired: false, description: 'Max credit balance threshold limit' },
+  { id: 'outstanding', label: 'Outstanding Receivables', isDefaultVisible: true, isRequired: false, description: 'Aggregated unpaid invoice balance' },
+  { id: 'status', label: 'Status', isDefaultVisible: true, isRequired: true, description: 'Commercial customer account status' },
+  { id: 'actions', label: 'Actions', isDefaultVisible: true, isRequired: true, description: 'Account editing and removal actions' },
+];
 
 export interface BillingPartyRecord {
   _id: string;
@@ -59,7 +73,8 @@ export interface BillingPartyRecord {
 
 export const BillingPartyListPage: React.FC = () => {
   const queryClient = useQueryClient();
-  const { role } = useAuthStore();
+  const { user, role } = useAuthStore();
+  const columnVisibility = useTableColumnVisibility('billing_party_list', BILLING_PARTY_TABLE_COLUMNS, user?.id);
   const canEdit = ['admin', 'dispatcher', 'accountant'].includes(role || '');
   const isAdmin = role === 'admin';
 
@@ -280,7 +295,7 @@ export const BillingPartyListPage: React.FC = () => {
       </div>
 
       {/* Search & Filters */}
-      <div className="card" style={{ padding: '1rem 1.25rem', marginBottom: '1.5rem' }}>
+      <div className="card" style={{ padding: '1rem 1.25rem', marginBottom: '1.5rem', overflow: 'visible', position: 'relative', zIndex: 20 }}>
         <div className="filter-toolbar">
           <div className="filter-toolbar-left">
             <div style={{ position: 'relative', width: '100%', maxWidth: '360px' }}>
@@ -319,6 +334,15 @@ export const BillingPartyListPage: React.FC = () => {
                 <option value="inactive">Inactive</option>
               </select>
             </div>
+
+            <TableColumnVisibilityMenu
+              columns={BILLING_PARTY_TABLE_COLUMNS}
+              visibleColumns={columnVisibility.visibleColumns}
+              isVisible={columnVisibility.isVisible}
+              toggleColumn={columnVisibility.toggleColumn}
+              resetToDefaults={columnVisibility.resetToDefaults}
+              showAllColumns={columnVisibility.showAllColumns}
+            />
           </div>
         </div>
       </div>
@@ -329,26 +353,26 @@ export const BillingPartyListPage: React.FC = () => {
           <table className="table" style={{ width: '100%', margin: 0 }}>
             <thead>
               <tr>
-                <th>Customer Legal Name</th>
-                <th>GSTIN / PAN</th>
-                <th>Contact Person</th>
-                <th>Payment Terms</th>
-                <th>Credit Limit</th>
-                <th>Outstanding</th>
-                <th>Status</th>
-                <th style={{ textAlign: 'right' }}>Actions</th>
+                {columnVisibility.isVisible('customer_name') && <th>Customer Legal Name</th>}
+                {columnVisibility.isVisible('gstin_pan') && <th>GSTIN / PAN</th>}
+                {columnVisibility.isVisible('contact_person') && <th>Contact Person</th>}
+                {columnVisibility.isVisible('payment_terms') && <th>Payment Terms</th>}
+                {columnVisibility.isVisible('credit_limit') && <th>Credit Limit</th>}
+                {columnVisibility.isVisible('outstanding') && <th>Outstanding</th>}
+                {columnVisibility.isVisible('status') && <th>Status</th>}
+                {columnVisibility.isVisible('actions') && <th style={{ textAlign: 'right' }}>Actions</th>}
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={8} style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-muted)' }}>
+                  <td colSpan={columnVisibility.visibleCount || 8} style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-muted)' }}>
                     Loading billing parties...
                   </td>
                 </tr>
               ) : parties.length === 0 ? (
                 <tr>
-                  <td colSpan={8} style={{ textAlign: 'center', padding: '3rem 1rem' }}>
+                  <td colSpan={columnVisibility.visibleCount || 8} style={{ textAlign: 'center', padding: '3rem 1rem' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
                       <Building2 size={36} color="var(--color-slate-400)" />
                       <div style={{ fontWeight: 'var(--font-weight-semibold)', color: 'var(--text-main)' }}>No customers found</div>
@@ -361,74 +385,90 @@ export const BillingPartyListPage: React.FC = () => {
               ) : (
                 parties.map((party) => (
                   <tr key={party._id}>
-                    <td>
-                      <div style={{ fontWeight: 'var(--font-weight-semibold)', color: 'var(--text-main)' }}>{party.name}</div>
-                      {party.trade_name && (
-                        <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>{party.trade_name}</div>
-                      )}
-                    </td>
-                    <td>
-                      {party.gstin ? (
-                        <span className="badge badge-success" style={{ fontFamily: 'monospace', letterSpacing: '0.05em' }}>
-                          {party.gstin}
-                        </span>
-                      ) : (
-                        <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>Unregistered</span>
-                      )}
-                    </td>
-                    <td>
-                      <div style={{ fontSize: 'var(--font-size-sm)' }}>{party.contact_person || 'N/A'}</div>
-                      {party.phone && (
-                        <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>{party.phone}</div>
-                      )}
-                    </td>
-                    <td>
-                      <span className="badge badge-neutral">{party.payment_terms_days} Days</span>
-                    </td>
-                    <td>
-                      {party.enforce_credit_limit ? (
-                        <span style={{ fontWeight: 'var(--font-weight-medium)' }}>
-                          ₹{(party.credit_limit || 0).toLocaleString('en-IN')}
-                        </span>
-                      ) : (
-                        <span style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-xs)' }}>
-                          Unrestricted
-                        </span>
-                      )}
-                    </td>
-                    <td>
-                      <span style={{ fontWeight: 'var(--font-weight-semibold)', color: party.outstanding_receivables > 0 ? 'var(--color-danger)' : 'inherit' }}>
-                        ₹{(party.outstanding_receivables || 0).toLocaleString()}
-                      </span>
-                    </td>
-                    <td>
-                      <span className={`badge ${party.status === 'active' ? 'badge-success' : 'badge-neutral'}`}>
-                        {party.status}
-                      </span>
-                    </td>
-                    <td style={{ textAlign: 'right' }}>
-                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
-                        {canEdit && (
-                          <button
-                            type="button"
-                            className="btn btn-secondary btn-sm"
-                            onClick={() => openEditModal(party)}
-                          >
-                            <Edit size={14} />
-                          </button>
+                    {columnVisibility.isVisible('customer_name') && (
+                      <td>
+                        <div style={{ fontWeight: 'var(--font-weight-semibold)', color: 'var(--text-main)' }}>{party.name}</div>
+                        {party.trade_name && (
+                          <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>{party.trade_name}</div>
                         )}
-                        {isAdmin && (
-                          <button
-                            type="button"
-                            className="btn btn-danger btn-sm"
-                            title="Remove customer"
-                            onClick={() => setPartyToDelete(party)}
-                          >
-                            <Trash2 size={14} />
-                          </button>
+                      </td>
+                    )}
+                    {columnVisibility.isVisible('gstin_pan') && (
+                      <td>
+                        {party.gstin ? (
+                          <span className="badge badge-success" style={{ fontFamily: 'monospace', letterSpacing: '0.05em' }}>
+                            {party.gstin}
+                          </span>
+                        ) : (
+                          <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>Unregistered</span>
                         )}
-                      </div>
-                    </td>
+                      </td>
+                    )}
+                    {columnVisibility.isVisible('contact_person') && (
+                      <td>
+                        <div style={{ fontSize: 'var(--font-size-sm)' }}>{party.contact_person || 'N/A'}</div>
+                        {party.phone && (
+                          <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>{party.phone}</div>
+                        )}
+                      </td>
+                    )}
+                    {columnVisibility.isVisible('payment_terms') && (
+                      <td>
+                        <span className="badge badge-neutral">{party.payment_terms_days} Days</span>
+                      </td>
+                    )}
+                    {columnVisibility.isVisible('credit_limit') && (
+                      <td>
+                        {party.enforce_credit_limit ? (
+                          <span style={{ fontWeight: 'var(--font-weight-medium)' }}>
+                            ₹{(party.credit_limit || 0).toLocaleString('en-IN')}
+                          </span>
+                        ) : (
+                          <span style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-xs)' }}>
+                            Unrestricted
+                          </span>
+                        )}
+                      </td>
+                    )}
+                    {columnVisibility.isVisible('outstanding') && (
+                      <td>
+                        <span style={{ fontWeight: 'var(--font-weight-semibold)', color: party.outstanding_receivables > 0 ? 'var(--color-danger)' : 'inherit' }}>
+                          ₹{(party.outstanding_receivables || 0).toLocaleString()}
+                        </span>
+                      </td>
+                    )}
+                    {columnVisibility.isVisible('status') && (
+                      <td>
+                        <span className={`badge ${party.status === 'active' ? 'badge-success' : 'badge-neutral'}`}>
+                          {party.status}
+                        </span>
+                      </td>
+                    )}
+                    {columnVisibility.isVisible('actions') && (
+                      <td style={{ textAlign: 'right' }}>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+                          {canEdit && (
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-sm"
+                              onClick={() => openEditModal(party)}
+                            >
+                              <Edit size={14} />
+                            </button>
+                          )}
+                          {isAdmin && (
+                            <button
+                              type="button"
+                              className="btn btn-danger btn-sm"
+                              title="Remove customer"
+                              onClick={() => setPartyToDelete(party)}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))
               )}
